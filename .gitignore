@@ -1,0 +1,21 @@
+# Build artifacts
+/galaxyimpact
+/galaxy-impact
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+
+# Go tooling
+*.out
+/vendor/
+
+# Runtime-generated save data
+highscores.txt
+
+# Editor/OS cruft
+.vscode/
+.idea/
+*.swp
+.DS_Store

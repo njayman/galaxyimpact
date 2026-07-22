@@ -1,4 +1,4 @@
-module github.com/njayman/rayliblearn
+module github.com/njayman/galaxyimpact
 
 go 1.23.8
 
