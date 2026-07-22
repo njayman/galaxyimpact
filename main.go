@@ -6,7 +6,7 @@ import (
 
 func main() {
 	rl.SetConfigFlags(rl.FlagWindowResizable | rl.FlagVsyncHint)
-	rl.InitWindow(800, 600, "Galaxy Impact")
+	rl.InitWindow(defaultWindowWidth, defaultWindowHeight, "Galaxy Impact")
 	defer rl.CloseWindow()
 	rl.SetExitKey(rl.KeyNull) // Escape is our own pause key, not the window-close key
 	rl.SetWindowMinSize(320, 240)
@@ -17,7 +17,9 @@ func main() {
 	rl.SetTargetFPS(60)
 
 	game := InitGame()
+	defer rl.UnloadRenderTexture(game.WorldTarget)
 	defer rl.UnloadRenderTexture(game.PixelTarget)
+	defer rl.UnloadMusicStream(game.BGM)
 
 	shouldExit := false
 

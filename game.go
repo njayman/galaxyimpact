@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	rl "github.com/gen2brain/raylib-go/raylib"
 
 	"github.com/njayman/galaxyimpact/highscore"
@@ -13,7 +15,17 @@ const (
 	GAMEPLAY
 	PAUSED
 	GAME_OVER
+	LEVEL_UP
+	SETTINGS
 )
+
+// arenaHalf bounds the otherwise-open world: play reads as infinite (no
+// visible edges under normal movement) but is backed by this large finite
+// square so spawn-ring/background math stays simple bounded arithmetic.
+const arenaHalf = float32(4000)
+
+// waveDuration is how long (seconds) each wave lasts before the next begins.
+const waveDuration = float32(25)
 
 const highScoreFile = "highscores.txt"
 
@@ -23,47 +35,83 @@ type Game struct {
 	// runtime. WindowWidth/WindowHeight track the actual OS window size (which
 	// does change, e.g. in fullscreen) purely so the final frame can be scaled
 	// and letterboxed to fit it without anything in the game moving or resizing.
-	ScreenWidth        int32
-	ScreenHeight       int32
-	WindowWidth        int32
-	WindowHeight       int32
-	State              GameState
-	Player             Player
-	Boss               Boss
-	Bullets            []Bullet
-	Asteroids          []Asteroid
-	Projectiles        []BossProjectile
-	BlackHole          BlackHole
-	Stars              []Star
-	BgParticles        []BgParticle
-	BorderStars        []Star
-	AsteroidSpawnTimer float32
-	SpreadWindupShots  int32
-	Score              int32
-	HighScores         []int32
-	HighScoreRepo      highscore.Repository
-	MenuIndex          int32
-	ScoreRecorded      bool
-	Sounds             Sounds
-	ShakeTimer         float32
-	ShakeDuration      float32
-	ShakeIntensity     float32
-	HitPauseTimer      float32
-	PixelTarget        rl.RenderTexture2D
+	ScreenWidth             int32
+	ScreenHeight            int32
+	WindowWidth             int32
+	WindowHeight            int32
+	State                   GameState
+	Player                  Player
+	Boss                    Boss
+	BossActive              bool
+	Bullets                 []Bullet
+	Asteroids               []Asteroid
+	Projectiles             []BossProjectile
+	Enemies                 []Enemy
+	Pickups                 []Pickup
+	Mines                   []Mine
+	Weapons                 []Weapon
+	SkillLevels             map[SkillID]int32
+	PendingChoices          []LevelUpChoice
+	BossDeathShockwave      bool
+	BossDeathShockwaveTimer float32
+	BossDeathShockwavePos   rl.Vector2
+	BossDeathShockwaveHit   bool
+	BlackHole               BlackHole
+	Stars                   []Star
+	BgParticles             []BgParticle
+	BorderStars             []Star
+	AsteroidSpawnTimer      float32
+	EnemySpawnTimer         float32
+	SpreadWindupShots       int32
+	XP                      int32
+	Level                   int32
+	XPToNext                int32
+	WaveNumber              int32
+	WaveTimer               float32
+	RunTime                 float32
+	Score                   int32
+	HighScores              []int32
+	HighScoreRepo           highscore.Repository
+	MenuIndex               int32
+	ScoreRecorded           bool
+	Sounds                  Sounds
+	ShakeTimer              float32
+	ShakeDuration           float32
+	ShakeIntensity          float32
+	HitPauseTimer           float32
+	WorldTarget             rl.RenderTexture2D
+	PixelTarget             rl.RenderTexture2D
+	Font                    rl.Font
+	Settings                Settings
+	SettingsReturnState     GameState
+	BGM                     rl.Music
 }
 
-// pixelScale is how chunky the retro-pixel look is: the game is rendered into
-// a render texture this many times smaller than the window, then scaled back
-// up with nearest-neighbor filtering. Kept modest (2x) so text stays legible.
-const pixelScale = int32(2)
+// pixelScale downscales WorldTarget (game-world shapes only: ship, enemies,
+// bullets, background, ...) before it's scaled back up with nearest-neighbor
+// filtering onto PixelTarget - this is what gives the deliberate chunky
+// pixel-art look. Text is drawn separately, straight onto PixelTarget at its
+// native ScreenWidth/ScreenHeight resolution (see DrawGame), so it stays
+// crisp instead of inheriting the same blur a low-res-then-upscaled font
+// would have. The final PixelTarget->window blit (see letterboxRect) is a
+// separate, resolution-independence concern, unrelated to this chunkiness.
+const pixelScale = int32(3)
+
+// defaultWindowWidth/Height is the default logical resolution and starting
+// window size - Full HD, so text/HUD have plenty of native pixels to work
+// with even before any fullscreen/letterbox scaling.
+const (
+	defaultWindowWidth  = int32(1920)
+	defaultWindowHeight = int32(1080)
+)
 
 func InitGame() *Game {
 	g := &Game{}
 
-	g.ScreenWidth = 800
-	g.ScreenHeight = 600
-	g.WindowWidth = 800
-	g.WindowHeight = 600
+	g.ScreenWidth = defaultWindowWidth
+	g.ScreenHeight = defaultWindowHeight
+	g.WindowWidth = defaultWindowWidth
+	g.WindowHeight = defaultWindowHeight
 	g.State = TITLE
 
 	g.Stars = make([]Star, 80)
@@ -100,14 +148,54 @@ func InitGame() *Game {
 	g.HighScores, _ = g.HighScoreRepo.Load()
 
 	g.Sounds = LoadSounds()
+	g.Font = loadReadableFont()
 
-	g.PixelTarget = rl.LoadRenderTexture(g.ScreenWidth/pixelScale, g.ScreenHeight/pixelScale)
+	g.Settings = Settings{
+		ResolutionIndex: defaultResolutionIndex(),
+		Difficulty:      DifficultyNormal,
+		BGMOn:           true,
+		SoundOn:         true,
+	}
+
+	g.BGM = loadBGM()
+	rl.PlayMusicStream(g.BGM)
+
+	g.WorldTarget = rl.LoadRenderTexture(g.ScreenWidth/pixelScale, g.ScreenHeight/pixelScale)
+	rl.SetTextureFilter(g.WorldTarget.Texture, rl.FilterPoint)
+
+	g.PixelTarget = rl.LoadRenderTexture(g.ScreenWidth, g.ScreenHeight)
 	rl.SetTextureFilter(g.PixelTarget.Texture, rl.FilterPoint)
 
 	resetRun(g)
 	g.State = TITLE
 
 	return g
+}
+
+// loadReadableFont picks a real, legible system sans-serif over raylib's tiny
+// built-in bitmap font (which is what made text unreadable). Loaded at a
+// large base size and downsampled at draw time for crisp text at any size.
+// Falls back to the default font if none of the common paths exist.
+func loadReadableFont() rl.Font {
+	candidates := []string{
+		"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+		"/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+		"/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+		"/Library/Fonts/Arial Bold.ttf",
+		"C:\\Windows\\Fonts\\arialbd.ttf",
+	}
+
+	for _, path := range candidates {
+		if _, err := os.Stat(path); err == nil {
+			font := rl.LoadFontEx(path, 96, nil)
+			if font.Texture.ID != 0 {
+				rl.SetTextureFilter(font.Texture, rl.FilterBilinear)
+				return font
+			}
+		}
+	}
+
+	return rl.GetFontDefault()
 }
 
 // toggleFullscreen switches between windowed and fullscreen. Going fullscreen
@@ -117,7 +205,7 @@ func InitGame() *Game {
 func toggleFullscreen(g *Game) {
 	if rl.IsWindowFullscreen() {
 		rl.ToggleFullscreen()
-		rl.SetWindowSize(800, 600)
+		rl.SetWindowSize(int(defaultWindowWidth), int(defaultWindowHeight))
 	} else {
 		monitor := rl.GetCurrentMonitor()
 		rl.SetWindowSize(rl.GetMonitorWidth(monitor), rl.GetMonitorHeight(monitor))
@@ -140,32 +228,46 @@ func syncScreenSize(g *Game) {
 
 // resetRun (re)initializes everything needed for a fresh playthrough, without
 // touching window-level state (screen size, starfield, loaded high scores).
+// The player always starts at the world origin - the camera keeps them
+// pinned at screen center regardless (see beginWorldCamera in draw.go).
 func resetRun(g *Game) {
 	g.Player = Player{
-		Position: rl.NewVector2(float32(g.ScreenWidth)/2, float32(g.ScreenHeight)/2),
-		Radius:   15,
-		Color:    colorAccent,
-		Speed:    5,
-		Health:   5,
+		Position:  rl.Vector2{},
+		Radius:    15,
+		Color:     colorAccent,
+		Speed:     5,
+		Health:    5,
+		MaxHealth: 5,
+		Charges:   maxCharges,
 	}
 
-	g.Boss = Boss{
-		Position:    rl.NewVector2(float32(g.ScreenWidth)/2-50, 50),
-		Size:        rl.NewVector2(100, 100),
-		Color:       colorBossIdle,
-		Health:      500,
-		MaxHealth:   500,
-		State:       IDLE,
-		Attack:      AttackBeam,
-		AttackTimer: float32(rl.GetRandomValue(15, 35)) / 10.0,
-	}
+	g.Boss = Boss{Size: rl.NewVector2(100, 100)}
+	g.BossActive = false
 
 	g.Bullets = []Bullet{}
 	g.Asteroids = []Asteroid{}
 	g.Projectiles = []BossProjectile{}
+	g.Enemies = []Enemy{}
+	g.Pickups = []Pickup{}
+	g.Mines = []Mine{}
+	g.Weapons = []Weapon{{Kind: WeaponForward, Level: 1}}
+	g.SkillLevels = map[SkillID]int32{SkillForwardShot: 1}
+	g.BossDeathShockwave = false
+	g.BossDeathShockwaveTimer = 0
+	g.BossDeathShockwaveHit = false
+
 	g.BlackHole = BlackHole{Timer: float32(rl.GetRandomValue(30, 60)) / 10.0}
 	g.AsteroidSpawnTimer = 1.0
+	g.EnemySpawnTimer = 1.0
 	g.SpreadWindupShots = 0
+
+	g.XP = 0
+	g.Level = 1
+	g.XPToNext = 100
+	g.WaveNumber = 1
+	g.WaveTimer = waveDuration
+	g.RunTime = 0
+
 	g.ShakeTimer = 0
 	g.ShakeDuration = 0
 	g.ShakeIntensity = 0

@@ -88,6 +88,41 @@ func noiseSound(duration float64) rl.Sound {
 	return soundFromSamples(samples)
 }
 
+// loadBGM procedurally generates a soft, seamlessly-looping ambient chord
+// pad (no external audio assets needed) for the background music toggle.
+func loadBGM() rl.Music {
+	const duration = 6.0
+	n := int(audioSampleRate * duration)
+	samples := make([]int16, n)
+
+	freqs := []float64{110.00, 130.81, 164.81} // A2-C3-E3 minor chord
+	fadeDuration := 0.05
+	fadeSamples := int(fadeDuration * float64(audioSampleRate))
+
+	for i := range samples {
+		t := float64(i) / audioSampleRate
+
+		v := 0.0
+		for _, f := range freqs {
+			v += math.Sin(2*math.Pi*f*t) / float64(len(freqs))
+		}
+
+		breathe := 0.6 + 0.4*math.Sin(2*math.Pi*t/duration)
+		amp := 0.12 * breathe
+
+		if i < fadeSamples {
+			amp *= float64(i) / float64(fadeSamples)
+		} else if i > n-fadeSamples {
+			amp *= float64(n-i) / float64(fadeSamples)
+		}
+
+		samples[i] = int16(v * amp * 32767)
+	}
+
+	data := encodeWAV(samples)
+	return rl.LoadMusicStreamFromMemory(".wav", data, int32(len(data)))
+}
+
 func soundFromSamples(samples []int16) rl.Sound {
 	data := encodeWAV(samples)
 	wave := rl.LoadWaveFromMemory(".wav", data, int32(len(data)))
