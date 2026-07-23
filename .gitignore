@@ -13,6 +13,7 @@
 
 # Runtime-generated save data
 highscores.txt
+settings.txt
 
 # Editor/OS cruft
 .vscode/

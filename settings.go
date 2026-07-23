@@ -1,5 +1,10 @@
 package main
 
+import (
+	"fmt"
+	"os"
+)
+
 type Difficulty int32
 
 const (
@@ -54,4 +59,53 @@ func defaultResolutionIndex() int32 {
 		}
 	}
 	return 0
+}
+
+const settingsFile = "settings.txt"
+
+// loadSettings reads persisted settings (resolution/difficulty/BGM/sound)
+// from disk, falling back to defaults if the file is missing or malformed -
+// display mode is deliberately not persisted here (the game always launches
+// windowed, per earlier design).
+func loadSettings() Settings {
+	s := Settings{
+		ResolutionIndex: defaultResolutionIndex(),
+		Difficulty:      DifficultyNormal,
+		BGMOn:           true,
+		SoundOn:         true,
+	}
+
+	data, err := os.ReadFile(settingsFile)
+	if err != nil {
+		return s
+	}
+
+	var resIdx, difficulty, bgmOn, soundOn int32
+	if _, err := fmt.Sscanf(string(data), "%d %d %d %d", &resIdx, &difficulty, &bgmOn, &soundOn); err != nil {
+		return s
+	}
+
+	if resIdx >= 0 && int(resIdx) < len(resolutionOptions) {
+		s.ResolutionIndex = resIdx
+	}
+	if difficulty >= 0 && difficulty < int32(difficultyCount) {
+		s.Difficulty = Difficulty(difficulty)
+	}
+	s.BGMOn = bgmOn != 0
+	s.SoundOn = soundOn != 0
+
+	return s
+}
+
+func saveSettings(s Settings) {
+	bgmOn, soundOn := 0, 0
+	if s.BGMOn {
+		bgmOn = 1
+	}
+	if s.SoundOn {
+		soundOn = 1
+	}
+
+	data := fmt.Sprintf("%d %d %d %d", s.ResolutionIndex, int32(s.Difficulty), bgmOn, soundOn)
+	_ = os.WriteFile(settingsFile, []byte(data), 0644)
 }

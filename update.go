@@ -57,6 +57,7 @@ func UpdateGame(g *Game, deltaTime float32) bool {
 	syncScreenSize(g)
 
 	updateBgParticles(g)
+	updateDeathParticles(g, deltaTime)
 	rl.UpdateMusicStream(g.BGM)
 
 	if g.ShakeTimer > 0 {
@@ -110,7 +111,7 @@ func triggerHitPause(g *Game, duration float32) {
 }
 
 func updateTitle(g *Game) bool {
-	index, confirmed := updateMenuSelection(g.MenuIndex, 3)
+	index, confirmed := updateMenuSelection(g, g.MenuIndex, 3, titleMenuY, menuLineHeight)
 	playMenuSounds(g, index, confirmed)
 	g.MenuIndex = index
 
@@ -136,7 +137,7 @@ func updatePaused(g *Game) bool {
 		return false
 	}
 
-	index, confirmed := updateMenuSelection(g.MenuIndex, 4)
+	index, confirmed := updateMenuSelection(g, g.MenuIndex, 4, pausedMenuY, menuLineHeight)
 	playMenuSounds(g, index, confirmed)
 	g.MenuIndex = index
 
@@ -164,7 +165,7 @@ func updateGameOver(g *Game) bool {
 		g.ScoreRecorded = true
 	}
 
-	index, confirmed := updateMenuSelection(g.MenuIndex, 2)
+	index, confirmed := updateMenuSelection(g, g.MenuIndex, 2, gameOverMenuY, menuLineHeight)
 	playMenuSounds(g, index, confirmed)
 	g.MenuIndex = index
 
@@ -183,7 +184,7 @@ func updateGameOver(g *Game) bool {
 // updateLevelUp handles the non-cancelable skill/evolve picker that pauses
 // the world when the player levels up.
 func updateLevelUp(g *Game) bool {
-	index, confirmed := updateMenuSelection(g.MenuIndex, int32(len(g.PendingChoices)))
+	index, confirmed := updateMenuSelection(g, g.MenuIndex, int32(len(g.PendingChoices)), levelUpMenuY, levelUpLineHeight)
 	playMenuSounds(g, index, confirmed)
 	g.MenuIndex = index
 
@@ -249,6 +250,13 @@ func updateSettings(g *Game) bool {
 	right := rl.IsKeyPressed(rl.KeyD) || rl.IsKeyPressed(rl.KeyRight)
 	confirm := rl.IsKeyPressed(rl.KeyEnter) || rl.IsKeyPressed(rl.KeySpace)
 
+	if row, hovering := hoveredRow(g, settingsRowCount, settingsMenuY, settingsLineHeight); hovering {
+		g.MenuIndex = row
+		if rl.IsMouseButtonPressed(rl.MouseButtonLeft) {
+			confirm = true
+		}
+	}
+
 	if left || right || confirm {
 		playSFX(g, g.Sounds.MenuMove)
 	}
@@ -288,6 +296,10 @@ func updateSettings(g *Game) bool {
 		}
 	}
 
+	if (left || right || confirm) && g.MenuIndex <= 3 {
+		saveSettings(g.Settings)
+	}
+
 	return false
 }
 
@@ -312,9 +324,50 @@ func applyBGMState(g *Game) {
 	}
 }
 
+// nerveMax/nerveKillGain/nerveDecayPerSec drive the Nerve meter: it climbs
+// with kills, bleeds away on its own so idling can't bank it forever, and
+// snaps to zero on any hit - "hesitation is defeat" means a mistake should
+// cost the aggression bonus you built up, not just a chunk of HP.
+const (
+	nerveMax            = float32(100)
+	nerveKillGain       = float32(6)
+	nerveDecayPerSec    = float32(4)
+	nerveDamageBonusMax = float32(0.5)
+	nerveSpeedBonusMax  = float32(0.2)
+)
+
+func nerveFrac(g *Game) float32 {
+	return g.Player.Nerve / nerveMax
+}
+
+func gainNerve(g *Game) {
+	g.Player.Nerve += nerveKillGain
+	if g.Player.Nerve > nerveMax {
+		g.Player.Nerve = nerveMax
+	}
+
+	// Landing a kill also chips away at the ability-charge regen timer, so
+	// staying aggressive earns dash/shield charges back faster than turtling
+	// out the clock does.
+	if g.Player.Charges < maxCharges {
+		g.Player.ChargeRegenTimer -= 0.4
+	}
+}
+
+func updateNerve(g *Game, deltaTime float32) {
+	if g.Player.Nerve > 0 {
+		g.Player.Nerve -= nerveDecayPerSec * deltaTime
+		if g.Player.Nerve < 0 {
+			g.Player.Nerve = 0
+		}
+	}
+}
+
 // damagePlayer is the single path all player damage flows through: it applies
 // the hit and transitions to GAME_OVER if health runs out.
 func damagePlayer(g *Game, amount int32) {
+	g.Player.Nerve = 0
+
 	if g.Player.ShieldStacks > 0 {
 		g.Player.ShieldStacks--
 		g.Player.ImmunityTimer = 1.0
@@ -332,10 +385,47 @@ func damagePlayer(g *Game, amount int32) {
 		playSFX(g, g.Sounds.Defeat)
 		triggerShake(g, 12, 0.5)
 		triggerHitPause(g, 0.15)
+		spawnDeathExplosion(g)
 	} else {
 		playSFX(g, g.Sounds.Hit)
 		triggerShake(g, 4, 0.2)
 	}
+}
+
+// spawnDeathExplosion bursts debris outward from the player on death -
+// purely cosmetic, kept animating independent of g.State (see
+// updateDeathParticles's call site in UpdateGame) so it survives into the
+// Game Over screen instead of freezing.
+func spawnDeathExplosion(g *Game) {
+	debrisColors := []rl.Color{colorAccent, colorCrit, colorHaze}
+
+	for i := 0; i < 28; i++ {
+		angle := float64(rl.GetRandomValue(0, 359)) * rl.Deg2rad
+		speed := float32(rl.GetRandomValue(20, 80)) / 10.0
+		velocity := rl.NewVector2(float32(math.Cos(angle))*speed, float32(math.Sin(angle))*speed)
+		life := float32(rl.GetRandomValue(60, 100)) / 100.0
+
+		g.DeathParticles = append(g.DeathParticles, Particle{
+			Position: g.Player.Position,
+			Velocity: velocity,
+			Radius:   float32(rl.GetRandomValue(2, 5)),
+			Life:     life,
+			MaxLife:  life,
+			Color:    debrisColors[rl.GetRandomValue(0, int32(len(debrisColors)-1))],
+		})
+	}
+}
+
+func updateDeathParticles(g *Game, deltaTime float32) {
+	active := g.DeathParticles[:0]
+	for _, p := range g.DeathParticles {
+		p.Position = rl.Vector2Add(p.Position, p.Velocity)
+		p.Life -= deltaTime
+		if p.Life > 0 {
+			active = append(active, p)
+		}
+	}
+	g.DeathParticles = active
 }
 
 func updateGameplay(g *Game, deltaTime float32) {
@@ -347,6 +437,11 @@ func updateGameplay(g *Game, deltaTime float32) {
 
 	g.RunTime += deltaTime
 
+	if g.Sandbox {
+		updateSandboxInput(g)
+	}
+
+	updateNerve(g, deltaTime)
 	updateAbilityCharges(g, deltaTime)
 	updatePlayerMovement(g, deltaTime)
 	updateShieldAndBarrier(g, deltaTime)
@@ -395,6 +490,7 @@ func updateGameplay(g *Game, deltaTime float32) {
 			playSFX(g, g.Sounds.Victory)
 			triggerShake(g, 14, 0.6)
 			triggerHitPause(g, 0.2)
+			gainNerve(g)
 		}
 	}
 
@@ -409,6 +505,37 @@ func updateGameplay(g *Game, deltaTime float32) {
 // slamDuration) so it reads as a lingering aftermath rather than another
 // snap attack - it still reaches maxSlamRadius (screen-covering) by the end.
 const bossDeathShockwaveDuration = float32(3.0)
+
+// resolveExpandingWaveHit checks a slow-expanding hazard (boss Slam / death
+// shockwave) against the player once per frame: if they're within the
+// hazard's eventual max radius and have a shield bubble, a shield stack, or
+// (if allowDash) an active dash up at any point before the growing radius
+// physically reaches them, that counts as dodging it - consuming a shield
+// stack if that's specifically what protected them. Only once the radius
+// itself crosses the player unprotected does it report a hit. A transient
+// post-hit ImmunityTimer deliberately does NOT count as protection here -
+// it has nothing to do with dodging this specific hazard, and treating it
+// as a free pass let an unrelated graze on the way in cancel the hazard
+// entirely. Returns (resolved, hit): resolved means the caller should latch
+// its own one-shot hit flag; hit means damagePlayer should be called.
+func resolveExpandingWaveHit(g *Game, from rl.Vector2, radius float32, allowDash bool) (resolved bool, hit bool) {
+	distToPlayer := rl.Vector2Distance(from, g.Player.Position)
+	inDanger := distToPlayer <= maxSlamRadius+g.Player.Radius
+	dashProtected := allowDash && g.Player.Dashing
+
+	if inDanger && (g.Player.ShieldActive || dashProtected || g.Player.ShieldStacks > 0) {
+		if !g.Player.ShieldActive && !dashProtected && g.Player.ShieldStacks > 0 {
+			g.Player.ShieldStacks--
+		}
+		return true, false
+	}
+
+	if distToPlayer <= radius+g.Player.Radius {
+		return true, true
+	}
+
+	return false, false
+}
 
 // updateBossDeathShockwave expands a one-time ring from the boss's death
 // position, destroying every enemy/asteroid it passes over (no score/XP -
@@ -442,10 +569,13 @@ func updateBossDeathShockwave(g *Game, deltaTime float32) {
 		}
 	}
 
-	if !g.BossDeathShockwaveHit && !g.Player.ShieldActive && g.Player.ImmunityTimer <= 0 &&
-		rl.Vector2Distance(g.BossDeathShockwavePos, g.Player.Position) <= radius+g.Player.Radius {
-		g.BossDeathShockwaveHit = true
-		damagePlayer(g, enemyDamage(g, 1))
+	if !g.BossDeathShockwaveHit {
+		if resolved, hit := resolveExpandingWaveHit(g, g.BossDeathShockwavePos, radius, false); resolved {
+			g.BossDeathShockwaveHit = true
+			if hit {
+				damagePlayer(g, enemyDamage(g, 1))
+			}
+		}
 	}
 
 	if g.BossDeathShockwaveTimer <= 0 {
@@ -467,7 +597,7 @@ func updatePlayerMovement(g *Game, deltaTime float32) {
 		}
 		g.Player.Position = rl.Vector2Add(g.Player.Position, g.Player.DashVelocity)
 	} else {
-		effectiveSpeed := g.Player.Speed
+		effectiveSpeed := g.Player.Speed * (1 + nerveSpeedBonusMax*nerveFrac(g))
 		if inBlackHole {
 			effectiveSpeed -= blackHoleSlow
 		}
@@ -504,17 +634,8 @@ func updatePlayerMovement(g *Game, deltaTime float32) {
 		}
 	}
 
-	if g.Player.Position.X < -arenaHalf {
-		g.Player.Position.X = -arenaHalf
-	}
-	if g.Player.Position.X > arenaHalf {
-		g.Player.Position.X = arenaHalf
-	}
-	if g.Player.Position.Y < -arenaHalf {
-		g.Player.Position.Y = -arenaHalf
-	}
-	if g.Player.Position.Y > arenaHalf {
-		g.Player.Position.Y = arenaHalf
+	if dist := rl.Vector2Length(g.Player.Position); dist > arenaHalf {
+		g.Player.Position = rl.Vector2Scale(rl.Vector2Normalize(g.Player.Position), arenaHalf)
 	}
 
 	if g.BossActive {
@@ -650,9 +771,17 @@ func weaponCooldown(g *Game, kind WeaponKind, level int32, evolved bool) float32
 	return base
 }
 
+// postCapDamageBonusPerLevel is the small compounding damage bump granted
+// each level-up once every ability slot is full and maxed (see
+// rollLevelUpChoices) - keeps the player scaling to match waveEnemyScale's
+// indefinite escalation instead of flatlining once the build is "complete".
+const postCapDamageBonusPerLevel = float32(0.05)
+
 func weaponDamage(g *Game, level int32) int32 {
 	dmg := baseBulletDamage + level*2
 	dmg = int32(float32(dmg) * (1 + 0.15*float32(g.SkillLevels[SkillDamage])))
+	dmg = int32(float32(dmg) * (1 + nerveDamageBonusMax*nerveFrac(g)))
+	dmg = int32(float32(dmg) * (1 + postCapDamageBonusPerLevel*float32(g.PostCapDamageLevels)))
 	return dmg
 }
 
@@ -960,6 +1089,10 @@ func beamPulse(g *Game, dir rl.Vector2, length float32, dmg int32) {
 // enemies from the roster on a ring just outside the screen around the
 // player; every 5th wave also brings the boss in.
 func updateWaveSpawner(g *Game, deltaTime float32) {
+	if g.Sandbox {
+		return
+	}
+
 	g.WaveTimer -= deltaTime
 	if g.WaveTimer <= 0 {
 		g.WaveNumber++
@@ -1035,8 +1168,19 @@ func asteroidCap(g *Game) int {
 
 // enemyDamage scales a base enemy damage amount by the difficulty's damage
 // multiplier (Easy hits softer, Hard hits harder).
+// waveEnemyScalePerWave gives enemies a small, steady stat climb every wave
+// (health here, contact damage via enemyDamage) so the run keeps escalating
+// indefinitely - the player is expected to keep pace by leveling up weapons/
+// passives, and by the flat postCapDamageBonus once every slot is full and
+// maxed (see rollLevelUpChoices).
+const waveEnemyScalePerWave = float32(0.035)
+
+func waveEnemyScale(g *Game) float32 {
+	return 1 + float32(g.WaveNumber-1)*waveEnemyScalePerWave
+}
+
 func enemyDamage(g *Game, base int32) int32 {
-	return int32(float32(base) * difficultyDefs[g.Settings.Difficulty].EnemyDamageMult)
+	return int32(float32(base) * difficultyDefs[g.Settings.Difficulty].EnemyDamageMult * waveEnemyScale(g))
 }
 
 // spawnEnemy picks a weighted-random kind (eligible for the current wave)
@@ -1070,7 +1214,7 @@ func spawnEnemyAt(g *Game, kindIndex int, pos rl.Vector2) {
 	kind := enemyKinds[kindIndex]
 	elite := rl.GetRandomValue(0, 999) < int32(eliteChance*1000)
 
-	health := int32(float32(kind.Health) * difficultyDefs[g.Settings.Difficulty].EnemyHealthMult)
+	health := int32(float32(kind.Health) * difficultyDefs[g.Settings.Difficulty].EnemyHealthMult * waveEnemyScale(g))
 	if elite {
 		health *= 2
 	}
@@ -1265,6 +1409,10 @@ func rollLevelUpChoices(g *Game) []LevelUpChoice {
 	var choices []LevelUpChoice
 	if len(eligible) == 0 {
 		choices = rollRewardChoices()
+		// Nothing left to level - waves keep escalating regardless (see
+		// waveEnemyScale), so grant a small permanent damage bump each time
+		// instead of leaving the player stuck at a fixed power level forever.
+		g.PostCapDamageLevels++
 	} else {
 		for _, id := range sampleDistinct(eligible, 3) {
 			choices = append(choices, LevelUpChoice{Kind: ChoiceSkill, Skill: id})
@@ -1439,6 +1587,7 @@ func damageEnemy(g *Game, index int, amount int32) {
 	}
 	g.Score += score
 	playSFX(g, g.Sounds.Explosion)
+	gainNerve(g)
 
 	g.Pickups = append(g.Pickups, Pickup{Position: g.Enemies[index].Position, Value: score, Kind: PickupXP, Active: true})
 
@@ -1687,7 +1836,7 @@ func updateProjectiles(g *Game) {
 			}
 		}
 
-		if g.Projectiles[i].Active && !g.Projectiles[i].FromPlayer && g.Player.Health > 0 && !g.Player.ShieldActive && g.Player.ImmunityTimer <= 0 && rl.CheckCollisionCircles(g.Player.Position, g.Player.Radius, g.Projectiles[i].Position, g.Projectiles[i].Radius) {
+		if g.Projectiles[i].Active && !g.Projectiles[i].FromPlayer && g.Player.Health > 0 && !g.Player.ShieldActive && !g.Player.Dashing && g.Player.ImmunityTimer <= 0 && rl.CheckCollisionCircles(g.Player.Position, g.Player.Radius, g.Projectiles[i].Position, g.Projectiles[i].Radius) {
 			g.Projectiles[i].Active = false
 			damagePlayer(g, enemyDamage(g, 1))
 		}
@@ -1815,6 +1964,8 @@ func updateBoss(g *Game, deltaTime float32, bossCenter rl.Vector2) {
 				g.SpreadWindupShots = 0
 			case AttackSlam:
 				g.Boss.Color = colorAccent
+			case AttackBeam:
+				g.Boss.Color = colorBossBeam
 			default:
 				g.Boss.Color = colorAccentDim
 			}
@@ -1848,10 +1999,13 @@ func updateBoss(g *Game, deltaTime float32, bossCenter rl.Vector2) {
 				}
 			}
 
-			if !g.Boss.SlamHit && !g.Player.ShieldActive && g.Player.ImmunityTimer <= 0 &&
-				rl.Vector2Distance(g.Player.Position, bossCenter) <= radius+g.Player.Radius {
-				g.Boss.SlamHit = true
-				damagePlayer(g, enemyDamage(g, 1))
+			if !g.Boss.SlamHit {
+				if resolved, hit := resolveExpandingWaveHit(g, bossCenter, radius, true); resolved {
+					g.Boss.SlamHit = true
+					if hit {
+						damagePlayer(g, enemyDamage(g, 1))
+					}
+				}
 			}
 		}
 
@@ -1876,7 +2030,7 @@ func updateBoss(g *Game, deltaTime float32, bossCenter rl.Vector2) {
 				g.Asteroids = breakAsteroid(g.Asteroids, g.Asteroids[i])
 			}
 
-			if !blocked && g.Player.Health > 0 && !g.Player.ShieldActive && g.Player.ImmunityTimer <= 0 && CheckCollisionCircleLine(g.Player.Position, g.Player.Radius, beamStart, beamEnd) {
+			if !blocked && g.Player.Health > 0 && !g.Player.ShieldActive && !g.Player.Dashing && g.Player.ImmunityTimer <= 0 && CheckCollisionCircleLine(g.Player.Position, g.Player.Radius, beamStart, beamEnd) {
 				damagePlayer(g, enemyDamage(g, 1))
 			}
 		}

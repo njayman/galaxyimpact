@@ -34,26 +34,6 @@ type Star struct {
 	Radius   float32
 }
 
-// Particle is a short-lived debris fleck for one-shot effects (the player
-// death explosion) - moves in a straight line and fades out over Life.
-type Particle struct {
-	Position rl.Vector2
-	Velocity rl.Vector2
-	Radius   float32
-	Life     float32
-	MaxLife  float32
-	Color    rl.Color
-}
-
-// GasCloud is one soft puff in the boundary nebula ring marking the edge of
-// the (otherwise open-feeling) arena - purely decorative, the actual clamp
-// is the circular arenaHalf check in updatePlayerMovement.
-type GasCloud struct {
-	Position rl.Vector2
-	Radius   float32
-	Color    rl.Color
-}
-
 // BgParticle is a soft, slow-drifting background mote (distant nebula dust) —
 // purely decorative, distinct from the crisp foreground Stars.
 type BgParticle struct {
@@ -83,7 +63,6 @@ type Player struct {
 	DashVelocity        rl.Vector2
 	ShieldStacks        int32 // rare-drop damage shields, absorb one hit each - separate from the dash-ability ShieldActive bubble
 	HalfLifeOrb         bool  // true once one life orb has been collected; a second converts to +1 Health
-	Nerve               float32
 }
 
 const maxShieldStacks = int32(3)

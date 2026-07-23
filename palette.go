@@ -23,4 +23,5 @@ var (
 	colorBossIdle   = rl.NewColor(70, 90, 120, 255)
 	colorBossHoming = rl.NewColor(150, 95, 55, 255)
 	colorBossSpread = rl.NewColor(140, 70, 95, 255)
+	colorBossBeam   = rl.NewColor(90, 150, 165, 255)
 )

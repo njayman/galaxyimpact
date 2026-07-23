@@ -68,7 +68,7 @@ func DrawGame(g *Game) {
 	case PAUSED:
 		drawHUD(g)
 		drawOverlay(g)
-		drawMenu(g, "PAUSED", []string{"Resume", "Settings", "New Game", "Exit"}, pausedMenuY)
+		drawMenu(g, "PAUSED", []string{"Resume", "Settings", "New Game", "Exit"}, 300)
 	case LEVEL_UP:
 		drawHUD(g)
 		drawOverlay(g)
@@ -184,7 +184,7 @@ func drawTitle(g *Game) {
 	title := "GALAXY IMPACT"
 	drawText(g, title, g.ScreenWidth/2-measureText(g, title, 50)/2, 80, 50, colorAccent)
 
-	drawMenu(g, "", []string{"Start", "Settings", "Exit"}, titleMenuY)
+	drawMenu(g, "", []string{"Start", "Settings", "Exit"}, 220)
 	drawHighScores(g, g.ScreenWidth/2-80, 330, g.HighScores)
 }
 
@@ -197,7 +197,7 @@ func drawGameOver(g *Game) {
 	drawText(g, statsText, g.ScreenWidth/2-measureText(g, statsText, 20)/2, 120, 20, colorStructLight)
 
 	drawHighScores(g, g.ScreenWidth/2-80, 160, g.HighScores)
-	drawMenu(g, "", []string{"New Game", "Exit"}, gameOverMenuY)
+	drawMenu(g, "", []string{"New Game", "Exit"}, 420)
 }
 
 func drawOverlay(g *Game) {
@@ -231,7 +231,7 @@ func drawSettings(g *Game) {
 		{"Back", ""},
 	}
 
-	y := settingsMenuY
+	y := int32(240)
 	for i, row := range rows {
 		color := colorStructLight
 		if int32(i) == g.MenuIndex {
@@ -244,127 +244,11 @@ func drawSettings(g *Game) {
 		}
 
 		drawText(g, text, g.ScreenWidth/2-measureText(g, text, 26)/2, y, 26, color)
-		y += settingsLineHeight
+		y += 45
 	}
 
 	hint := "Up/Down: select   Left/Right: change   Enter: confirm"
 	drawText(g, hint, g.ScreenWidth/2-measureText(g, hint, 16)/2, y+20, 16, colorStructMid)
-}
-
-// drawSkillIcon draws a small vector glyph for a weapon or passive skill,
-// consistent with the game's shape-based art style (no image assets).
-func drawSkillIcon(id SkillID, c rl.Vector2, s float32, color rl.Color) {
-	if kind, ok := weaponForGrantSkill(id); ok {
-		drawWeaponIcon(kind, c, s, color)
-		return
-	}
-	drawPassiveIcon(id, c, s, color)
-}
-
-func drawWeaponIcon(kind WeaponKind, c rl.Vector2, s float32, color rl.Color) {
-	switch kind {
-	case WeaponForward:
-		rl.DrawTriangle(rl.NewVector2(c.X, c.Y-s), rl.NewVector2(c.X-s*0.7, c.Y+s*0.7), rl.NewVector2(c.X+s*0.7, c.Y+s*0.7), color)
-	case WeaponOrbit:
-		rl.DrawCircleLines(int32(c.X), int32(c.Y), s, color)
-		rl.DrawCircleV(rl.NewVector2(c.X+s, c.Y), s*0.25, color)
-	case WeaponHoming:
-		rl.DrawCircleLines(int32(c.X), int32(c.Y), s, color)
-		rl.DrawCircleV(c, s*0.3, color)
-		rl.DrawLineEx(rl.NewVector2(c.X, c.Y-s), rl.NewVector2(c.X, c.Y-s*1.7), 2, color)
-	case WeaponMine:
-		rl.DrawCircleV(c, s*0.55, color)
-		for a := 0; a < 360; a += 60 {
-			rad := float64(a) * rl.Deg2rad
-			tip := rl.NewVector2(c.X+float32(math.Cos(rad))*s, c.Y+float32(math.Sin(rad))*s)
-			rl.DrawLineEx(c, tip, 2, color)
-		}
-	case WeaponBeam:
-		rl.DrawLineEx(rl.NewVector2(c.X-s, c.Y), rl.NewVector2(c.X+s, c.Y), 3, color)
-		rl.DrawCircleV(rl.NewVector2(c.X-s, c.Y), s*0.25, color)
-	case WeaponShock:
-		rl.DrawCircleLines(int32(c.X), int32(c.Y), s, color)
-		rl.DrawCircleLines(int32(c.X), int32(c.Y), s*0.5, color)
-	}
-}
-
-func drawPassiveIcon(id SkillID, c rl.Vector2, s float32, color rl.Color) {
-	switch id {
-	case SkillDamage:
-		rl.DrawTriangle(rl.NewVector2(c.X, c.Y-s), rl.NewVector2(c.X-s*0.6, c.Y+s), rl.NewVector2(c.X+s*0.6, c.Y+s), color)
-	case SkillBarrier:
-		rl.DrawCircleLines(int32(c.X), int32(c.Y), s, color)
-		rl.DrawCircleLines(int32(c.X), int32(c.Y), s*0.55, color)
-	case SkillCooldown:
-		rl.DrawCircleLines(int32(c.X), int32(c.Y), s, color)
-		rl.DrawLineEx(c, rl.NewVector2(c.X, c.Y-s*0.8), 2, color)
-		rl.DrawLineEx(c, rl.NewVector2(c.X+s*0.5, c.Y), 2, color)
-	case SkillPickupRadius:
-		rl.DrawCircleLines(int32(c.X), int32(c.Y), s*0.5, color)
-		rl.DrawCircleLines(int32(c.X), int32(c.Y), s, rl.Fade(color, 0.5))
-	case SkillMoveSpeed:
-		rl.DrawTriangle(rl.NewVector2(c.X-s, c.Y-s*0.6), rl.NewVector2(c.X-s, c.Y+s*0.6), rl.NewVector2(c.X, c.Y), color)
-		rl.DrawTriangle(rl.NewVector2(c.X, c.Y-s*0.6), rl.NewVector2(c.X, c.Y+s*0.6), rl.NewVector2(c.X+s, c.Y), color)
-	case SkillMaxHP:
-		rl.DrawRectangle(int32(c.X-s*0.15), int32(c.Y-s), int32(s*0.3), int32(s*2), color)
-		rl.DrawRectangle(int32(c.X-s), int32(c.Y-s*0.15), int32(s*2), int32(s*0.3), color)
-	}
-}
-
-// evolutionHint returns the evolved weapon name if picking this skill (a
-// passive whose linked weapon is already equipped) contributes toward that
-// weapon's fusion - lets the level-up picker show what a passive is building
-// toward instead of it just reading as a flat stat bump.
-func evolutionHint(g *Game, id SkillID) string {
-	for kind, grantSkill := range weaponGrantSkill {
-		if skillLinkedPassive[grantSkill] == id && hasWeapon(g, kind) {
-			return evolvedWeaponName[kind]
-		}
-	}
-	return ""
-}
-
-// drawAbilitySlots shows all maxAbilitySlots ability slots as a row of icons
-// - filled for equipped weapons/passives (bright if evolved), empty outlined
-// boxes for open slots - so slot pressure is visible at a glance.
-func drawAbilitySlots(g *Game, x, y int32) {
-	const boxSize, gap = float32(28), float32(34)
-	const iconScale = 0.32 // icon glyph radius as a fraction of boxSize, leaves a margin inside the box outline
-
-	type slot struct {
-		id    SkillID
-		color rl.Color
-	}
-	var slots []slot
-
-	for _, w := range g.Weapons {
-		color := colorShield
-		if w.Evolved {
-			color = colorCrit
-		}
-		slots = append(slots, slot{id: weaponGrantSkill[w.Kind], color: color})
-	}
-
-	for id := SkillID(0); id < skillCount; id++ {
-		if g.SkillLevels[id] == 0 || isFusedPassive(g, id) {
-			continue
-		}
-		if _, ok := weaponForGrantSkill(id); ok {
-			continue
-		}
-		slots = append(slots, slot{id: id, color: colorShield})
-	}
-
-	for i := int32(0); i < maxAbilitySlots; i++ {
-		bx := float32(x) + float32(i)*gap
-		by := float32(y)
-		rl.DrawRectangleLines(int32(bx), int32(by), int32(boxSize), int32(boxSize), rl.Fade(colorStructMid, 0.6))
-
-		if int(i) < len(slots) {
-			center := rl.NewVector2(bx+boxSize/2, by+boxSize/2)
-			drawSkillIcon(slots[i].id, center, boxSize*iconScale, slots[i].color)
-		}
-	}
 }
 
 // drawLevelUp shows the rolled skill/evolve choices as a non-cancelable picker.
@@ -372,16 +256,7 @@ func drawLevelUp(g *Game) {
 	heading := fmt.Sprintf("LEVEL %d", g.Level)
 	drawText(g, heading, g.ScreenWidth/2-measureText(g, heading, 34)/2, 100, 34, colorAccent)
 
-	y := levelUpMenuY
-	const (
-		nameFontSize = 24
-		descFontSize = 15
-		descOffsetY  = 27
-		iconOffsetX  = 24
-		iconOffsetY  = 10
-		iconRadius   = 11
-	)
-
+	y := int32(200)
 	for i, choice := range g.PendingChoices {
 		color := colorStructLight
 		if int32(i) == g.MenuIndex {
@@ -389,8 +264,6 @@ func drawLevelUp(g *Game) {
 		}
 
 		var name, desc string
-		var icon SkillID
-		hasIcon := false
 		switch choice.Kind {
 		case ChoiceEvolve:
 			name = fmt.Sprintf("EVOLVE: %s", evolvedWeaponName[choice.Weapon])
@@ -400,31 +273,21 @@ func drawLevelUp(g *Game) {
 			}
 		case ChoiceLifeOrbs:
 			name = fmt.Sprintf("%d x Life Orb", choice.Count)
-			desc = "All slots full and maxed - a health reward, plus a small permanent damage bump."
+			desc = "All slots are full and maxed - a direct health reward instead."
 		case ChoiceShields:
 			name = fmt.Sprintf("%d x Shield", choice.Count)
-			desc = "All slots full and maxed - a shield reward, plus a small permanent damage bump."
+			desc = "All slots are full and maxed - a direct shield reward instead."
 		default:
 			def := skillDefs[choice.Skill]
 			lvl := g.SkillLevels[choice.Skill]
 			name = fmt.Sprintf("%s (Lv %d)", def.Name, lvl+1)
 			desc = def.Description
-			if hint := evolutionHint(g, choice.Skill); hint != "" {
-				desc = fmt.Sprintf("%s  ->  builds toward %s", desc, hint)
-			}
-			icon = choice.Skill
-			hasIcon = true
 		}
 
-		textWidth := measureText(g, name, nameFontSize)
-		textX := g.ScreenWidth/2 - textWidth/2
-		if hasIcon {
-			drawSkillIcon(icon, rl.NewVector2(float32(textX-iconOffsetX), float32(y+iconOffsetY)), iconRadius, color)
-		}
-		drawText(g, name, textX, y, nameFontSize, color)
-		drawText(g, desc, g.ScreenWidth/2-measureText(g, desc, descFontSize)/2, y+descOffsetY, descFontSize, colorStructMid)
+		drawText(g, name, g.ScreenWidth/2-measureText(g, name, 24)/2, y, 24, color)
+		drawText(g, desc, g.ScreenWidth/2-measureText(g, desc, 15)/2, y+27, 15, colorStructMid)
 
-		y += levelUpLineHeight
+		y += 62
 	}
 }
 
@@ -438,7 +301,7 @@ func drawMenu(g *Game, heading string, options []string, y int32) {
 	for i, option := range options {
 		textWidth := measureText(g, option, 24)
 		textX := g.ScreenWidth/2 - textWidth/2
-		rowY := y + int32(i)*menuLineHeight
+		rowY := y + int32(i)*35
 
 		color := colorStructLight
 		if int32(i) == g.MenuIndex {
@@ -473,10 +336,6 @@ func drawHighScores(g *Game, x, y int32, scores []int32) {
 
 func drawGameplayWorld(g *Game) {
 	drawBackgroundStars(g, g.Player.Position)
-
-	for _, c := range g.BoundaryClouds {
-		rl.DrawCircleV(c.Position, c.Radius, c.Color)
-	}
 
 	if g.BlackHole.Active {
 		rl.DrawCircleV(g.BlackHole.Position, g.BlackHole.Radius, colorVoid)
@@ -548,7 +407,7 @@ func drawGameplayWorld(g *Game) {
 
 	drawOrbitBlades(g)
 
-	shipVisible := g.Player.Health > 0 && (g.Player.ImmunityTimer <= 0 || int(rl.GetTime()*10)%2 == 0)
+	shipVisible := g.Player.ImmunityTimer <= 0 || int(rl.GetTime()*10)%2 == 0
 	if shipVisible {
 		drawShip(g)
 	}
@@ -563,10 +422,6 @@ func drawGameplayWorld(g *Game) {
 
 	for _, b := range g.Bullets {
 		rl.DrawCircleV(b.Position, b.Radius, b.Color)
-	}
-
-	for _, p := range g.DeathParticles {
-		rl.DrawCircleV(p.Position, p.Radius, rl.Fade(p.Color, p.Life/p.MaxLife))
 	}
 }
 
@@ -615,7 +470,7 @@ func drawEnemy(g *Game, e Enemy) {
 
 	rl.DrawCircleV(e.Position, kind.Radius, color)
 
-	maxHealth := int32(float32(kind.Health) * difficultyDefs[g.Settings.Difficulty].EnemyHealthMult * waveEnemyScale(g))
+	maxHealth := int32(float32(kind.Health) * difficultyDefs[g.Settings.Difficulty].EnemyHealthMult)
 	if e.IsElite {
 		maxHealth *= 2
 	}
@@ -645,15 +500,6 @@ func drawBoss(g *Game) {
 			progress = 1
 		}
 		drawChargeParticles(bossCenter, progress, g.Boss.Color, 100, 65)
-
-		// Beam gets its own aim-preview line (not just a particle glow) so it
-		// reads unmistakably differently from Slam's windup at a glance -
-		// Slam is "get away/shield in time", Beam is "get off this line".
-		if g.Boss.Attack == AttackBeam {
-			direction := rl.Vector2Normalize(rl.Vector2Subtract(g.Boss.TargetPosition, bossCenter))
-			beamEnd := rl.Vector2Add(bossCenter, rl.Vector2Scale(direction, 2000))
-			rl.DrawLineEx(bossCenter, beamEnd, 3, rl.Fade(colorBossBeam, 0.25+0.5*progress))
-		}
 	}
 
 	if g.Boss.Health > 0 {
@@ -820,14 +666,8 @@ func drawHUD(g *Game) {
 
 	drawChargePips(g, 10, 82)
 	drawShieldStackPips(g, 70, 82)
-	drawNerveBar(g, 10, 110)
-	drawAbilitySlots(g, 10, 132)
 
-	drawText(g, "Move: WASD | Dash: L-Click | Shield: R-Click | Pause: Esc | F11: Fullscreen", 10, 172, 18, colorStructMid)
-
-	if g.Sandbox {
-		drawSandboxHUD(g)
-	}
+	drawText(g, "Move: WASD | Dash: L-Click | Shield: R-Click | Pause: Esc | F11: Fullscreen", 10, 110, 18, colorStructMid)
 }
 
 // drawHealthPips shows health as a row of ship-icon "lives" (full MaxHealth
@@ -880,19 +720,6 @@ func drawShieldStackPips(g *Game, x, y int32) {
 			rl.DrawCircleLines(int32(center.X), int32(center.Y), pipRadius, rl.Fade(colorStructMid, 0.5))
 		}
 	}
-}
-
-// drawNerveBar shows the aggression meter that grants bonus damage/speed the
-// longer you kill without getting hit - fills toward colorCrit as it climbs,
-// so the "hesitation is defeat" payoff reads as an escalating hot streak.
-func drawNerveBar(g *Game, x, y int32) {
-	const width, height = 120, 8
-	frac := nerveFrac(g)
-
-	rl.DrawRectangle(x, y, width, height, rl.Fade(colorStructMid, 0.5))
-	rl.DrawRectangle(x, y, int32(width*frac), height, rl.ColorLerp(colorCharge, colorCrit, frac))
-	rl.DrawRectangleLines(x, y, width, height, colorStructDark)
-	drawText(g, "Nerve", x+width+8, y-6, 16, colorStructMid)
 }
 
 // drawChargePips shows the shared dash/shield charge pool as two pips: full

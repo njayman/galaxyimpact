@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"os"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -52,6 +53,7 @@ type Game struct {
 	Weapons                 []Weapon
 	SkillLevels             map[SkillID]int32
 	PendingChoices          []LevelUpChoice
+	PostCapDamageLevels     int32
 	BossDeathShockwave      bool
 	BossDeathShockwaveTimer float32
 	BossDeathShockwavePos   rl.Vector2
@@ -60,6 +62,8 @@ type Game struct {
 	Stars                   []Star
 	BgParticles             []BgParticle
 	BorderStars             []Star
+	BoundaryClouds          []GasCloud
+	DeathParticles          []Particle
 	AsteroidSpawnTimer      float32
 	EnemySpawnTimer         float32
 	SpreadWindupShots       int32
@@ -85,6 +89,8 @@ type Game struct {
 	Settings                Settings
 	SettingsReturnState     GameState
 	BGM                     rl.Music
+	Sandbox                 bool
+	SandboxKindIndex        int32
 }
 
 // pixelScale downscales WorldTarget (game-world shapes only: ship, enemies,
@@ -144,18 +150,15 @@ func InitGame() *Game {
 		}
 	}
 
+	g.BoundaryClouds = generateBoundaryClouds()
+
 	g.HighScoreRepo = highscore.NewFileRepository(highScoreFile)
 	g.HighScores, _ = g.HighScoreRepo.Load()
 
 	g.Sounds = LoadSounds()
 	g.Font = loadReadableFont()
 
-	g.Settings = Settings{
-		ResolutionIndex: defaultResolutionIndex(),
-		Difficulty:      DifficultyNormal,
-		BGMOn:           true,
-		SoundOn:         true,
-	}
+	g.Settings = loadSettings()
 
 	g.BGM = loadBGM()
 	rl.PlayMusicStream(g.BGM)
@@ -170,6 +173,37 @@ func InitGame() *Game {
 	g.State = TITLE
 
 	return g
+}
+
+// generateBoundaryClouds builds an irregular nebula ring around arenaHalf -
+// clusters of overlapping soft blobs, jittered in angle/distance/size, so
+// the world's edge reads as an organic gas cloud rather than a perfect
+// circle or an invisible wall. The actual clamp is still just a circular
+// distance check (see updatePlayerMovement) - this is decoration only.
+func generateBoundaryClouds() []GasCloud {
+	cloudColors := []rl.Color{rl.Fade(colorHaze, 0.12), rl.Fade(colorStructMid, 0.15), rl.Fade(colorAccentDim, 0.08)}
+
+	var clouds []GasCloud
+	const clusterCount = 40
+
+	for i := 0; i < clusterCount; i++ {
+		baseAngle := float64(i) * 360.0 / clusterCount
+		angle := (baseAngle + float64(rl.GetRandomValue(-8, 8))) * rl.Deg2rad
+		dist := arenaHalf + float32(rl.GetRandomValue(-800, 800))
+		center := rl.NewVector2(float32(math.Cos(angle))*dist, float32(math.Sin(angle))*dist)
+
+		blobCount := int(rl.GetRandomValue(3, 5))
+		for b := 0; b < blobCount; b++ {
+			offset := rl.NewVector2(float32(rl.GetRandomValue(-150, 150)), float32(rl.GetRandomValue(-150, 150)))
+			clouds = append(clouds, GasCloud{
+				Position: rl.Vector2Add(center, offset),
+				Radius:   float32(rl.GetRandomValue(80, 220)),
+				Color:    cloudColors[rl.GetRandomValue(0, int32(len(cloudColors)-1))],
+			})
+		}
+	}
+
+	return clouds
 }
 
 // loadReadableFont picks a real, legible system sans-serif over raylib's tiny
@@ -250,8 +284,10 @@ func resetRun(g *Game) {
 	g.Enemies = []Enemy{}
 	g.Pickups = []Pickup{}
 	g.Mines = []Mine{}
+	g.DeathParticles = []Particle{}
 	g.Weapons = []Weapon{{Kind: WeaponForward, Level: 1}}
 	g.SkillLevels = map[SkillID]int32{SkillForwardShot: 1}
+	g.PostCapDamageLevels = 0
 	g.BossDeathShockwave = false
 	g.BossDeathShockwaveTimer = 0
 	g.BossDeathShockwaveHit = false
