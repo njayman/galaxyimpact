@@ -237,7 +237,7 @@ The "hesitation is defeat" identity: staying aggressive and landing kills keeps 
 
 ## Damage meter
 
-A live readout next to the Nerve bar showing **this frame's outgoing damage only** — recalculated fresh every frame, reading blank when nothing was hit. When you deal damage, it shows the total plus a breakdown by source (Forward / Orbit / Homing / Mine / Beam / Shock / Dash), so you can directly watch how Nerve's damage bonus affects your numbers in real time.
+A live readout next to the Nerve bar showing your outgoing damage, broken down by source (Forward / Orbit / Homing / Mine / Beam / Shock / Dash), so you can directly watch how Nerve's damage bonus affects your numbers in real time. Defaults to `DMG: 0`. A hit refreshes the reading and holds it for a short moment before it decays back to 0, instead of flickering blank between frames.
 
 ---
 
@@ -283,6 +283,11 @@ Launch with `-sandbox` (or `--sandbox`) for a clean, empty arena with no waves o
 | `L` | Open the level-up picker on demand |
 | `H` | Full heal + max shield stacks + max Nerve |
 | `R` | Reset weapons/skills back to starting Forward Shot only |
+| `G` | Toggle death (god mode) — off by default, so damage doesn't matter until you turn it on |
+| `,` / `.` | Cycle the boss attack to command |
+| `O` | Force the nearest boss to immediately wind up and use the selected attack |
+
+Current sandbox state (selected enemy kind, god-mode on/off, selected boss attack) is always shown at the bottom of the screen.
 
 ---
 
