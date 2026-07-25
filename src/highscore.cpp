@@ -1,5 +1,6 @@
 #include "highscore.hpp"
 
+#include "platform.hpp"
 #include <algorithm>
 #include <charconv>
 #include <fstream>
@@ -15,7 +16,7 @@ constexpr size_t maxEntries = 5;
 
 FileRepository::FileRepository(std::string path) : path(std::move(path)) {}
 
-auto FileRepository::Load() -> std::vector<int32_t>
+auto FileRepository::load() -> std::vector<int32_t>
 {
     std::ifstream file(path);
     if (!file)
@@ -43,7 +44,7 @@ auto FileRepository::Load() -> std::vector<int32_t>
     return scores;
 }
 
-auto FileRepository::Save(const std::vector<int32_t>& scores) -> bool
+auto FileRepository::save(const std::vector<int32_t>& scores) -> bool
 {
     std::ofstream file(path, std::ios::trunc);
     if (!file)
@@ -60,10 +61,16 @@ auto FileRepository::Save(const std::vector<int32_t>& scores) -> bool
         file << scores.at(i);
     }
 
-    return static_cast<bool>(file);
+    const bool ok = static_cast<bool>(file);
+    file.close();
+    if (ok)
+    {
+        platformSyncSaveData();
+    }
+    return ok;
 }
 
-auto Record(Repository& repo, const std::vector<int32_t>& scores,
+auto record(Repository& repo, const std::vector<int32_t>& scores,
             int32_t score) -> std::vector<int32_t>
 {
     std::vector<int32_t> updated = scores;
@@ -76,7 +83,7 @@ auto Record(Repository& repo, const std::vector<int32_t>& scores,
         updated.resize(maxEntries);
     }
 
-    repo.Save(updated);
+    repo.save(updated);
 
     return updated;
 }

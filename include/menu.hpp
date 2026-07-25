@@ -8,7 +8,7 @@
 // mouseUIPos maps the real mouse position (window space) into the fixed
 // logical screenWidth/screenHeight space that all menu/HUD drawing uses,
 // inverting the letterbox scale/offset applied when blitting to the window.
-auto mouseUIPos(Game& game) -> Vector2;
+auto mouseUIPos(const Game& game) -> Vector2;
 
 // hoveredRow returns the row index the mouse is currently over, given rows
 // laid out as full-width bands starting at y, lineHeight apart - matching

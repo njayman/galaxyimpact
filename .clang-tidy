@@ -3,7 +3,8 @@ Checks: >
   performance-*,
   readability-*,
   modernize-*,
-  cppcoreguidelines-*
+  cppcoreguidelines-*,
+  clang-analyzer-*
 
 WarningsAsErrors: ''
 

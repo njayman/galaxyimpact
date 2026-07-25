@@ -1,4 +1,5 @@
 build/
+build-web/
 .cache/
 highscore.txt
 settings.txt

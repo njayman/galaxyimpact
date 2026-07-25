@@ -17,8 +17,8 @@ class Repository
     auto operator=(Repository&&) -> Repository& = default;
     virtual ~Repository() = default;
 
-    virtual auto Load() -> std::vector<int32_t> = 0;
-    virtual auto Save(const std::vector<int32_t>& scores) -> bool = 0;
+    virtual auto load() -> std::vector<int32_t> = 0;
+    virtual auto save(const std::vector<int32_t>& scores) -> bool = 0;
 };
 
 class FileRepository : public Repository
@@ -26,8 +26,8 @@ class FileRepository : public Repository
   public:
     explicit FileRepository(std::string path);
 
-    auto Load() -> std::vector<int32_t> override;
-    auto Save(const std::vector<int32_t>& scores) -> bool override;
+    auto load() -> std::vector<int32_t> override;
+    auto save(const std::vector<int32_t>& scores) -> bool override;
 
   private:
     std::string path;
@@ -35,7 +35,7 @@ class FileRepository : public Repository
 
 // Record inserts score into scores, keeps it sorted descending, truncates to
 // the top maxEntries, persists via repo, and returns the updated list.
-auto Record(Repository& repo, const std::vector<int32_t>& scores,
+auto record(Repository& repo, const std::vector<int32_t>& scores,
             int32_t score) -> std::vector<int32_t>;
 
 } // namespace highscore

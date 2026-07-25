@@ -7,7 +7,7 @@
 #include <optional>
 #include <string_view>
 
-namespace ItemConts
+namespace ItemConstants
 {
 constexpr int maxAbilitySlots = 6;
 }
@@ -60,7 +60,7 @@ enum class SkillType : std::uint8_t
     OrbitBlades,
     HomingMissiles,
     MineLayers,
-    BeemSweep,
+    BeamSweep,
     ShockWave,
     Damage,
     Barrier,
@@ -108,14 +108,14 @@ constexpr std::array<Skill, static_cast<size_t>(SkillType::Count)> Skills{
 
 constexpr std::array<SkillType, static_cast<size_t>(WeaponType::Count)> weaponGrantSkill{
     SkillType::ForwardShot, SkillType::OrbitBlades, SkillType::HomingMissiles,
-    SkillType::MineLayers,  SkillType::BeemSweep,   SkillType::ShockWave};
+    SkillType::MineLayers,  SkillType::BeamSweep,   SkillType::ShockWave};
 
 constexpr std::array<SkillType, static_cast<size_t>(WeaponType::Count)> skillLinkedPassive{
     SkillType::Damage,       SkillType::Barrier,   SkillType::Cooldown,
     SkillType::PickupRadius, SkillType::MoveSpeed, SkillType::MaxHp};
 
 constexpr std::array<std::string_view, static_cast<size_t>(WeaponType::Count)> evolvedWeaponName{
-    "Photon Canon",    "Aegis Ring",  "Seeker Swarm",
+    "Photon Cannon",   "Aegis Ring",  "Seeker Swarm",
     "Cluster Charges", "Lance Sweep", "Bulwark Pulse"};
 
 enum class ChoiceType : std::uint8_t

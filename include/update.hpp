@@ -18,6 +18,8 @@ constexpr float waveEnemyScalePerWave = 0.035F;
 constexpr float pickupExpiryWarning = 2.5F; // pickups blink in their last this-many seconds
 constexpr float shockwaveStompRadius = 220; // shared with draw.cpp's telegraph/impact visual
 constexpr float shockwaveStompDuration = 0.5F;
+constexpr float shieldCooldownDuration = 2.0F; // shared with draw.cpp's cooldown-arc visual
+constexpr int maxEnemies = 200; // hard population cap; also game.cpp's reserve() target
 } // namespace UpdateConstants
 
 auto nerveFrac(const Game& game) -> float;

@@ -17,7 +17,7 @@ struct Sounds
     Sound defeat;
     Sound critical;
     Sound bossWindUp;
-    Sound beemFire;
+    Sound beamFire;
     Sound homingLaunch;
     Sound spreadBurst;
     Sound slamBoom;

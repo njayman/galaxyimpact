@@ -30,7 +30,7 @@ auto measureText(const Game& game, const char* text, int32_t size) -> int32_t;
 // letterBoxRect scales the fixed logical frame up (or down) to fit as much of
 // the actual window as possible while preserving its aspect ratio, centering
 // it and leaving black bars rather than stretching.
-auto letterBoxRect(Game& game) -> Rectangle;
+auto letterBoxRect(const Game& game) -> Rectangle;
 
 // drawGame renders in three passes: worldTarget (low-res, pixel-art game
 // world) -> pixelTarget (native resolution, world scaled up + UI text drawn

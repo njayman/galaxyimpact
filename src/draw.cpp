@@ -5,6 +5,7 @@
 #include "entities/item.hpp"
 #include "entities/player.hpp"
 #include "entities/space.hpp"
+#include "menu.hpp"
 #include "palette.hpp"
 #include "raylib.h"
 #include "raymath.h"
@@ -16,6 +17,7 @@
 #include <cstdint>
 #include <format>
 #include <numbers>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,7 +32,7 @@ auto measureText(const Game& game, const char* text, int32_t size) -> int32_t
     return static_cast<int32_t>(MeasureTextEx(game.font, text, static_cast<float>(size), 1).x);
 }
 
-auto letterBoxRect(Game& game) -> Rectangle
+auto letterBoxRect(const Game& game) -> Rectangle
 {
     auto scale = static_cast<float>(game.windowWidth) / static_cast<float>(game.screenWidth);
     auto heightScale =
@@ -74,7 +76,9 @@ void drawChargeParticles(Vector2 center, float fraction, Color color, float maxR
                          float minRadius);
 void drawComet(const BossProjectile& projectile);
 void drawHUD(const Game& game);
+void drawDownwardTriangleIcon(float cx, int32_t y, float size, Color fillColor, bool filled);
 void drawHealthPips(const Game& game, int32_t x, int32_t y);
+auto healthPipsWidth(const Game& game) -> int32_t;
 void drawShieldStackPips(const Game& game, int32_t x, int32_t y);
 void drawNerveBar(const Game& game, int32_t x, int32_t y);
 void drawDamageMeter(const Game& game, int32_t x, int32_t y);
@@ -205,11 +209,14 @@ void drawSettings(const Game& game)
     const std::string displayMode = IsWindowFullscreen() ? "Fullscreen" : "Windowed";
     const auto onOff = [](bool on) -> std::string { return on ? "On" : "Off"; };
 
+    const bool difficultyLocked = game.settingsReturnState == GameState::PAUSED;
+    const std::string difficultyValue =
+        std::string(difficultyDefs.at(static_cast<size_t>(game.settings.difficulty)).name) +
+        (difficultyLocked ? " (locked mid-run)" : "");
+
     const std::array<std::pair<std::string, std::string>, 7> rows{
         std::pair{"Resolution", std::format("{}x{}", res.width, res.height)},
-        std::pair{
-            "Difficulty",
-            std::string(difficultyDefs.at(static_cast<size_t>(game.settings.difficulty)).name)},
+        std::pair{"Difficulty", difficultyValue},
         std::pair{"BGM", onOff(game.settings.bgmOn)},
         std::pair{"Sound", onOff(game.settings.soundOn)},
         std::pair{"FPS Cap",
@@ -386,7 +393,11 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
         slots.push_back(Slot{.id = id, .color = Palette::Shield});
     }
 
-    for (int32_t i = 0; i < ItemConts::maxAbilitySlots; i++)
+    const Vector2 mouse = mouseUIPos(game);
+    std::optional<SkillType> hovered;
+    Vector2 hoveredBoxPos{};
+
+    for (int32_t i = 0; i < ItemConstants::maxAbilitySlots; i++)
     {
         const float bx = static_cast<float>(x) + static_cast<float>(i) * gap;
         const auto by = static_cast<float>(y);
@@ -399,7 +410,40 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
             const Vector2 center{.x = bx + boxSize / 2, .y = by + boxSize / 2};
             drawSkillIcon(slots.at(static_cast<size_t>(i)).id, center, boxSize * iconScale,
                           slots.at(static_cast<size_t>(i)).color);
+
+            if (CheckCollisionPointRec(
+                    mouse, Rectangle{.x = bx, .y = by, .width = boxSize, .height = boxSize}))
+            {
+                hovered = slots.at(static_cast<size_t>(i)).id;
+                hoveredBoxPos = Vector2{.x = bx, .y = by};
+            }
         }
+    }
+
+    if (hovered.has_value())
+    {
+        const auto& def = Skills.at(static_cast<size_t>(*hovered));
+        const int lvl = game.skillLevels.at(static_cast<size_t>(*hovered));
+        const std::string name = std::format("{} (Lv {})", def.name, lvl);
+        const std::string desc(def.description);
+
+        constexpr int32_t nameFontSize = 16;
+        constexpr int32_t descFontSize = 13;
+        const int32_t boxWidth = std::max(measureText(game, name.c_str(), nameFontSize),
+                                          measureText(game, desc.c_str(), descFontSize)) +
+                                 16;
+        int32_t tipX = static_cast<int32_t>(hoveredBoxPos.x);
+        if (tipX + boxWidth > game.screenWidth)
+        {
+            tipX = game.screenWidth - boxWidth;
+        }
+        const int32_t tipY =
+            static_cast<int32_t>(hoveredBoxPos.y) + static_cast<int32_t>(boxSize) + 6;
+
+        DrawRectangle(tipX, tipY, boxWidth, 46, Fade(Palette::Void, 0.9F));
+        DrawRectangleLines(tipX, tipY, boxWidth, 46, Palette::StructMid);
+        drawText(game, name.c_str(), tipX + 8, tipY + 6, nameFontSize, Palette::Accent);
+        drawText(game, desc.c_str(), tipX + 8, tipY + 26, descFontSize, Palette::StructLight);
     }
 }
 
@@ -881,7 +925,8 @@ void drawBoss(const Game& game, const Boss& boss)
         {
             if (CheckCollisionCircleLine(a.position, a.radius, beamStart, beamEnd))
             {
-                if (const float dist = Vector2Distance(bossCenter, a.position); dist < beamLength)
+                if (const float dist = Vector2Distance(bossCenter, a.position) - a.radius;
+                    dist < beamLength)
                 {
                     beamLength = dist;
                 }
@@ -1041,12 +1086,12 @@ void drawOrbitBlades(const Game& game)
 // ready.
 void drawShieldIndicator(const Player& player)
 {
-    constexpr float cooldownDuration = 2.0F;
     const float ringRadius = player.radius + 10;
 
     if (player.shieldCooldownTimer > 0)
     {
-        const float progress = 1 - player.shieldCooldownTimer / cooldownDuration;
+        const float progress =
+            1 - player.shieldCooldownTimer / UpdateConstants::shieldCooldownDuration;
         DrawCircleLines(static_cast<int32_t>(player.position.x),
                         static_cast<int32_t>(player.position.y), ringRadius,
                         Fade(Palette::StructMid, 0.5F));
@@ -1129,6 +1174,7 @@ void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius)
 void drawHUD(const Game& game)
 {
     drawHealthPips(game, 10, 10);
+    drawShieldStackPips(game, 10 + healthPipsWidth(game) + 20, 10);
 
     const std::string statsText =
         std::format("Score: {}   Wave: {}   Lv: {}", game.score, game.waveNumber, game.level);
@@ -1140,14 +1186,20 @@ void drawHUD(const Game& game)
     DrawRectangle(10, 64, static_cast<int32_t>(300 * xpFrac), 10, Palette::Charge);
     DrawRectangleLines(10, 64, 300, 10, Palette::StructDark);
 
-    drawChargePips(game, 10, 82);
-    drawShieldStackPips(game, 70, 82);
-    drawNerveBar(game, 10, 110);
-    drawDamageMeter(game, 220, 100);
-    drawAbilitySlots(game, 10, 132);
+    // Nerve directly under XP; damage counter beside it.
+    drawNerveBar(game, 10, 82);
+    drawDamageMeter(game, 150, 82);
+    drawChargePips(game, 10, 106);
+
+    // Skills live in their own corner, away from the health/nerve cluster.
+    constexpr int32_t abilitySlotCount = ItemConstants::maxAbilitySlots;
+    constexpr int32_t abilityBoxSize = 28;
+    constexpr int32_t abilityGap = 34;
+    const int32_t abilitySlotsWidth = (abilitySlotCount - 1) * abilityGap + abilityBoxSize;
+    drawAbilitySlots(game, game.screenWidth - abilitySlotsWidth - 10, 10);
 
     drawText(game, "Move: WASD | Dash: L-Click | Shield: R-Click | Pause: Esc | F11: Fullscreen",
-             10, 172, 18, Palette::StructMid);
+             10, game.screenHeight - 28, 18, Palette::StructMid);
 
     if (game.sandbox)
     {
@@ -1155,30 +1207,34 @@ void drawHUD(const Game& game)
     }
 }
 
-// drawHealthPips shows health as a row of ship-icon "lives" (full maxHealth
-// count) instead of a number - filled/accent for current health, outlined
-// and dim for missing ones. A collected-but-not-yet-converted life orb shows
-// as a faint half-filled icon in the next empty slot.
+// drawDownwardTriangleIcon is the shared pip shape for both health and
+// shield-stack: points downward - apex at the bottom, base along the top -
+// filled when active, outlined when empty. Shared so the two rows read as
+// one consistent icon language rather than two different shapes.
+void drawDownwardTriangleIcon(float cx, int32_t y, float size, Color fillColor, bool filled)
+{
+    const Vector2 bottom{.x = cx, .y = static_cast<float>(y) + size * 2};
+    const Vector2 topLeft{.x = cx - size * 0.8F, .y = static_cast<float>(y)};
+    const Vector2 topRight{.x = cx + size * 0.8F, .y = static_cast<float>(y)};
+
+    if (filled)
+    {
+        DrawTriangle(bottom, topRight, topLeft, fillColor);
+    }
+    else
+    {
+        DrawTriangleLines(bottom, topRight, topLeft, Fade(Palette::StructMid, 0.6F));
+    }
+}
+
+// drawHealthPips shows health as a row of downward-pointing "lives" (full
+// maxHealth count) instead of a number - filled/accent for current health,
+// outlined and dim for missing ones. A collected-but-not-yet-converted life
+// orb shows as a faint half-filled icon in the next empty slot.
 void drawHealthPips(const Game& game, int32_t x, int32_t y)
 {
     constexpr float size = 11;
     constexpr float gap = 24;
-
-    const auto drawIcon = [y](float cx, Color fillColor, bool filled)
-    {
-        const Vector2 top{.x = cx, .y = static_cast<float>(y)};
-        const Vector2 left{.x = cx - size * 0.8F, .y = static_cast<float>(y) + size * 2};
-        const Vector2 right{.x = cx + size * 0.8F, .y = static_cast<float>(y) + size * 2};
-
-        if (filled)
-        {
-            DrawTriangle(top, left, right, fillColor);
-        }
-        else
-        {
-            DrawTriangleLines(top, left, right, Fade(Palette::StructMid, 0.6F));
-        }
-    };
 
     for (int32_t i = 0; i < game.player.maxHealth; i++)
     {
@@ -1186,42 +1242,43 @@ void drawHealthPips(const Game& game, int32_t x, int32_t y)
 
         if (i < game.player.health)
         {
-            drawIcon(cx, Palette::Accent, true);
+            drawDownwardTriangleIcon(cx, y, size, Palette::Accent, true);
         }
         else if (i == game.player.health && game.player.halfLifeOrb)
         {
-            drawIcon(cx, Fade(Palette::Accent, 0.45F), true);
+            drawDownwardTriangleIcon(cx, y, size, Fade(Palette::Accent, 0.45F), true);
         }
         else
         {
-            drawIcon(cx, Color{}, false);
+            drawDownwardTriangleIcon(cx, y, size, Color{}, false);
         }
     }
 }
 
-// drawShieldStackPips shows the rare-drop damage shields (0-3) as small
-// hexagon-ish rings, separate from the dash-ability shield pips.
+// healthPipsWidth is how far drawHealthPips' row extends from its own x, so
+// callers (drawShieldStackPips, positioned beside it) can start right after
+// it regardless of the player's current maxHealth.
+auto healthPipsWidth(const Game& game) -> int32_t
+{
+    constexpr float size = 11;
+    constexpr float gap = 24;
+    return static_cast<int32_t>(size + static_cast<float>(game.player.maxHealth - 1) * gap +
+                                size * 0.8F);
+}
+
+// drawShieldStackPips shows the rare-drop damage shields (0-3), same
+// downward-triangle shape as health, shown beside it in the HUD.
 void drawShieldStackPips(const Game& game, int32_t x, int32_t y)
 {
-    constexpr float pipRadius = 8;
-    constexpr float gap = 22;
+    constexpr float size = 11;
+    constexpr float gap = 24;
 
     for (int32_t i = 0; i < playerConstants::maxShieldStack; i++)
     {
-        const Vector2 center{.x = static_cast<float>(x) + pipRadius + static_cast<float>(i) * gap,
-                             .y = static_cast<float>(y) + pipRadius};
+        const float cx = static_cast<float>(x) + size + static_cast<float>(i) * gap;
+        const Color fillColor = Fade(Palette::Shield, 0.85F);
 
-        if (i < game.player.shieldStacks)
-        {
-            DrawCircleV(center, pipRadius, Fade(Palette::Shield, 0.85F));
-            DrawCircleLines(static_cast<int32_t>(center.x), static_cast<int32_t>(center.y),
-                            pipRadius, Palette::Haze);
-        }
-        else
-        {
-            DrawCircleLines(static_cast<int32_t>(center.x), static_cast<int32_t>(center.y),
-                            pipRadius, Fade(Palette::StructMid, 0.5F));
-        }
+        drawDownwardTriangleIcon(cx, y, size, fillColor, i < game.player.shieldStacks);
     }
 }
 
@@ -1318,7 +1375,7 @@ void drawSandboxHUD(const Game& game)
                     game.sandboxDeathEnabled ? "ON" : "OFF", attackName),
     };
 
-    int32_t y = game.screenHeight - 112;
+    int32_t y = game.screenHeight - 140;
     for (const auto& line : lines)
     {
         drawText(game, line.c_str(), 10, y, 18, Palette::Crit);

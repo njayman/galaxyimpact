@@ -1,5 +1,6 @@
 #include "draw.hpp"
 #include "game.hpp"
+#include "platform.hpp"
 #include "raylib.h"
 #include "sandbox.hpp"
 #include "settings.hpp"
@@ -25,6 +26,10 @@ auto main(int argc, char* argv[]) -> int
     SetTargetFPS(targetFPS);
 
     InitAudioDevice();
+
+    // Must run before InitGame() reads settings.txt/highscore.txt - on Web
+    // this mounts+loads IndexedDB first; everywhere else it's a no-op.
+    platformInitSaveData();
 
     Game game = InitGame();
 
@@ -58,6 +63,7 @@ auto main(int argc, char* argv[]) -> int
     UnloadMusicStream(game.bgm.upgrade);
     UnloadRenderTexture(game.pixelTarget);
     UnloadRenderTexture(game.worldTarget);
+    UnloadFont(game.font);
     CloseAudioDevice();
     CloseWindow();
 

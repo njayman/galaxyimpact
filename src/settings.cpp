@@ -1,12 +1,13 @@
 #include "settings.hpp"
 
 #include "game.hpp"
+#include "platform.hpp"
 #include <fstream>
 #include <sstream>
 
 namespace
 {
-constexpr const char* settingsFile = "settings.txt";
+auto settingsFilePath() -> std::string { return getSaveDataDir() + "settings.txt"; }
 
 // defaultResolutionIndex finds the 1920x1080 entry in resolutionOptions so
 // the settings menu starts in sync with the actual default window size.
@@ -33,7 +34,7 @@ auto loadSettings() -> Settings
                       .soundOn = true,
                       .fpsIndex = 0};
 
-    std::ifstream file(settingsFile);
+    std::ifstream file(settingsFilePath());
     if (!file)
     {
         return settings;
@@ -74,7 +75,7 @@ auto loadSettings() -> Settings
 
 void saveSettings(const Settings& settings)
 {
-    std::ofstream file(settingsFile, std::ios::trunc);
+    std::ofstream file(settingsFilePath(), std::ios::trunc);
     if (!file)
     {
         return;
@@ -83,4 +84,6 @@ void saveSettings(const Settings& settings)
     file << settings.resolutionIndex << ' ' << static_cast<int32_t>(settings.difficulty) << ' '
          << (settings.bgmOn ? 1 : 0) << ' ' << (settings.soundOn ? 1 : 0) << ' '
          << settings.fpsIndex;
+    file.close();
+    platformSyncSaveData();
 }

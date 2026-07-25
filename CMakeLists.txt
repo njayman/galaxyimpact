@@ -4,8 +4,16 @@ project(GalaxyImpact)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Building for Web: use the Emscripten SDK's toolchain file, e.g.
+#   emcmake cmake -S . -B build-web && cmake --build build-web
+# EMSCRIPTEN is set by CMake automatically when that toolchain is active.
+if (EMSCRIPTEN)
+    set(PLATFORM "Web" CACHE STRING "" FORCE)
+endif()
 
 include(FetchContent)
 FetchContent_Declare(
@@ -22,3 +30,26 @@ add_executable(GalaxyImpact ${GALAXYIMPACT_SOURCES})
 target_include_directories(GalaxyImpact PRIVATE include)
 
 target_link_libraries(GalaxyImpact PRIVATE raylib)
+
+target_compile_options(GalaxyImpact PRIVATE -Wall -Wextra)
+
+if (EMSCRIPTEN)
+    # -sASYNCIFY: lets platformInitSaveData/platformSyncSaveData (src/platform.cpp)
+    #   block with emscripten_sleep() until the async IndexedDB round-trip
+    #   finishes, instead of needing every caller restructured into callbacks.
+    # -sFORCE_FILESYSTEM: keeps IDBFS's FS.* JS API linked in even though no
+    #   C++ code calls a filesystem function Emscripten can statically see
+    #   (the save/load path goes through EM_ASM's inline JS instead).
+    # No --preload-file: the game has no asset files to bundle (the font
+    # falls back to raylib's built-in default when no system font is found,
+    # and all audio is synthesized in sound.cpp, not loaded from disk) - add
+    # one here if that changes.
+    set_target_properties(GalaxyImpact PROPERTIES SUFFIX ".html")
+    target_link_options(GalaxyImpact PRIVATE
+        -sUSE_GLFW=3
+        -sASYNCIFY
+        -sFORCE_FILESYSTEM=1
+        -sALLOW_MEMORY_GROWTH=1
+        -lidbfs.js
+    )
+endif()

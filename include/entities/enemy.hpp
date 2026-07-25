@@ -13,7 +13,7 @@ enum class EnemyPattern : std::uint8_t
     Charge,
     Orbit,
     Turret,
-    Sprawner,
+    Spawner,
     Stationary
 };
 
@@ -31,7 +31,7 @@ class Enemy
     bool charging;
     bool telegraphing; // Charge pattern only: winding up, direction locked but not yet moving
     bool phased;
-    double orbitAngle;
+    float orbitAngle;
     float orbitDist;
     bool isElite;
     bool hitByDash;
@@ -170,7 +170,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .color = Palette::BossHoming,
               .minWave = 3,
               .fireInterval = 2.5,
-              .projectileSpeed = 3},
+              .projectileSpeed = 6},
     EnemyKind{.name = "Sniper",
               .radius = 14,
               .health = 10,
@@ -219,7 +219,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .speed = 0.4,
               .contactDamage = 1,
               .score = 20,
-              .pattern = EnemyPattern::Sprawner,
+              .pattern = EnemyPattern::Spawner,
               .color = Palette::BossSpread,
               .minWave = 5,
               .spawnKind = enemyKindSwarmling,
@@ -259,7 +259,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .speed = 0,
               .contactDamage = 1,
               .score = 20,
-              .pattern = EnemyPattern::Sprawner,
+              .pattern = EnemyPattern::Spawner,
               .color = Palette::BossIdle,
               .minWave = 7,
               .spawnKind = enemyKindSwarmling,

@@ -21,6 +21,7 @@ class Player
     float shieldCooldownTimer;
     float immunityTimer;
     float blackHoleCoreTimer;
+    float bossBodyTimer; // seconds spent lingering inside a boss's hitbox undashed
     float slowTimer;
     int charges;
     float chargeRegenTimer;

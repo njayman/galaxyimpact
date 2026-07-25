@@ -121,7 +121,7 @@ All 6 weapon-grant skills max at level 8.
 | Charge | Telegraphs, then dashes in a straight line |
 | Orbit | Circles you, slowly spiraling inward |
 | Turret | Stationary, fires projectiles at range |
-| Sprawner | Stationary (or slow), periodically spawns more enemies |
+| Spawner | Stationary (or slow), periodically spawns more enemies |
 | Stationary | Doesn't move — a pure contact hazard |
 
 A random 6% of spawns roll as **Elite** — double health, faster, and worth double score. Special kind traits include splitting on death, exploding on death, phasing in and out of tangibility, and leeching (slows and heavily damages you on contact but heavily damages itself when it does).
@@ -161,18 +161,18 @@ Bosses come in 20 flavors (name, color, and health/size multipliers) — purely 
 | Move | Effect |
 |---|---|
 | **Beam** | A long, telegraphed beam. See below for its full mechanic. |
-| **Homing** | Launches 3 homing projectiles. |
-| **Spread** | A fan burst of projectiles; windup time before the burst adds more shots (up to +12). |
+| **Spread** | Multiple rounds of a fan burst — 10/30/60 total bullets by Easy/Normal/Hard, each round re-aimed at your current position. |
 | **Slam** | A screen-covering expanding shockwave from the boss's position. |
 | **WormholeBeam** | Summons a temporary wormhole and fires its beam from a flanking point near you instead of from itself — same beam mechanic, unpredictable origin. |
 | **MineDrop** | Drops 4 stationary mines around itself that sit and threaten anyone who touches them. |
-| **ChargeDash** | Telegraphs, then rams a straight line through the arena at high speed. |
-| **SummonAdds** | Spawns 2 regular enemies. |
+| **ChargeDash** | Telegraphs, then dashes edge-to-edge across the arena at high speed. |
+| **SummonAdds** | Spawns 2/3/4 regular enemies by Easy/Normal/Hard. |
 | **ShockwaveStomp** | An instant area pulse around the boss. |
-| **Barrage** | Sustained rapid-fire single shots at you for several seconds. |
+| **Barrage** | Sustained rapid-fire straight shots at your current position, at a speed matching your own move speed so a direct retreat can't just outrun it — not homing, so moving off-line still dodges it. |
 | **GravityWell** | Pulls you steadily toward the boss for several seconds. |
+| **HomingBarrage** | Sustained rapid-fire *homing* shots — continuously re-aims in flight, so it can't be outrun the way Barrage can, but it's dodgeable by breaking line of sight or juking at close range. |
 
-**Boss attacks always destroy** every asteroid and enemy they touch (Beam, Slam, ShockwaveStomp) — they don't stop for obstacles, and there's no line-of-sight blocking; an asteroid in a beam's path gets destroyed but doesn't shield you from it. Boss-fired Homing/Spread/Barrage projectiles likewise pass through and destroy anything they touch rather than being stopped by it — the only way to stop one is sustained direct fire (they have their own small HP pool, scaled by wave and difficulty).
+**Boss attacks always destroy** every asteroid and enemy they touch (Beam, Slam, ShockwaveStomp) — they don't stop for obstacles, and there's no line-of-sight blocking; an asteroid in a beam's path gets destroyed but doesn't shield you from it. On Normal/Hard, enemies killed this way (not by your own damage) drop no score/XP/pickups — only Easy difficulty and the boss's own death shockwave pay out loot for kills of opportunity. Boss-fired Spread/Barrage/HomingBarrage projectiles likewise pass through and destroy anything they touch rather than being stopped by it — the only way to stop one is sustained direct fire (they have their own small HP pool, scaled by wave and difficulty).
 
 ### Beam mechanic
 

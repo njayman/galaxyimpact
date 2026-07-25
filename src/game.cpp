@@ -2,6 +2,7 @@
 
 #include "highscore.hpp"
 #include "palette.hpp"
+#include "platform.hpp"
 #include "raymath.h"
 #include "sound.hpp"
 #include "update.hpp"
@@ -128,8 +129,9 @@ auto InitGame() -> Game
 
     game.gasClouds = generateBoundaryClouds();
 
-    game.highScoreRepo = std::make_shared<highscore::FileRepository>(GameConstants::highScoreFile);
-    game.highScores = game.highScoreRepo->Load();
+    game.highScoreRepo = std::make_shared<highscore::FileRepository>(getSaveDataDir() +
+                                                                     GameConstants::highScoreFile);
+    game.highScores = game.highScoreRepo->load();
 
     game.sounds = LoadSounds();
     game.font = loadReadableFont();
@@ -209,6 +211,7 @@ void resetRun(Game& game)
                          .shieldCooldownTimer = 0,
                          .immunityTimer = 0,
                          .blackHoleCoreTimer = 0,
+                         .bossBodyTimer = 0,
                          .slowTimer = 0,
                          .charges = UpdateConstants::maxCharges,
                          .chargeRegenTimer = 0,
@@ -229,6 +232,9 @@ void resetRun(Game& game)
     game.asteroids.reserve(static_cast<size_t>(maxAsteroid));
     game.bossProjectiles.clear();
     game.enemies.clear();
+    // Same reasoning as asteroids above - guards spawnEnemyAt's push_back
+    // (Spawner pattern, splits-on-death) against reallocating mid-iteration.
+    game.enemies.reserve(static_cast<size_t>(UpdateConstants::maxEnemies));
     game.eliteHazards.clear();
     game.eliteHazardSpawnTimer = static_cast<float>(GetRandomValue(45, 90));
     game.pickups.clear();

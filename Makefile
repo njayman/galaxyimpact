@@ -1,9 +1,9 @@
-.PHONY: configure build run clean
+.PHONY: build run clean
 
-configure:
+build/CMakeCache.txt:
 	cmake -S . -B build -G Ninja
 
-build: configure
+build: build/CMakeCache.txt
 	cmake --build build
 
 run: build

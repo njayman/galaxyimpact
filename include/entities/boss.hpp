@@ -25,7 +25,6 @@ enum class BossState : std::uint8_t
 enum class BossAttack : std::uint8_t
 {
     Beam,
-    Homing,
     Spread,
     Slam,
     WormholeBeam,
@@ -34,14 +33,15 @@ enum class BossAttack : std::uint8_t
     SummonAdds,
     ShockwaveStomp,
     Barrage,
-    GravityWell
+    GravityWell,
+    HomingBarrage
 };
 
 constexpr int bossAttackCount = 11;
 
 constexpr std::array<std::string_view, bossAttackCount> bossAttackNames{
-    "Beam",       "Homing",     "Spread",         "Slam",    "WormholeBeam", "MineDrop",
-    "ChargeDash", "SummonAdds", "ShockwaveStomp", "Barrage", "GravityWell"};
+    "Beam",       "Spread",         "Slam",    "WormholeBeam", "MineDrop",     "ChargeDash",
+    "SummonAdds", "ShockwaveStomp", "Barrage", "GravityWell",  "HomingBarrage"};
 
 class Boss
 {
@@ -63,7 +63,8 @@ class Boss
     bool beamShieldLatched;     // player was shielded while standing in the beam this attack
     Vector2 wormholeBeamOrigin; // flank point WormholeBeam fires its beam from
     Vector2 chargeVelocity;     // ChargeDash's fixed dash direction*speed for the attack
-    float barrageTimer;         // Barrage's next-shot countdown
+    float barrageTimer;         // next-shot/round countdown, shared by Barrage/HomingBarrage/Spread
+    bool hitByDash; // guards a single dash from ramming this boss every frame it's active
 };
 
 // BossType is flavor only (name/color/stat multipliers) - the 20 types share

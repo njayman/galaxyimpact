@@ -55,9 +55,9 @@ constexpr std::array<int32_t, 3> fpsOptions{60, 120, 240};
 struct Settings
 {
     int32_t resolutionIndex{};
-    Difficulty difficulty{};
-    bool bgmOn{};
-    bool soundOn{};
+    Difficulty difficulty{Difficulty::Normal};
+    bool bgmOn{true};
+    bool soundOn{true};
     int32_t fpsIndex{};
 };
 

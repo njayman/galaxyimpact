@@ -2,7 +2,7 @@
 
 #include "draw.hpp"
 
-auto mouseUIPos(Game& game) -> Vector2
+auto mouseUIPos(const Game& game) -> Vector2
 {
     const Vector2 mouse = GetMousePosition();
     const Rectangle rect = letterBoxRect(game);
