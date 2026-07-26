@@ -1,5 +1,6 @@
 #include "draw.hpp"
 #include "game.hpp"
+#include "guitheme.hpp"
 #include "platform.hpp"
 #include "raylib.h"
 #include "sandbox.hpp"
@@ -32,6 +33,7 @@ auto main(int argc, char* argv[]) -> int
     platformInitSaveData();
 
     Game game = InitGame();
+    setupGuiTheme(game);
 
     if (const auto& opt = resolutionOptions.at(static_cast<size_t>(game.settings.resolutionIndex));
         opt.width != GameConstants::defaultWindowWidth ||
@@ -57,6 +59,8 @@ auto main(int argc, char* argv[]) -> int
 
         drawGame(game);
     }
+
+    platformExitToLanding();
 
     UnloadMusicStream(game.bgm.drone);
     UnloadMusicStream(game.bgm.intensity);

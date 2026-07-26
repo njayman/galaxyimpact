@@ -1,5 +1,6 @@
 #include "update.hpp"
 
+#include "democonfig.hpp"
 #include "draw.hpp"
 #include "entities/item.hpp"
 #include "highscore.hpp"
@@ -21,7 +22,7 @@
 // per-frame delta by (deltaTime * frameScale) reproduces the original
 // 60fps-tuned distance exactly at 60fps, and scales correctly at the 120/240
 // FPS caps instead of moving proportionally faster.
-constexpr float frameScale = 60.0F;
+constexpr float frameScale = UpdateConstants::frameScale;
 
 constexpr float projectileSpeed = 10;
 constexpr float projectileSize = 7;
@@ -51,7 +52,7 @@ constexpr float damageMeterHoldDuration = 1.5F;
 // Charger enemy (EnemyPattern::Charge): telegraph window before the dash
 // actually moves, and the dash's own duration once it does.
 constexpr float chargeTelegraphDuration = 0.5F;
-constexpr float enemyChargeDashDuration = 0.4F;
+constexpr float enemyChargeDashDuration = UpdateConstants::enemyChargeDashDuration;
 // Pickup expiry: XP is common/low-stakes and expires quickly; Shield/LifeOrb
 // are rarer and worth chasing a bit longer. Both blink in their last
 // pickupExpiryWarning seconds as a despawn warning.
@@ -73,7 +74,6 @@ constexpr float nerveSpeedBonusMax = 0.2F;
 constexpr float postCapDamageBonusPerLevel = 0.05F;
 constexpr float mineLifetime = 5.0F;
 constexpr float mineHomeSpeed = 3.5F;
-constexpr float mineBaseContactRadius = 8.0F;
 constexpr float mineSeekRadius = 320;
 constexpr float bossEngageDistance = 380;
 constexpr float bossKillCalmDuration = 6.0F;
@@ -88,6 +88,14 @@ constexpr float miniBossHealthMult = 0.5F;
 constexpr float miniBossSizeMult = 0.7F;
 constexpr float megaBossHealthMult = 1.5F;
 constexpr float megaBossSizeMult = 1.3F;
+
+// Boss kill rewards: miniboss XP is enough to guarantee (and slightly
+// overshoot, for a felt "boost") one level-up; megaboss overshoots enough to
+// usually chain a second level-up next frame once xpToNext is recalculated.
+// A swarm kill (every bossSwarmInterval-th spawn) additionally drops a
+// guaranteed Shield+LifeOrb jackpot per boss on top of its mega reward.
+constexpr float miniBossXpMult = 1.5F;
+constexpr float megaBossXpMult = 2.2F;
 
 // Enemy spawn-rate cycling: the base interval steps down (rate up) once per
 // 10-wave cycle; the back half of each cycle spawns faster than the front
@@ -131,6 +139,7 @@ constexpr float eliteHazardOrbitSpin = 6.0F;      // degrees/sec drift around th
 constexpr float eliteHazardFollowRate = 1.2F;     // position lerp speed toward its orbit point
 constexpr int32_t eliteHazardBaseHealth = 220;    // above regular enemies, below a miniboss
 constexpr int32_t eliteHazardScore = 150;
+constexpr int32_t eliteHazardXpBonus = 300; // deliberately well above a regular enemy's XP drop
 constexpr int32_t eliteHazardContactDamage = 2;
 constexpr float warlordSpeedBuff = 1.35F;
 constexpr float suppressorCooldownPenalty = 1.4F;
@@ -222,7 +231,7 @@ void updateEliteHazards(Game& game, float deltaTime);
 void damageEliteHazard(Game& game, size_t index, int32_t amount);
 auto enemyDamage(const Game& game, int32_t base) -> int32_t;
 void spawnEnemy(Game& game);
-void spawnBossWave(Game& game, float healthMult, float sizeMult);
+void spawnBossWave(Game& game, float healthMult, float sizeMult, bool isMega);
 auto bossMoveCountForDifficulty(Difficulty difficulty) -> int;
 auto sampleBossMoveset(int count) -> std::vector<BossAttack>;
 auto spawnRingPosition(const Game& game) -> Vector2;
@@ -283,8 +292,9 @@ void triggerHitPause(Game& game, float duration)
 
 auto updateTitle(Game& game) -> bool
 {
-    const auto [index, confirmed] = updateMenuSelection(
-        game, game.menuIndex, 3, MenuLayout::titleMenuY, MenuLayout::lineHeight);
+    const auto [index, confirmed] = updateMenuSelectionWindow(
+        game, game.menuIndex, 3, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
+        MenuLayout::buttonGap, MenuLayout::titleMenuY);
     playMenuSounds(game, index, confirmed);
     game.menuIndex = index;
 
@@ -318,8 +328,9 @@ auto updatePaused(Game& game) -> bool
         return false;
     }
 
-    const auto [index, confirmed] = updateMenuSelection(
-        game, game.menuIndex, 4, MenuLayout::pausedMenuY, MenuLayout::lineHeight);
+    const auto [index, confirmed] = updateMenuSelectionWindow(
+        game, game.menuIndex, 4, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
+        MenuLayout::buttonGap, MenuLayout::pausedMenuY);
     playMenuSounds(game, index, confirmed);
     game.menuIndex = index;
 
@@ -358,8 +369,9 @@ auto updateGameOver(Game& game) -> bool
         game.scoreRecorded = true;
     }
 
-    const auto [index, confirmed] = updateMenuSelection(
-        game, game.menuIndex, 2, MenuLayout::gameOverMenuY, MenuLayout::lineHeight);
+    const auto [index, confirmed] = updateMenuSelectionWindow(
+        game, game.menuIndex, 2, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
+        MenuLayout::buttonGap, MenuLayout::gameOverMenuY);
     playMenuSounds(game, index, confirmed);
     game.menuIndex = index;
 
@@ -384,9 +396,10 @@ auto updateGameOver(Game& game) -> bool
 // the world when the player levels up.
 auto updateLevelUp(Game& game) -> bool
 {
-    const auto [index, confirmed] =
-        updateMenuSelection(game, game.menuIndex, static_cast<int32_t>(game.pendingChoices.size()),
-                            MenuLayout::levelUpMenuY, MenuLayout::levelUpLineHeight);
+    const auto [index, confirmed] = updateMenuSelectionWindow(
+        game, game.menuIndex, static_cast<int32_t>(game.pendingChoices.size()),
+        MenuLayout::levelUpWidth, MenuLayout::levelUpHeight, MenuLayout::levelUpGap,
+        MenuLayout::levelUpMenuY);
     playMenuSounds(game, index, confirmed);
     game.menuIndex = index;
 
@@ -471,13 +484,31 @@ auto updateSettings(Game& game) -> bool
     const bool right = IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT);
     bool confirm = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
 
-    if (const auto row = hoveredRow(game, settingsRowCount, MenuLayout::settingsMenuY,
-                                    MenuLayout::settingsLineHeight);
-        row.has_value())
+    // Mouse hover only steals the row when the mouse actually moved this
+    // frame - see updateMenuSelectionWindow for why (a keyboard Up/Down
+    // press would otherwise get overwritten by the mouse sitting on the old
+    // row).
+    const Vector2 mouseDelta = GetMouseDelta();
+    const bool mouseMoved = mouseDelta.x != 0 || mouseDelta.y != 0;
+    if (mouseMoved)
     {
-        game.menuIndex = *row;
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        if (const auto row = hoveredColumnRow(settingsRowCount, MenuLayout::settingsWidth,
+                                              MenuLayout::settingsHeight, MenuLayout::settingsGap,
+                                              MenuLayout::settingsMenuY, game);
+            row.has_value())
         {
+            game.menuIndex = *row;
+        }
+    }
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    {
+        if (const auto row = hoveredColumnRow(settingsRowCount, MenuLayout::settingsWidth,
+                                              MenuLayout::settingsHeight, MenuLayout::settingsGap,
+                                              MenuLayout::settingsMenuY, game);
+            row.has_value())
+        {
+            game.menuIndex = *row;
             confirm = true;
         }
     }
@@ -614,9 +645,14 @@ void updateBgmLayers(Game& game, float deltaTime)
     constexpr float volumeSmoothing = 1.5F;
     constexpr float calmCeiling = 0.35F;
     constexpr float swarmOverrideThreshold = 0.7F;
+    // A floor, not zero - with no enemies (title screen, a fresh run) the
+    // drone alone is just a held chord with no rhythm; keeping the beat
+    // layer audibly present at rest is what makes the score feel alive
+    // instead of a single sustained note, rising further as enemies swarm.
+    constexpr float intensityFloor = 0.3F;
 
-    float intensityTarget =
-        std::clamp(static_cast<float>(game.enemies.size()) / intensityEnemyThreshold, 0.0F, 1.0F);
+    float intensityTarget = std::clamp(
+        static_cast<float>(game.enemies.size()) / intensityEnemyThreshold, intensityFloor, 1.0F);
 
     if (game.bgm.calmTimer > 0)
     {
@@ -832,6 +868,18 @@ void updateGameplay(Game& game, float deltaTime)
         boss.color = Palette::StructDark;
         game.score += 1000;
         anyBossKilledThisFrame = true;
+
+        // Boss kill reward: miniboss XP guarantees a level-up (with a bit of
+        // leftover as a felt "boost"); megaboss XP overshoots enough to
+        // usually chain a second level-up once xpToNext recalculates next
+        // frame. A swarm kill also drops a guaranteed jackpot pickup.
+        game.xp += static_cast<int>(static_cast<float>(game.xpToNext) *
+                                     (boss.isMega ? megaBossXpMult : miniBossXpMult));
+        if (boss.isSwarm)
+        {
+            spawnPickup(game, bossCenter, 0, PickupType::Shield);
+            spawnPickup(game, bossCenter, 0, PickupType::LifeOrb);
+        }
 
         game.bossDeathShockwaves.push_back(
             BossDeathShockwave{.timer = UpdateConstants::bossDeathShockwaveDuration,
@@ -1257,6 +1305,11 @@ auto aimAtMouse(const Game& game) -> Vector2
     return Vector2Normalize(dir);
 }
 
+// nearestEnemy is the shared "what should this home in on" target picker for
+// homing missiles, mine seeking, etc. - considers both regular enemies and
+// elite hazards (Warlord/Suppressor), which are otherwise valid, damageable
+// targets (see aoePulse/beamPulse/updateProjectiles) but a separate entity
+// list from game.enemies.
 auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>
 {
     float best = -1;
@@ -1274,6 +1327,21 @@ auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>
         {
             best = d;
             target = enemy.position;
+            found = true;
+        }
+    }
+
+    for (const auto& hazard : game.eliteHazards)
+    {
+        if (!hazard.active)
+        {
+            continue;
+        }
+        const float d = Vector2Distance(from, hazard.position);
+        if (best < 0 || d < best)
+        {
+            best = d;
+            target = hazard.position;
             found = true;
         }
     }
@@ -1314,11 +1382,13 @@ auto weaponCooldown(const Game& game, WeaponType kind, int32_t level, bool evolv
         base *= 0.8F;
     }
 
+    // A Suppressor's debuff applies to the player across the whole screen,
+    // not just within EliteHazardConstants::auraRadius - the aura ring drawn
+    // around it (see drawEliteHazard) is a visual read on which hazard is
+    // doing it, not a range gate.
     for (const auto& hazard : game.eliteHazards)
     {
-        if (hazard.active && hazard.role == EliteHazardRole::Suppressor &&
-            Vector2Distance(hazard.position, game.player.position) <=
-                EliteHazardConstants::auraRadius)
+        if (hazard.active && hazard.role == EliteHazardRole::Suppressor)
         {
             base *= suppressorCooldownPenalty;
             break;
@@ -1428,12 +1498,14 @@ auto nearestAsteroidWithin(const Game& game, Vector2 from, float maxDist) -> std
     return target;
 }
 
-// updateMines drifts each mine toward a target within mineSeekRadius and
-// detonates it (an aoePulse at the mine's own position) on contact or once
-// its fuse runs out. Base (non-evolved) mines only ever home on enemies and
-// need to be right on top of one to trigger - they mostly just sit where
-// they were dropped; evolved mines also seek asteroids and trigger across
-// their full blast radius.
+// updateMines detonates each mine (an aoePulse at the mine's own position,
+// hitting enemies, elite hazards, and asteroids alike) the instant something
+// enters its blast ring (mine.radius - the same ring drawn around it, see
+// drawGameplayWorld) or once its fuse runs out. Base (non-evolved) mines
+// stay exactly where they were dropped (see spawnMines) and just wait for
+// something to wander into the ring; evolved mines actively home in on the
+// nearest enemy/hazard (or asteroid, if none in range) within mineSeekRadius
+// until it's inside the ring.
 void updateMines(Game& game, float deltaTime)
 {
     for (auto& mine : game.mines)
@@ -1443,34 +1515,46 @@ void updateMines(Game& game, float deltaTime)
             continue;
         }
 
-        auto target = nearestEnemyWithin(game, mine.position, mineSeekRadius);
-        if (!target.has_value() && mine.evolved)
-        {
-            target = nearestAsteroidWithin(game, mine.position, mineSeekRadius);
-        }
-
         bool detonate = false;
-        const float triggerRadius = mine.evolved ? mine.radius : mineBaseContactRadius;
 
-        if (target.has_value())
+        if (mine.evolved)
         {
-            const Vector2 dir = Vector2Subtract(*target, mine.position);
-            if (Vector2Length(dir) <= triggerRadius)
+            auto target = nearestEnemyWithin(game, mine.position, mineSeekRadius);
+            if (!target.has_value())
             {
-                detonate = true;
+                target = nearestAsteroidWithin(game, mine.position, mineSeekRadius);
+            }
+
+            if (target.has_value())
+            {
+                const Vector2 dir = Vector2Subtract(*target, mine.position);
+                if (Vector2Length(dir) <= mine.radius)
+                {
+                    detonate = true;
+                }
+                else
+                {
+                    mine.velocity = Vector2Scale(Vector2Normalize(dir), mineHomeSpeed);
+                }
             }
             else
             {
-                mine.velocity = Vector2Scale(Vector2Normalize(dir), mineHomeSpeed);
+                mine.velocity = Vector2{};
             }
-        }
-        else
-        {
-            mine.velocity = Vector2{};
-        }
 
-        mine.position =
-            Vector2Add(mine.position, Vector2Scale(mine.velocity, deltaTime * frameScale));
+            mine.position =
+                Vector2Add(mine.position, Vector2Scale(mine.velocity, deltaTime * frameScale));
+        }
+        else if (nearestEnemyWithin(game, mine.position, mine.radius).has_value())
+        {
+            // Base mines don't chase - they sit exactly where they were
+            // dropped (see spawnMines) and only trigger as a passive
+            // proximity mine, going off the instant anything (enemy or
+            // elite hazard) enters the blast ring drawn around it (see
+            // drawGameplayWorld) - the ring is the actual trigger, not just
+            // a decoration.
+            detonate = true;
+        }
 
         mine.fuse -= deltaTime;
         if (mine.fuse <= 0)
@@ -1651,6 +1735,18 @@ void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSourc
         }
     }
 
+    for (size_t j = 0; j < game.eliteHazards.size(); j++)
+    {
+        const auto& hazard = game.eliteHazards.at(j);
+        if (hazard.active &&
+            Vector2Distance(center, hazard.position) <= radius + EliteHazardConstants::radius)
+        {
+            damageEliteHazard(game, j, dmg);
+            recordDamage(game, source, dmg);
+            hitAny = true;
+        }
+    }
+
     for (auto& asteroid : game.asteroids)
     {
         if (asteroid.active &&
@@ -1685,6 +1781,18 @@ void beamPulse(Game& game, Vector2 dir, float length, int32_t dmg, DamageSource 
                 enemy.position, enemyKinds.at(static_cast<size_t>(enemy.kind)).radius, start, end))
         {
             damageEnemy(game, j, dmg);
+            recordDamage(game, source, dmg);
+            hitAny = true;
+        }
+    }
+
+    for (size_t j = 0; j < game.eliteHazards.size(); j++)
+    {
+        const auto& hazard = game.eliteHazards.at(j);
+        if (hazard.active &&
+            CheckCollisionCircleLine(hazard.position, EliteHazardConstants::radius, start, end))
+        {
+            damageEliteHazard(game, j, dmg);
             recordDamage(game, source, dmg);
             hitAny = true;
         }
@@ -1726,11 +1834,11 @@ void updateWaveSpawner(Game& game, float deltaTime)
 
         if (game.waveNumber % megaBossWaveInterval == 0)
         {
-            spawnBossWave(game, megaBossHealthMult, megaBossSizeMult);
+            spawnBossWave(game, megaBossHealthMult, megaBossSizeMult, true);
         }
         else if (game.waveNumber % miniBossWaveInterval == 0)
         {
-            spawnBossWave(game, miniBossHealthMult, miniBossSizeMult);
+            spawnBossWave(game, miniBossHealthMult, miniBossSizeMult, false);
         }
     }
 
@@ -1831,13 +1939,14 @@ auto eliteHazardCap(const Game& game) -> int
     }
 }
 
-// enemyDamage scales a base enemy damage amount by the difficulty's damage
-// multiplier (Easy hits softer, Hard hits harder).
 auto waveEnemyScale(const Game& game) -> float
 {
     return 1 + static_cast<float>(game.waveNumber - 1) * UpdateConstants::waveEnemyScalePerWave;
 }
 
+// enemyDamage scales a base enemy damage amount by the difficulty's damage
+// multiplier (Easy hits softer, Hard hits harder) and the wave's continuous
+// scale-up.
 auto enemyDamage(const Game& game, int32_t base) -> int32_t
 {
     return static_cast<int32_t>(
@@ -1937,7 +2046,10 @@ auto sampleBossMoveset(int count) -> std::vector<BossAttack>
     pool.reserve(bossAttackCount);
     for (int i = 0; i < bossAttackCount; i++)
     {
-        pool.push_back(static_cast<BossAttack>(i));
+        if (const auto attack = static_cast<BossAttack>(i); DemoConfig::isBossAttackAllowed(attack))
+        {
+            pool.push_back(attack);
+        }
     }
 
     count = std::min(count, static_cast<int>(pool.size()));
@@ -1956,7 +2068,7 @@ auto sampleBossMoveset(int count) -> std::vector<BossAttack>
 // (waveNumber / megaBossWaveInterval) so mini and mega bosses keep climbing
 // together as waves go on, just at different strengths. Its moveset is
 // sampled fresh from the shared move pool, sized by difficulty.
-void spawnBossInstance(Game& game, float healthMult, float sizeMult)
+void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega, bool isSwarm)
 {
     const int32_t tier = game.waveNumber / megaBossWaveInterval;
 
@@ -1965,8 +2077,14 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult)
     const Vector2 spawnPos = Vector2Add(
         game.player.position, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
 
-    const auto& type = bossTypes.at(
-        static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(bossTypes.size()) - 1)));
+    size_t typeIndex =
+        static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(bossTypes.size()) - 1));
+    if constexpr (DemoConfig::isDemoBuild)
+    {
+        typeIndex = DemoConfig::allowedBossTypeIndices.at(static_cast<size_t>(GetRandomValue(
+            0, static_cast<int32_t>(DemoConfig::allowedBossTypeIndices.size()) - 1)));
+    }
+    const auto& type = bossTypes.at(typeIndex);
 
     const auto health = static_cast<int32_t>(
         static_cast<float>(500 + tier * 250) * healthMult * type.healthMult *
@@ -1994,24 +2112,40 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult)
                                .wormholeBeamOrigin = Vector2{},
                                .chargeVelocity = Vector2{},
                                .barrageTimer = 0,
-                               .hitByDash = false});
+                               .hitByDash = false,
+                               .isMega = isMega,
+                               .isSwarm = isSwarm});
 }
 
 // spawnBossWave spawns one boss of the given tier, except every
 // bossSwarmInterval-th boss spawn (mini or mega, counted together) brings 3
 // at once.
-void spawnBossWave(Game& game, float healthMult, float sizeMult)
+void spawnBossWave(Game& game, float healthMult, float sizeMult, bool isMega)
 {
     game.bossSpawnCount++;
-    const int count = game.bossSpawnCount % bossSwarmInterval == 0 ? 3 : 1;
+    const bool isSwarm = game.bossSpawnCount % bossSwarmInterval == 0;
+    const int count = isSwarm ? 3 : 1;
     for (int i = 0; i < count; i++)
     {
-        spawnBossInstance(game, healthMult, sizeMult);
+        spawnBossInstance(game, healthMult, sizeMult, isMega, isSwarm);
     }
     playSFX(game, game.sounds.bossWindUp);
 }
 
-void spawnBoss(Game& game) { spawnBossWave(game, megaBossHealthMult, megaBossSizeMult); }
+void spawnBoss(Game& game) { spawnBossWave(game, megaBossHealthMult, megaBossSizeMult, true); }
+
+void spawnMiniboss(Game& game) { spawnBossWave(game, miniBossHealthMult, miniBossSizeMult, false); }
+
+// spawnSwarmBoss forces the every-50th-spawn 3-boss swarm on demand (sandbox
+// only) without waiting for game.bossSpawnCount to naturally reach it.
+void spawnSwarmBoss(Game& game)
+{
+    for (int i = 0; i < 3; i++)
+    {
+        spawnBossInstance(game, megaBossHealthMult, megaBossSizeMult, true, true);
+    }
+    playSFX(game, game.sounds.bossWindUp);
+}
 
 // updateBossMovement has the boss approach from wherever it spawned (usually
 // far off-camera) toward the player - a bit faster than the player's own
@@ -2178,6 +2312,22 @@ auto sampleDistinct(std::vector<SkillType> ids, int count) -> std::vector<SkillT
     return ids;
 }
 
+// demoSkillAllowed hides a weapon's grant-skill and linked-passive skill
+// alike once that weapon itself isn't in the demo's allowed set - "two
+// weapons and linked abilities" (see democonfig.hpp), a no-op outside demo
+// builds.
+auto demoSkillAllowed(SkillType id) -> bool
+{
+    for (size_t i = 0; i < weaponGrantSkill.size(); i++)
+    {
+        if (weaponGrantSkill.at(i) == id || skillLinkedPassive.at(i) == id)
+        {
+            return DemoConfig::isWeaponAllowed(static_cast<WeaponType>(i));
+        }
+    }
+    return true;
+}
+
 // rollLevelUpChoices rolls up to 3 distinct skill picks (new skills only
 // offered if there's a free ability slot; owned-but-unmaxed skills are
 // always offerable) plus, if any weapon+linked-passive pair has both reached
@@ -2194,7 +2344,8 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
     for (size_t i = 0; i < static_cast<size_t>(SkillType::Count); i++)
     {
         const auto id = static_cast<SkillType>(i);
-        if (isFusedPassive(game, id) || game.skillLevels.at(i) >= Skills.at(i).maxLevel)
+        if (isFusedPassive(game, id) || game.skillLevels.at(i) >= Skills.at(i).maxLevel ||
+            !demoSkillAllowed(id))
         {
             continue;
         }
@@ -2609,11 +2760,13 @@ void updateEnemies(Game& game, float deltaTime)
         const auto& kind = enemyKinds.at(static_cast<size_t>(enemy.kind));
         float speedMod = enemy.isElite ? 1.2F : 1.0F;
 
+        // A Warlord's buff applies to every enemy on screen, not just within
+        // EliteHazardConstants::auraRadius - the aura ring drawn around it
+        // (see drawEliteHazard) is a visual read on which hazard is doing
+        // it, not a range gate.
         for (const auto& hazard : game.eliteHazards)
         {
-            if (hazard.active && hazard.role == EliteHazardRole::Warlord &&
-                Vector2Distance(hazard.position, enemy.position) <=
-                    EliteHazardConstants::auraRadius)
+            if (hazard.active && hazard.role == EliteHazardRole::Warlord)
             {
                 speedMod *= warlordSpeedBuff;
                 break;
@@ -2671,7 +2824,8 @@ void updateEnemies(Game& game, float deltaTime)
                     enemy.stateTimer = chargeTelegraphDuration;
                     const Vector2 dir =
                         Vector2Normalize(Vector2Subtract(game.player.position, enemy.position));
-                    enemy.velocity = Vector2Scale(dir, kind.speed * speedMod * 6);
+                    enemy.velocity = Vector2Scale(
+                        dir, kind.speed * speedMod * UpdateConstants::enemyChargeDashSpeedMult);
                 }
             }
             else
@@ -2915,13 +3069,32 @@ void updateProjectiles(Game& game, float deltaTime)
             enemy.active = false; // the boss's own projectile, no player reward
         }
 
+        if (projectile.fromPlayer)
+        {
+            for (size_t j = 0; j < game.eliteHazards.size(); j++)
+            {
+                auto& hazard = game.eliteHazards.at(j);
+                if (!projectile.active || !hazard.active ||
+                    !CheckCollisionCircles(projectile.position, projectile.radius, hazard.position,
+                                           EliteHazardConstants::radius))
+                {
+                    continue;
+                }
+
+                projectile.active = false;
+                damageEliteHazard(game, j, projectile.damage);
+                recordDamage(game, DamageSource::Homing, projectile.damage);
+                break;
+            }
+        }
+
         if (projectile.active && !projectile.fromPlayer && game.player.health > 0 &&
             !game.player.shieldActive && !game.player.dashing && game.player.immunityTimer <= 0 &&
             CheckCollisionCircles(game.player.position, game.player.radius, projectile.position,
                                   projectile.radius))
         {
             projectile.active = false;
-            damagePlayer(game, enemyDamage(game, 1));
+            damagePlayer(game, enemyDamage(game, projectile.damage));
         }
     }
 }
@@ -2984,6 +3157,7 @@ void damageEliteHazard(Game& game, size_t index, int32_t amount)
     // A deliberate risk/reward kill, not a routine one - guaranteed reward.
     spawnPickup(game, hazard.position, 0,
                 GetRandomValue(0, 1) == 0 ? PickupType::Shield : PickupType::LifeOrb);
+    spawnPickup(game, hazard.position, eliteHazardXpBonus, PickupType::XP);
 }
 
 // updateEliteHazards spawns/despawns hazards on a long timer (capped
@@ -2991,6 +3165,42 @@ void damageEliteHazard(Game& game, size_t index, int32_t amount)
 // edge of the player's screen, slowly orbiting - it holds position rather
 // than chasing, and applies its buff/debuff aura for as long as it's alive
 // (see weaponCooldown for Suppressor, updateEnemies for Warlord).
+// spawnEliteHazard places one hazard of the given role out on the
+// screen-edge orbit ring (not on top of the player, so it doesn't land an
+// unavoidable free hit the instant it appears - see updateEliteHazards'
+// follow loop). Shared by the natural auto-spawn path and the sandbox's
+// on-command hotkey (see updateSandboxInput); the sandbox path ignores
+// eliteHazardCap by design (spawn whatever's asked for, for testing).
+void spawnEliteHazard(Game& game, EliteHazardRole role)
+{
+    // The visible world viewport is ~screenWidth x screenHeight world units -
+    // the pixelScale render-target downscale and the 1/pixelScale camera
+    // zoom cancel out (see beginWorldCamera) - so half-extents are just
+    // screenWidth/2 x screenHeight/2, NOT multiplied by pixelScale again
+    // (that placed hazards ~3x past the actual screen edge, off-camera).
+    const float halfExtentX = static_cast<float>(game.screenWidth) / 2;
+    const float halfExtentY = static_cast<float>(game.screenHeight) / 2;
+    const float orbitDist = std::min(halfExtentX, halfExtentY) * eliteHazardOrbitDistFrac;
+
+    const auto health = static_cast<int32_t>(
+        static_cast<float>(eliteHazardBaseHealth) *
+        difficultyDefs.at(static_cast<size_t>(game.settings.difficulty)).enemyHealthMult *
+        waveEnemyScale(game));
+
+    const auto spawnAngle = static_cast<float>(GetRandomValue(0, 359));
+    const float spawnRad = spawnAngle * DEG2RAD;
+    const Vector2 spawnPos =
+        Vector2Add(game.player.position, Vector2{.x = std::cos(spawnRad) * orbitDist,
+                                                 .y = std::sin(spawnRad) * orbitDist});
+
+    game.eliteHazards.push_back(EliteHazard{.position = spawnPos,
+                                            .angle = spawnAngle,
+                                            .role = role,
+                                            .health = health,
+                                            .maxHealth = health,
+                                            .active = true});
+}
+
 void updateEliteHazards(Game& game, float deltaTime)
 {
     // The visible world viewport is ~screenWidth x screenHeight world units -
@@ -3003,32 +3213,14 @@ void updateEliteHazards(Game& game, float deltaTime)
     const float orbitDist = std::min(halfExtentX, halfExtentY) * eliteHazardOrbitDistFrac;
 
     game.eliteHazardSpawnTimer -= deltaTime;
-    if (game.eliteHazardSpawnTimer <= 0)
+    // Sandbox has no auto-spawns (see enterSandbox) - hazards only ever
+    // appear there via the sandbox's own spawn command.
+    if (!game.sandbox && game.eliteHazardSpawnTimer <= 0)
     {
         if (static_cast<int>(game.eliteHazards.size()) < eliteHazardCap(game))
         {
-            const auto health = static_cast<int32_t>(
-                static_cast<float>(eliteHazardBaseHealth) *
-                difficultyDefs.at(static_cast<size_t>(game.settings.difficulty)).enemyHealthMult *
-                waveEnemyScale(game));
-
-            // Spawn already out on the orbit ring (not on top of the player)
-            // so it doesn't land an unavoidable free hit the instant it
-            // appears - the follow-loop below then just orbits it in place.
-            const auto spawnAngle = static_cast<float>(GetRandomValue(0, 359));
-            const float spawnRad = spawnAngle * DEG2RAD;
-            const Vector2 spawnPos =
-                Vector2Add(game.player.position, Vector2{.x = std::cos(spawnRad) * orbitDist,
-                                                         .y = std::sin(spawnRad) * orbitDist});
-
-            game.eliteHazards.push_back(EliteHazard{.position = spawnPos,
-                                                    .angle = spawnAngle,
-                                                    .role = GetRandomValue(0, 1) == 0
-                                                                ? EliteHazardRole::Warlord
-                                                                : EliteHazardRole::Suppressor,
-                                                    .health = health,
-                                                    .maxHealth = health,
-                                                    .active = true});
+            spawnEliteHazard(game, GetRandomValue(0, 1) == 0 ? EliteHazardRole::Warlord
+                                                             : EliteHazardRole::Suppressor);
         }
         game.eliteHazardSpawnTimer =
             static_cast<float>(GetRandomValue(static_cast<int32_t>(eliteHazardSpawnIntervalMin),
@@ -3060,21 +3252,30 @@ void updateEliteHazards(Game& game, float deltaTime)
     }
 }
 
+// spawnBlackHole activates the black hole at a random point near the player
+// - the natural auto-spawn path (updateBlackHole) and the sandbox's
+// on-command hotkey (see updateSandboxInput) both funnel through this.
+void spawnBlackHole(Game& game)
+{
+    const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+    const auto dist = static_cast<float>(GetRandomValue(150, 350));
+    game.blackhole.position = Vector2Add(
+        game.player.position, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+    game.blackhole.radius = 25;
+    game.blackhole.influenceRadius = 140;
+    game.blackhole.active = true;
+    game.blackhole.timer = static_cast<float>(GetRandomValue(60, 100)) / 10.0F;
+}
+
 void updateBlackHole(Game& game, float deltaTime)
 {
     game.blackhole.timer -= deltaTime;
 
-    if (!game.blackhole.active && game.blackhole.timer <= 0)
+    // Sandbox has no auto-spawns (see enterSandbox) - the black hole only
+    // ever appears there via the sandbox's own spawn command.
+    if (!game.sandbox && !game.blackhole.active && game.blackhole.timer <= 0)
     {
-        const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-        const auto dist = static_cast<float>(GetRandomValue(150, 350));
-        game.blackhole.position =
-            Vector2Add(game.player.position,
-                       Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
-        game.blackhole.radius = 25;
-        game.blackhole.influenceRadius = 140;
-        game.blackhole.active = true;
-        game.blackhole.timer = static_cast<float>(GetRandomValue(60, 100)) / 10.0F;
+        spawnBlackHole(game);
     }
     else if (game.blackhole.active && game.blackhole.timer <= 0)
     {
@@ -3099,28 +3300,38 @@ void updateBlackHole(Game& game, float deltaTime)
 // updateWormhole spawns/despawns a linked pair of portal mouths on a timer,
 // the same way updateBlackHole does. Each mouth faces one of the 4 cardinal
 // directions, rolled independently.
+// spawnWormholePair activates a linked pair of portal mouths near the player
+// - shared by the natural auto-spawn path (updateWormhole) and the sandbox's
+// on-command hotkey (see updateSandboxInput).
+void spawnWormholePair(Game& game)
+{
+    const float angleA = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+    const auto distA = static_cast<float>(GetRandomValue(300, 600));
+    const float angleB = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+    const auto distB = static_cast<float>(GetRandomValue(300, 600));
+
+    game.wormhole.positionA =
+        Vector2Add(game.player.position,
+                   Vector2{.x = std::cos(angleA) * distA, .y = std::sin(angleA) * distA});
+    game.wormhole.positionB =
+        Vector2Add(game.player.position,
+                   Vector2{.x = std::cos(angleB) * distB, .y = std::sin(angleB) * distB});
+    game.wormhole.facingA = static_cast<WormholeFacing>(GetRandomValue(0, 3));
+    game.wormhole.facingB = static_cast<WormholeFacing>(GetRandomValue(0, 3));
+    game.wormhole.radius = wormholeRadius;
+    game.wormhole.active = true;
+    game.wormhole.timer = wormholeLifetime;
+}
+
 void updateWormhole(Game& game, float deltaTime)
 {
     game.wormhole.timer -= deltaTime;
 
-    if (!game.wormhole.active && game.wormhole.timer <= 0)
+    // Sandbox has no auto-spawns (see enterSandbox) - the wormhole only ever
+    // appears there via the sandbox's own spawn command.
+    if (!game.sandbox && !game.wormhole.active && game.wormhole.timer <= 0)
     {
-        const float angleA = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-        const auto distA = static_cast<float>(GetRandomValue(300, 600));
-        const float angleB = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-        const auto distB = static_cast<float>(GetRandomValue(300, 600));
-
-        game.wormhole.positionA =
-            Vector2Add(game.player.position,
-                       Vector2{.x = std::cos(angleA) * distA, .y = std::sin(angleA) * distA});
-        game.wormhole.positionB =
-            Vector2Add(game.player.position,
-                       Vector2{.x = std::cos(angleB) * distB, .y = std::sin(angleB) * distB});
-        game.wormhole.facingA = static_cast<WormholeFacing>(GetRandomValue(0, 3));
-        game.wormhole.facingB = static_cast<WormholeFacing>(GetRandomValue(0, 3));
-        game.wormhole.radius = wormholeRadius;
-        game.wormhole.active = true;
-        game.wormhole.timer = wormholeLifetime;
+        spawnWormholePair(game);
     }
     else if (game.wormhole.active && game.wormhole.timer <= 0)
     {

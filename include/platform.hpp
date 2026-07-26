@@ -25,3 +25,10 @@ void platformInitSaveData();
 // mounted IDBFS path are only an in-memory mirror until explicitly synced to
 // IndexedDB. Call after every settings/highscore save.
 void platformSyncSaveData();
+
+// platformExitToLanding sends the browser back to the game's landing page -
+// a no-op everywhere except Web, where there's no real process to exit:
+// returning from main() just leaves the canvas as a dead black frame.
+// Desktop keeps quitting via the normal window-close + return path. Call
+// once, right after the main loop ends.
+void platformExitToLanding();

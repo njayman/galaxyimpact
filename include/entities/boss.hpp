@@ -65,6 +65,8 @@ class Boss
     Vector2 chargeVelocity;     // ChargeDash's fixed dash direction*speed for the attack
     float barrageTimer;         // next-shot/round countdown, shared by Barrage/HomingBarrage/Spread
     bool hitByDash; // guards a single dash from ramming this boss every frame it's active
+    bool isMega;    // false = miniboss; determines the level-up/XP reward paid out on death
+    bool isSwarm;   // true for the every-50th-spawn 3-at-once wave; pays an extra jackpot drop
 };
 
 // BossType is flavor only (name/color/stat multipliers) - the 20 types share

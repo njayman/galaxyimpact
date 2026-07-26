@@ -1,6 +1,7 @@
 #include "menu.hpp"
 
 #include "draw.hpp"
+#include <algorithm>
 
 auto mouseUIPos(const Game& game) -> Vector2
 {
@@ -14,36 +15,57 @@ auto mouseUIPos(const Game& game) -> Vector2
     return Vector2{.x = (mouse.x - rect.x) / scale, .y = (mouse.y - rect.y) / scale};
 }
 
-auto hoveredRow(Game& game, int32_t count, int32_t y, int32_t lineHeight) -> std::optional<int32_t>
+auto guiUiScale(const Game& game) -> float
 {
-    const Vector2 mouse = mouseUIPos(game);
-    if (mouse.x < 0 || mouse.x > static_cast<float>(game.screenWidth))
-    {
-        return std::nullopt;
-    }
+    constexpr float referenceHeight = 1080.0F;
+    constexpr float minScale = 0.6F;
+    constexpr float maxScale = 2.2F;
+    return std::clamp(static_cast<float>(game.windowHeight) / referenceHeight, minScale, maxScale);
+}
 
+auto menuColumnRect(const Game& game, int32_t index, int32_t count, int32_t width, int32_t height,
+                    int32_t gap, int32_t topY) -> Rectangle
+{
+    (void)count;
+    const float scale = guiUiScale(game);
+    const float scaledWidth = static_cast<float>(width) * scale;
+    const float scaledHeight = static_cast<float>(height) * scale;
+    const float scaledGap = static_cast<float>(gap) * scale;
+    const float scaledTopY = static_cast<float>(topY) * scale;
+
+    return Rectangle{.x = static_cast<float>(game.windowWidth) / 2 - scaledWidth / 2,
+                     .y = scaledTopY + static_cast<float>(index) * (scaledHeight + scaledGap),
+                     .width = scaledWidth,
+                     .height = scaledHeight};
+}
+
+auto hoveredColumnRow(int32_t count, int32_t width, int32_t height, int32_t gap, int32_t topY,
+                      const Game& game) -> std::optional<int32_t>
+{
+    const Vector2 mouse = GetMousePosition();
     for (int32_t i = 0; i < count; i++)
     {
-        const int32_t rowY = y + i * lineHeight - lineHeight / 3;
-        if (mouse.y >= static_cast<float>(rowY) && mouse.y < static_cast<float>(rowY + lineHeight))
+        if (CheckCollisionPointRec(mouse, menuColumnRect(game, i, count, width, height, gap, topY)))
         {
             return i;
         }
     }
-
     return std::nullopt;
 }
 
-auto updateMenuSelection(Game& game, int32_t index, int32_t optionCount, int32_t y,
-                         int32_t lineHeight) -> MenuSelection
+auto updateMenuSelectionWindow(Game& game, int32_t index, int32_t optionCount, int32_t width,
+                               int32_t height, int32_t gap, int32_t topY) -> MenuSelection
 {
+    bool keyboardMoved = false;
     if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP))
     {
         index--;
+        keyboardMoved = true;
     }
     if (IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN))
     {
         index++;
+        keyboardMoved = true;
     }
 
     if (index < 0)
@@ -57,11 +79,23 @@ auto updateMenuSelection(Game& game, int32_t index, int32_t optionCount, int32_t
 
     bool confirmed = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
 
-    if (const auto row = hoveredRow(game, optionCount, y, lineHeight); row.has_value())
+    const Vector2 mouseDelta = GetMouseDelta();
+    const bool mouseMoved = mouseDelta.x != 0 || mouseDelta.y != 0;
+    if (!keyboardMoved && mouseMoved)
     {
-        index = *row;
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        if (const auto row = hoveredColumnRow(optionCount, width, height, gap, topY, game);
+            row.has_value())
         {
+            index = *row;
+        }
+    }
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    {
+        if (const auto row = hoveredColumnRow(optionCount, width, height, gap, topY, game);
+            row.has_value())
+        {
+            index = *row;
             confirmed = true;
         }
     }

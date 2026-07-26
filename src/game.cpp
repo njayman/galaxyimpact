@@ -142,6 +142,7 @@ auto InitGame() -> Game
     PlayMusicStream(game.bgm.drone);
     PlayMusicStream(game.bgm.intensity);
     PlayMusicStream(game.bgm.upgrade);
+    SetMusicVolume(game.bgm.drone, SoundConstants::droneVolume);
     SetMusicVolume(game.bgm.intensity, 0);
     SetMusicVolume(game.bgm.upgrade, 0);
 

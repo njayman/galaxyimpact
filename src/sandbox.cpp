@@ -40,12 +40,25 @@ void updateSandboxInput(Game& game)
 
     if (IsKeyPressed(KEY_B))
     {
-        spawnBoss(game);
+        if (IsKeyDown(KEY_LEFT_SHIFT))
+        {
+            spawnMiniboss(game);
+        }
+        else
+        {
+            spawnBoss(game);
+        }
+    }
+
+    if (IsKeyPressed(KEY_Y))
+    {
+        spawnSwarmBoss(game);
     }
 
     if (IsKeyPressed(KEY_K))
     {
         game.enemies.clear();
+        game.eliteHazards.clear();
         game.asteroids.clear();
         game.bossProjectiles.clear();
         game.mines.clear();
@@ -85,6 +98,31 @@ void updateSandboxInput(Game& game)
     {
         game.sandboxBossAttackIndex =
             (game.sandboxBossAttackIndex - 1 + bossAttackCount) % bossAttackCount;
+    }
+
+    if (IsKeyPressed(KEY_EQUAL))
+    {
+        game.waveNumber++;
+    }
+    if (IsKeyPressed(KEY_MINUS) && game.waveNumber > 1)
+    {
+        game.waveNumber--;
+    }
+
+    if (IsKeyPressed(KEY_N))
+    {
+        spawnBlackHole(game);
+    }
+
+    if (IsKeyPressed(KEY_M))
+    {
+        spawnWormholePair(game);
+    }
+
+    if (IsKeyPressed(KEY_U))
+    {
+        spawnEliteHazard(game, IsKeyDown(KEY_LEFT_SHIFT) ? EliteHazardRole::Suppressor
+                                                         : EliteHazardRole::Warlord);
     }
 
     if (IsKeyPressed(KEY_O) && !game.bosses.empty())

@@ -55,6 +55,10 @@ void platformSyncSaveData()
     }
 }
 
+// index.html is the landing page - see web/landing.html, copied alongside
+// GalaxyImpact.html/.js/.wasm by CMakeLists.txt's EMSCRIPTEN post-build step.
+void platformExitToLanding() { EM_ASM(window.location.href = 'index.html';); }
+
 #else
 
 auto getSaveDataDir() -> std::string
@@ -90,12 +94,13 @@ auto getSaveDataDir() -> std::string
         return "";
     }
 
-    std::error_code ec;
-    std::filesystem::create_directories(dir, ec);
+    std::error_code error_code;
+    std::filesystem::create_directories(dir, error_code);
     return dir.string() + "/";
 }
 
 void platformInitSaveData() {}
 void platformSyncSaveData() {}
+void platformExitToLanding() {}
 
 #endif

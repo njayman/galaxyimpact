@@ -5,8 +5,10 @@
 #include "entities/item.hpp"
 #include "entities/player.hpp"
 #include "entities/space.hpp"
+#include "guitheme.hpp"
 #include "menu.hpp"
 #include "palette.hpp"
+#include "raygui.h"
 #include "raylib.h"
 #include "raymath.h"
 #include "settings.hpp"
@@ -67,7 +69,7 @@ void drawMenu(const Game& game, const std::string& heading, const std::vector<st
 void drawHighScores(const Game& game, int32_t x, int32_t y, const std::vector<int32_t>& scores);
 void drawGameplayWorld(const Game& game);
 void drawShip(const Game& game);
-void drawEnemy(const Game& game, const Enemy& enemy);
+void drawEnemy(const Game& game, const Enemy& enemy, bool buffed);
 void drawEliteHazard(const EliteHazard& hazard);
 void drawBoss(const Game& game, const Boss& boss);
 void drawOrbitBlades(const Game& game);
@@ -81,8 +83,9 @@ void drawHealthPips(const Game& game, int32_t x, int32_t y);
 auto healthPipsWidth(const Game& game) -> int32_t;
 void drawShieldStackPips(const Game& game, int32_t x, int32_t y);
 void drawNerveBar(const Game& game, int32_t x, int32_t y);
-void drawDamageMeter(const Game& game, int32_t x, int32_t y);
+auto drawDamageMeter(const Game& game, int32_t x, int32_t y) -> int32_t;
 void drawChargePips(const Game& game, int32_t x, int32_t y);
+void drawDebuffIndicator(const Game& game, int32_t x, int32_t y);
 void drawSandboxHUD(const Game& game);
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius);
 
@@ -163,88 +166,127 @@ void drawBackgroundStars(const Game& game, Vector2 relativeTo)
     }
 }
 
+// windowText/measureWindowText are drawText/measureText scaled by
+// guiUiScale - the raygui-driven menu screens live in real window space (see
+// menu.hpp's menuColumnRect), not the fixed logical canvas the rest of
+// drawText's callers use, so their own text needs to grow/shrink with the
+// window too instead of staying pinned to a fixed pixel size.
+void windowText(const Game& game, const char* text, int32_t centerX, int32_t y, int32_t size,
+                Color color)
+{
+    const float scale = guiUiScale(game);
+    const auto scaledSize = static_cast<int32_t>(static_cast<float>(size) * scale);
+    const int32_t width = measureText(game, text, scaledSize);
+    drawText(game, text, centerX - width / 2, static_cast<int32_t>(static_cast<float>(y) * scale),
+             scaledSize, color);
+}
+
 void drawTitle(const Game& game)
 {
-    const std::string title = "GALAXY IMPACT";
-    drawText(game, title.c_str(), game.screenWidth / 2 - measureText(game, title.c_str(), 50) / 2,
-             80, 50, Palette::Accent);
+    applyGuiScale(game);
+    windowText(game, "GALAXY IMPACT", game.windowWidth / 2, 80, 50, Palette::Accent);
 
     drawMenu(game, "", {"Start", "Settings", "Exit"}, MenuLayout::titleMenuY);
-    drawHighScores(game, game.screenWidth / 2 - 80, 330, game.highScores);
+    drawHighScores(game, game.windowWidth / 2 - static_cast<int32_t>(80 * guiUiScale(game)),
+                   static_cast<int32_t>(280 * guiUiScale(game)), game.highScores);
 }
 
 void drawGameOver(const Game& game)
 {
-    const std::string message = "YOU WERE DEFEATED!";
-    drawText(game, message.c_str(),
-             game.screenWidth / 2 - measureText(game, message.c_str(), 40) / 2, 70, 40,
-             Palette::Accent);
+    applyGuiScale(game);
+    windowText(game, "YOU WERE DEFEATED!", game.windowWidth / 2, 70, 40, Palette::Accent);
 
     const std::string statsText =
         std::format("Score: {}   Level: {}   Wave: {}   Time: {:.0f}s", game.score, game.level,
                     game.waveNumber, game.runTime);
-    drawText(game, statsText.c_str(),
-             game.screenWidth / 2 - measureText(game, statsText.c_str(), 20) / 2, 120, 20,
-             Palette::StructLight);
+    windowText(game, statsText.c_str(), game.windowWidth / 2, 120, 20, Palette::StructLight);
 
-    drawHighScores(game, game.screenWidth / 2 - 80, 160, game.highScores);
+    drawHighScores(game, game.windowWidth / 2 - static_cast<int32_t>(80 * guiUiScale(game)),
+                   static_cast<int32_t>(160 * guiUiScale(game)), game.highScores);
     drawMenu(game, "", {"New Game", "Exit"}, MenuLayout::gameOverMenuY);
 }
 
+// drawOverlay dims the whole real window (not just the logical canvas) - the
+// HUD/world drawn underneath is still in logical/letterboxed space, but
+// everything drawn on top of this (the raygui menus) is in real window
+// space, so the dim needs to cover the same area they do.
 void drawOverlay(const Game& game)
 {
-    DrawRectangle(0, 0, game.screenWidth, game.screenHeight, Fade(Palette::Void, 0.75F));
+    DrawRectangle(0, 0, game.windowWidth, game.windowHeight, Fade(Palette::Void, 0.75F));
 }
 
-// drawSettings shows the settings rows with the selected row highlighted and
-// its current value alongside - Left/Right (or Enter) changes the value.
+// drawSettings shows each settings row as a raygui control: a real
+// GuiCheckBox for the two booleans (BGM/Sound), a button styled like a
+// "< value >" stepper for the cyclable ones, and a plain button for Back.
+// The actual value changes still happen in updateSettings (Left/Right/
+// Enter/click) - this only renders the current state.
 void drawSettings(const Game& game)
 {
-    const std::string heading = "SETTINGS";
-    drawText(game, heading.c_str(),
-             game.screenWidth / 2 - measureText(game, heading.c_str(), 34) / 2, 130, 34,
-             Palette::Accent);
+    applyGuiScale(game);
+    const float scale = guiUiScale(game);
+    windowText(game, "SETTINGS", game.windowWidth / 2, 130, 34, Palette::Accent);
 
     const auto& res = resolutionOptions.at(static_cast<size_t>(game.settings.resolutionIndex));
     const std::string displayMode = IsWindowFullscreen() ? "Fullscreen" : "Windowed";
-    const auto onOff = [](bool on) -> std::string { return on ? "On" : "Off"; };
 
     const bool difficultyLocked = game.settingsReturnState == GameState::PAUSED;
     const std::string difficultyValue =
         std::string(difficultyDefs.at(static_cast<size_t>(game.settings.difficulty)).name) +
-        (difficultyLocked ? " (locked mid-run)" : "");
+        (difficultyLocked ? " (locked)" : "");
 
-    const std::array<std::pair<std::string, std::string>, 7> rows{
-        std::pair{"Resolution", std::format("{}x{}", res.width, res.height)},
-        std::pair{"Difficulty", difficultyValue},
-        std::pair{"BGM", onOff(game.settings.bgmOn)},
-        std::pair{"Sound", onOff(game.settings.soundOn)},
-        std::pair{"FPS Cap",
-                  std::format("{}", fpsOptions.at(static_cast<size_t>(game.settings.fpsIndex)))},
-        std::pair{"Display Mode", displayMode},
-        std::pair{"Back", ""},
+    const std::array<std::string, 6> stepperLabels{"Resolution", "Difficulty", "",
+                                                   "",           "FPS Cap",    "Display Mode"};
+    const std::array<std::string, 6> stepperValues{
+        std::format("{}x{}", res.width, res.height),
+        difficultyValue,
+        "",
+        "",
+        std::format("{}", fpsOptions.at(static_cast<size_t>(game.settings.fpsIndex))),
+        displayMode,
     };
 
-    int32_t y = MenuLayout::settingsMenuY;
-    for (size_t i = 0; i < rows.size(); i++)
+    constexpr int32_t rowCount = 7;
+    for (int32_t i = 0; i < rowCount; i++)
     {
-        Color color = Palette::StructLight;
-        if (static_cast<int32_t>(i) == game.menuIndex)
+        const Rectangle rect =
+            menuColumnRect(game, i, rowCount, MenuLayout::settingsWidth, MenuLayout::settingsHeight,
+                           MenuLayout::settingsGap, MenuLayout::settingsMenuY);
+
+        if (i == game.menuIndex)
         {
-            color = Palette::Accent;
+            GuiSetState(STATE_FOCUSED);
         }
 
-        const auto& [label, value] = rows.at(i);
-        const std::string text = value.empty() ? label : std::format("{}:  < {} >", label, value);
+        if (i == 2 || i == 3) // BGM / Sound - real checkboxes
+        {
+            const bool on = i == 2 ? game.settings.bgmOn : game.settings.soundOn;
+            bool checked = on;
+            const char* label = i == 2 ? "BGM" : "Sound";
+            const Rectangle box{.x = rect.x,
+                                .y = rect.y + rect.height / 2 - 12 * scale,
+                                .width = 24 * scale,
+                                .height = 24 * scale};
+            GuiCheckBox(box, label, &checked);
+        }
+        else if (i == rowCount - 1) // Back
+        {
+            GuiButton(rect, "Back");
+        }
+        else
+        {
+            const std::string text =
+                std::format("{}:   <  {}  >", stepperLabels.at(static_cast<size_t>(i)),
+                            stepperValues.at(static_cast<size_t>(i)));
+            GuiButton(rect, text.c_str());
+        }
 
-        drawText(game, text.c_str(), game.screenWidth / 2 - measureText(game, text.c_str(), 26) / 2,
-                 y, 26, color);
-        y += MenuLayout::settingsLineHeight;
+        GuiSetState(STATE_NORMAL);
     }
 
-    const std::string hint = "Up/Down: select   Left/Right: change   Enter: confirm";
-    drawText(game, hint.c_str(), game.screenWidth / 2 - measureText(game, hint.c_str(), 16) / 2,
-             y + 20, 16, Palette::StructMid);
+    const int32_t hintY = MenuLayout::settingsMenuY +
+                          (MenuLayout::settingsHeight + MenuLayout::settingsGap) * rowCount + 20;
+    windowText(game, "Up/Down: select   Left/Right: change   Enter: confirm", game.windowWidth / 2,
+               hintY, 16, Palette::StructMid);
 }
 
 // drawSkillIcon draws a small vector glyph for a weapon or passive skill,
@@ -448,30 +490,31 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
 }
 
 // drawLevelUp shows the rolled skill/evolve choices as a non-cancelable picker.
+// drawLevelUp shows each choice as a raygui button spanning its whole row
+// (background/border/focus styling only - GuiButton's own text is left
+// empty), with the icon/name/description drawn manually on top for the
+// finer-grained layout a single centered button label can't give.
 void drawLevelUp(const Game& game)
 {
-    const std::string heading = std::format("LEVEL {}", game.level);
-    drawText(game, heading.c_str(),
-             game.screenWidth / 2 - measureText(game, heading.c_str(), 34) / 2, 100, 34,
-             Palette::Accent);
+    applyGuiScale(game);
+    const float scale = guiUiScale(game);
+    windowText(game, std::format("LEVEL {}", game.level).c_str(), game.windowWidth / 2, 100, 34,
+               Palette::Accent);
 
-    int32_t y = MenuLayout::levelUpMenuY;
+    const auto count = static_cast<int32_t>(game.pendingChoices.size());
     constexpr int32_t nameFontSize = 24;
     constexpr int32_t descFontSize = 15;
-    constexpr int32_t descOffsetY = 27;
     constexpr int32_t iconOffsetX = 24;
-    constexpr int32_t iconOffsetY = 10;
     constexpr float iconRadius = 11;
 
-    for (size_t i = 0; i < game.pendingChoices.size(); i++)
+    for (int32_t i = 0; i < count; i++)
     {
-        const auto& choice = game.pendingChoices.at(i);
-        Color color = Palette::StructLight;
-        if (static_cast<int32_t>(i) == game.menuIndex)
-        {
-            color = Palette::Accent;
-        }
+        const auto& choice = game.pendingChoices.at(static_cast<size_t>(i));
+        const Rectangle rect =
+            menuColumnRect(game, i, count, MenuLayout::levelUpWidth, MenuLayout::levelUpHeight,
+                           MenuLayout::levelUpGap, MenuLayout::levelUpMenuY);
 
+        Color color = Palette::StructLight;
         std::string name;
         std::string desc;
         SkillType icon{};
@@ -483,7 +526,7 @@ void drawLevelUp(const Game& game)
             name = std::format("EVOLVE: {}",
                                evolvedWeaponName.at(static_cast<size_t>(choice.weapon.value())));
             desc = "Fuses the weapon and its linked passive into a super weapon.";
-            if (static_cast<int32_t>(i) == game.menuIndex)
+            if (i == game.menuIndex)
             {
                 color = Palette::Crit;
             }
@@ -515,55 +558,60 @@ void drawLevelUp(const Game& game)
         }
         }
 
-        const int32_t textWidth = measureText(game, name.c_str(), nameFontSize);
-        const int32_t textX = game.screenWidth / 2 - textWidth / 2;
+        // No button background/border here - a filled box behind text drawn
+        // in the same accent color as the box's own border made the text
+        // unreadable. Selection is shown by the text color change alone,
+        // like the pre-raygui menu did.
+        if (i == game.menuIndex)
+        {
+            color = choice.type == ChoiceType::Evolve ? Palette::Crit : Palette::Accent;
+        }
+
+        const auto nameSize = static_cast<int32_t>(static_cast<float>(nameFontSize) * scale);
+        const auto descSize = static_cast<int32_t>(static_cast<float>(descFontSize) * scale);
+        const int32_t nameY = static_cast<int32_t>(rect.y + rect.height * 0.28F) - nameSize / 2;
+        const int32_t descY = static_cast<int32_t>(rect.y + rect.height * 0.68F) - descSize / 2;
+        const int32_t nameX = static_cast<int32_t>(rect.x + rect.width / 2) -
+                              measureText(game, name.c_str(), nameSize) / 2;
+
         if (hasIcon)
         {
-            drawSkillIcon(icon,
-                          Vector2{.x = static_cast<float>(textX - iconOffsetX),
-                                  .y = static_cast<float>(y + iconOffsetY)},
-                          iconRadius, color);
+            drawSkillIcon(
+                icon,
+                Vector2{.x = static_cast<float>(nameX) - static_cast<float>(iconOffsetX) * scale,
+                        .y = static_cast<float>(nameY) + static_cast<float>(nameSize) / 2},
+                iconRadius * scale, color);
         }
-        drawText(game, name.c_str(), textX, y, nameFontSize, color);
-        drawText(game, desc.c_str(),
-                 game.screenWidth / 2 - measureText(game, desc.c_str(), descFontSize) / 2,
-                 y + descOffsetY, descFontSize, Palette::StructMid);
-
-        y += MenuLayout::levelUpLineHeight;
+        drawText(game, name.c_str(), nameX, nameY, nameSize, color);
+        windowText(game, desc.c_str(), static_cast<int32_t>(rect.x + rect.width / 2),
+                   static_cast<int32_t>(static_cast<float>(descY) / scale), descFontSize,
+                   Palette::StructMid);
     }
 }
 
-// drawMenu renders an optional heading followed by a vertical list of options,
-// highlighting the currently selected one, starting at the given y.
+// drawMenu renders an optional heading followed by a vertical column of
+// raygui buttons in real window space, highlighting the currently selected
+// one (see menu.hpp's updateMenuSelectionWindow for how that's chosen).
 void drawMenu(const Game& game, const std::string& heading, const std::vector<std::string>& options,
               int32_t y)
 {
+    applyGuiScale(game);
     if (!heading.empty())
     {
-        drawText(game, heading.c_str(),
-                 game.screenWidth / 2 - measureText(game, heading.c_str(), 30) / 2, y - 50, 30,
-                 Palette::StructLight);
+        windowText(game, heading.c_str(), game.windowWidth / 2, y - 50, 30, Palette::StructLight);
     }
 
-    for (size_t i = 0; i < options.size(); i++)
+    const auto count = static_cast<int32_t>(options.size());
+    for (int32_t i = 0; i < count; i++)
     {
-        const int32_t textWidth = measureText(game, options.at(i).c_str(), 24);
-        const int32_t textX = game.screenWidth / 2 - textWidth / 2;
-        const int32_t rowY = y + static_cast<int32_t>(i) * MenuLayout::lineHeight;
-
-        Color color = Palette::StructLight;
-        if (static_cast<int32_t>(i) == game.menuIndex)
+        const Rectangle rect = menuColumnRect(game, i, count, MenuLayout::buttonWidth,
+                                              MenuLayout::buttonHeight, MenuLayout::buttonGap, y);
+        if (i == game.menuIndex)
         {
-            color = Palette::Accent;
-
-            const auto arrowX = static_cast<float>(textX - 20);
-            const float arrowY = static_cast<float>(rowY) + 12;
-            DrawTriangle(Vector2{.x = arrowX, .y = arrowY - 8},
-                         Vector2{.x = arrowX, .y = arrowY + 8},
-                         Vector2{.x = arrowX + 14, .y = arrowY}, Palette::Accent);
+            GuiSetState(STATE_FOCUSED);
         }
-
-        drawText(game, options.at(i).c_str(), textX, rowY, 24, color);
+        GuiButton(rect, options.at(static_cast<size_t>(i)).c_str());
+        GuiSetState(STATE_NORMAL);
     }
 }
 
@@ -623,9 +671,12 @@ void drawGameplayWorld(const Game& game)
                     a.radius / 5, Palette::StructDark);
     }
 
+    const bool warlordActive = std::any_of(
+        game.eliteHazards.begin(), game.eliteHazards.end(), [](const EliteHazard& hazard)
+        { return hazard.active && hazard.role == EliteHazardRole::Warlord; });
     for (const auto& e : game.enemies)
     {
-        drawEnemy(game, e);
+        drawEnemy(game, e, warlordActive);
     }
 
     for (const auto& hazard : game.eliteHazards)
@@ -776,7 +827,7 @@ void drawShip(const Game& game)
     DrawCircleV(p, r * 0.3F, Palette::StructLight);
 }
 
-void drawEnemy(const Game& game, const Enemy& enemy)
+void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
 {
     const auto& kind = enemyKinds.at(static_cast<size_t>(enemy.kind));
     Color color = kind.color;
@@ -789,6 +840,16 @@ void drawEnemy(const Game& game, const Enemy& enemy)
         DrawCircleLines(static_cast<int32_t>(enemy.position.x),
                         static_cast<int32_t>(enemy.position.y), kind.radius + 4, Palette::Crit);
     }
+    // Warlord's buff is screen-wide (see updateEnemies), so every active
+    // enemy gets this little upward chevron overhead while any Warlord
+    // hazard is alive - the visible tell that they're currently sped up.
+    if (buffed)
+    {
+        const Vector2 tip{.x = enemy.position.x, .y = enemy.position.y - kind.radius - 14};
+        const Vector2 left{.x = tip.x - 5, .y = tip.y + 6};
+        const Vector2 right{.x = tip.x + 5, .y = tip.y + 6};
+        DrawTriangle(left, tip, right, Palette::Accent);
+    }
 
     // Charge pattern telegraphs a blinking linear indicator along its locked
     // dash direction before it actually moves - a real read-and-dodge
@@ -797,7 +858,12 @@ void drawEnemy(const Game& game, const Enemy& enemy)
     {
         const Vector2 dir = Vector2Normalize(enemy.velocity);
         const float blink = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 14.0F);
-        const Vector2 lineEnd = Vector2Add(enemy.position, Vector2Scale(dir, 280));
+        // Matches the actual distance the dash will travel (velocity * frameScale
+        // integrated over enemyChargeDashDuration - see updateEnemies) so the
+        // telegraph doesn't promise a longer dash than the enemy actually does.
+        const float dashDistance = Vector2Length(enemy.velocity) * UpdateConstants::frameScale *
+                                   UpdateConstants::enemyChargeDashDuration;
+        const Vector2 lineEnd = Vector2Add(enemy.position, Vector2Scale(dir, dashDistance));
         DrawLineEx(enemy.position, lineEnd, 3, Fade(Palette::Crit, blink));
     }
 
@@ -1186,10 +1252,20 @@ void drawHUD(const Game& game)
     DrawRectangle(10, 64, static_cast<int32_t>(300 * xpFrac), 10, Palette::Charge);
     DrawRectangleLines(10, 64, 300, 10, Palette::StructDark);
 
-    // Nerve directly under XP; damage counter beside it.
+    // Nerve directly under XP; damage counter beside it. Everything below
+    // this row stacks dynamically off the damage meter's actual height (it
+    // grows with the number of active damage sources this frame) so a busy
+    // meter pushes the charge pips/debuff line down instead of overlapping
+    // them - fixed gaps only work for the meter's minimum size.
+    constexpr int32_t nerveBarHeight = 18; // bar + a little breathing room
+    constexpr int32_t damageMeterX = 210;  // clears the "Nerve" label beside the bar
     drawNerveBar(game, 10, 82);
-    drawDamageMeter(game, 150, 82);
-    drawChargePips(game, 10, 106);
+    const int32_t meterHeight = drawDamageMeter(game, damageMeterX, 82);
+
+    int32_t y = 82 + std::max(nerveBarHeight, meterHeight) + 6;
+    drawChargePips(game, 10, y);
+    y += 24;
+    drawDebuffIndicator(game, 10, y);
 
     // Skills live in their own corner, away from the health/nerve cluster.
     constexpr int32_t abilitySlotCount = ItemConstants::maxAbilitySlots;
@@ -1302,8 +1378,11 @@ void drawNerveBar(const Game& game, int32_t x, int32_t y)
 // (see updateGameplay - a hit refreshes it and holds briefly, so it's
 // actually readable instead of flickering blank between frames) next to the
 // Nerve bar, broken down by source, so the nerve bonus to weaponDamage is
-// directly visible as the total climbing while Nerve is high.
-void drawDamageMeter(const Game& game, int32_t x, int32_t y)
+// directly visible as the total climbing while Nerve is high. Its height
+// grows with the number of active sources this frame - returns that height
+// so the caller (drawHUD) can push whatever comes next down to make room,
+// instead of a fixed gap that overlaps once enough sources are active.
+auto drawDamageMeter(const Game& game, int32_t x, int32_t y) -> int32_t
 {
     const auto& meter = game.damageMeterDisplay;
     const std::string totalText = std::format("DMG: {}", meter.total);
@@ -1322,6 +1401,8 @@ void drawDamageMeter(const Game& game, int32_t x, int32_t y)
         drawText(game, line.c_str(), x, lineY, 14, Palette::StructLight);
         lineY += 16;
     }
+
+    return lineY - y;
 }
 
 // drawChargePips shows the shared dash/shield charge pool as two pips: full
@@ -1359,23 +1440,44 @@ void drawChargePips(const Game& game, int32_t x, int32_t y)
     }
 }
 
+// drawDebuffIndicator shows what's currently being applied to the player by
+// an active Suppressor elite hazard (see weaponCooldown/suppressorCooldownPenalty
+// in update.cpp) - screen-wide and for as long as any Suppressor is alive, so
+// this is the only on-screen tell of it besides the hazard's own aura ring.
+void drawDebuffIndicator(const Game& game, int32_t x, int32_t y)
+{
+    const bool suppressed = std::any_of(
+        game.eliteHazards.begin(), game.eliteHazards.end(), [](const EliteHazard& hazard)
+        { return hazard.active && hazard.role == EliteHazardRole::Suppressor; });
+    if (!suppressed)
+    {
+        return;
+    }
+
+    DrawCircleV(Vector2{.x = static_cast<float>(x) + 7, .y = static_cast<float>(y) + 9}, 7,
+                Palette::Shield);
+    drawText(game, "!", x + 4, y + 1, 14, Palette::Void);
+    drawText(game, "SUPPRESSED: weapon cooldowns +40%", x + 20, y, 16, Palette::Shield);
+}
+
 // drawSandboxHUD shows the sandbox-only hotkey reference and currently
-// selected enemy kind (the input handling side lands with the update.go
-// port).
+// selected enemy kind/wave/boss attack.
 void drawSandboxHUD(const Game& game)
 {
     const std::string kindName(enemyKinds.at(static_cast<size_t>(game.sandboxKindIndex)).name);
     const std::string attackName(
         bossAttackNames.at(static_cast<size_t>(game.sandboxBossAttackIndex)));
-    const std::array<std::string, 4> lines{
+    const std::array<std::string, 6> lines{
         "SANDBOX",
         std::format("[ / ]: cycle enemy ({})   E: spawn enemy   B: spawn boss", kindName),
         "K: clear board   L: level-up picker   H: full heal   R: reset abilities",
         std::format("G: death {}   , / . : cycle boss attack ({})   O: command nearest boss",
                     game.sandboxDeathEnabled ? "ON" : "OFF", attackName),
+        std::format("- / + : wave ({})", game.waveNumber),
+        "N: spawn black hole   M: spawn wormhole   U: spawn hazard (+Shift: debuff)",
     };
 
-    int32_t y = game.screenHeight - 140;
+    int32_t y = game.screenHeight - 180;
     for (const auto& line : lines)
     {
         drawText(game, line.c_str(), 10, y, 18, Palette::Crit);
@@ -1474,22 +1576,46 @@ auto drawGame(Game& game) -> void
                          .rotation = 0,
                          .zoom = uiScale});
 
+    // Only the gameplay HUD (health/nerve/damage meter/ability slots/
+    // sandbox debug text) draws here, through the same logical-canvas ->
+    // letterbox camera as the pixel-art world, so it scales in lockstep
+    // with it. The raygui-driven menu screens draw next, after EndMode2D,
+    // directly in real window space (see menu.hpp's menuColumnRect) so
+    // raygui's own mouse hit-testing (GetMousePosition(), always in window
+    // space) lines up with what's drawn at any window size.
+    switch (game.state)
+    {
+    case GameState::GAMEPLAY:
+    case GameState::PAUSED:
+    case GameState::LEVEL_UP:
+        drawHUD(game);
+        break;
+    case GameState::SETTINGS:
+        if (game.settingsReturnState == GameState::PAUSED)
+        {
+            drawHUD(game);
+        }
+        break;
+    case GameState::TITLE:
+    case GameState::GAME_OVER:
+        break;
+    }
+
+    EndMode2D();
+
     switch (game.state)
     {
     case GameState::TITLE:
         drawTitle(game);
         break;
     case GameState::GAMEPLAY:
-        drawHUD(game);
         break;
     case GameState::PAUSED:
-        drawHUD(game);
         drawOverlay(game);
         drawMenu(game, "PAUSED", {"Resume", "Settings", "New Game", "Exit"},
                  MenuLayout::pausedMenuY);
         break;
     case GameState::LEVEL_UP:
-        drawHUD(game);
         drawOverlay(game);
         drawLevelUp(game);
         break;
@@ -1498,16 +1624,10 @@ auto drawGame(Game& game) -> void
         drawGameOver(game);
         break;
     case GameState::SETTINGS:
-        if (game.settingsReturnState == GameState::PAUSED)
-        {
-            drawHUD(game);
-        }
         drawOverlay(game);
         drawSettings(game);
         break;
     }
-
-    EndMode2D();
 
     EndDrawing();
 }

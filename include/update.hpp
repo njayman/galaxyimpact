@@ -1,6 +1,7 @@
 #pragma once
 
 #include "entities/boss.hpp"
+#include "entities/enemy.hpp"
 #include "entities/item.hpp"
 #include "game.hpp"
 #include "raylib.h"
@@ -20,6 +21,9 @@ constexpr float shockwaveStompRadius = 220; // shared with draw.cpp's telegraph/
 constexpr float shockwaveStompDuration = 0.5F;
 constexpr float shieldCooldownDuration = 2.0F; // shared with draw.cpp's cooldown-arc visual
 constexpr int maxEnemies = 200; // hard population cap; also game.cpp's reserve() target
+constexpr float enemyChargeDashDuration = 0.4F;
+constexpr float enemyChargeDashSpeedMult = 6.0F; // Charger's dash velocity is kind.speed * this
+constexpr float frameScale = 60.0F;              // see update.cpp for the full explanation
 } // namespace UpdateConstants
 
 auto nerveFrac(const Game& game) -> float;
@@ -40,5 +44,10 @@ auto UpdateGame(Game& game, float deltaTime) -> bool;
 void applyBGMState(Game& game);
 void startLevelUp(Game& game);
 void spawnBoss(Game& game);
+void spawnMiniboss(Game& game);
+void spawnSwarmBoss(Game& game);
 void spawnEnemyAt(Game& game, int kindIndex, Vector2 pos);
 void forceBossAttack(Game& game, Boss& boss, BossAttack attack);
+void spawnBlackHole(Game& game);
+void spawnWormholePair(Game& game);
+void spawnEliteHazard(Game& game, EliteHazardRole role);

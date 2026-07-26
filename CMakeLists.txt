@@ -23,11 +23,21 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(raylib)
 
+# raygui is a single header (src/raygui.h) - no build target of its own.
+# RAYGUI_IMPLEMENTATION is defined in exactly one translation unit
+# (src/raygui_impl.cpp) to generate its function bodies once.
+FetchContent_Declare(
+    raygui
+    GIT_REPOSITORY https://github.com/raysan5/raygui.git
+    GIT_TAG 4.0
+)
+FetchContent_MakeAvailable(raygui)
+
 file(GLOB_RECURSE GALAXYIMPACT_SOURCES CONFIGURE_DEPENDS src/*.cpp)
 
 add_executable(GalaxyImpact ${GALAXYIMPACT_SOURCES})
 
-target_include_directories(GalaxyImpact PRIVATE include)
+target_include_directories(GalaxyImpact PRIVATE include "${raygui_SOURCE_DIR}/src")
 
 target_link_libraries(GalaxyImpact PRIVATE raylib)
 
@@ -51,5 +61,16 @@ if (EMSCRIPTEN)
         -sFORCE_FILESYSTEM=1
         -sALLOW_MEMORY_GROWTH=1
         -lidbfs.js
+        --shell-file "${CMAKE_SOURCE_DIR}/web/shell.html"
+    )
+
+    # index.html: the landing/store page a browser hits first (see
+    # web/landing.html) - its "Play" button links to GalaxyImpact.html, and
+    # platformExitToLanding() (src/platform.cpp) navigates back to it when the
+    # player exits from the title screen.
+    add_custom_command(TARGET GalaxyImpact POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+            "${CMAKE_SOURCE_DIR}/web/landing.html"
+            "$<TARGET_FILE_DIR:GalaxyImpact>/index.html"
     )
 endif()

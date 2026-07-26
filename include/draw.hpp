@@ -4,22 +4,31 @@
 #include "raylib.h"
 #include <cstdint>
 
-// Row layout for every menu/picker screen - shared by the drawXxx functions
-// here and the future updateXxx/hoveredRow hit-testing, so the two can never
-// drift out of sync with each other.
+// Button-column layout for every raygui menu/picker screen - shared by the
+// drawXxx functions here and the matching updateXxx/hoveredColumnRow hit
+// testing (see menu.hpp's menuColumnRect), so the two can never drift out of
+// sync with each other. All values are in window-space pixels at the
+// 1080-tall reference size - menuColumnRect applies guiUiScale itself, so
+// these don't need adjusting for actual window size.
 namespace MenuLayout
 {
-constexpr int32_t lineHeight = 35;
+constexpr int32_t buttonWidth = 340;
+constexpr int32_t buttonHeight = 50;
+constexpr int32_t buttonGap = 14;
 
-constexpr int32_t titleMenuY = 220;
-constexpr int32_t pausedMenuY = 300;
+constexpr int32_t titleMenuY = 430;
+constexpr int32_t pausedMenuY = 360;
 constexpr int32_t gameOverMenuY = 420;
 
-constexpr int32_t levelUpMenuY = 200;
-constexpr int32_t levelUpLineHeight = 62;
+constexpr int32_t levelUpWidth = 720;
+constexpr int32_t levelUpHeight = 92;
+constexpr int32_t levelUpGap = 16;
+constexpr int32_t levelUpMenuY = 260;
 
-constexpr int32_t settingsMenuY = 240;
-constexpr int32_t settingsLineHeight = 45;
+constexpr int32_t settingsWidth = 600;
+constexpr int32_t settingsHeight = 48;
+constexpr int32_t settingsGap = 10;
+constexpr int32_t settingsMenuY = 260;
 } // namespace MenuLayout
 
 // drawText/measureText wrap raylib's default-font-only DrawText/MeasureText

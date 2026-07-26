@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Galaxy Impact</title>
+    <style>
+      :root {
+        --void: #0a0c12;
+        --struct-dark: #1c222e;
+        --struct-mid: #384254;
+        --struct-light: #76849a;
+        --haze: #96a5b9;
+        --accent: #c43a3a;
+        --accent-dim: #8c2828;
+        --shield: #96b4c8;
+        --charge: #e0b26e;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--void);
+        color: var(--haze);
+        font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 6vh 5vw 4vh;
+      }
+      h1 {
+        color: var(--accent);
+        font-size: clamp(2rem, 6vw, 3.5rem);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin: 0 0 0.25em;
+        text-shadow: 0 0 20px rgba(196, 58, 58, 0.4);
+      }
+      .tagline {
+        color: var(--struct-light);
+        font-size: clamp(1rem, 2.2vw, 1.3rem);
+        margin: 0 0 2em;
+        text-align: center;
+      }
+      .panel {
+        background: var(--struct-dark);
+        border: 1px solid var(--struct-mid);
+        border-radius: 10px;
+        padding: 2em;
+        max-width: 640px;
+        width: 100%;
+      }
+      .panel p { line-height: 1.6; }
+      .panel ul { line-height: 1.8; padding-left: 1.2em; }
+      .panel strong { color: var(--charge); }
+      .actions {
+        display: flex;
+        gap: 1em;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-top: 2.5em;
+      }
+      .btn {
+        display: inline-block;
+        padding: 0.9em 2em;
+        border-radius: 6px;
+        text-decoration: none;
+        font-weight: bold;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      .btn:hover { transform: translateY(-2px); }
+      .btn-play {
+        background: var(--accent);
+        color: var(--void);
+        box-shadow: 0 0 0 rgba(196, 58, 58, 0);
+      }
+      .btn-play:hover { box-shadow: 0 4px 18px rgba(196, 58, 58, 0.5); }
+      .btn-steam {
+        background: transparent;
+        color: var(--shield);
+        border: 1px solid var(--shield);
+      }
+      .btn-steam:hover { box-shadow: 0 4px 18px rgba(150, 180, 200, 0.35); }
+      .demo-note {
+        margin-top: 3em;
+        color: var(--struct-light);
+        font-size: 0.85rem;
+        text-align: center;
+        max-width: 640px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Galaxy Impact</h1>
+    <p class="tagline">A twin-stick roguelite bullet-heaven shooter.</p>
+
+    <div class="panel">
+      <p>
+        Survive endless waves, level up a growing arsenal of weapons and abilities, and take
+        down massive bosses in this fast, frame-independent bullet-heaven shooter.
+      </p>
+      <ul>
+        <li><strong>Twin-stick combat</strong> &mdash; aim and dash your way through swarms.</li>
+        <li><strong>Build your loadout</strong> &mdash; mix weapons and skills every level up.</li>
+        <li><strong>Boss fights</strong> &mdash; huge enemies with telegraphed, dodgeable attacks.</li>
+        <li><strong>Runs scale with you</strong> &mdash; easy, normal, and hard difficulty.</li>
+      </ul>
+    </div>
+
+    <div class="actions">
+      <a class="btn btn-play" href="GalaxyImpact.html">Play the Demo</a>
+      <!-- TODO: replace with the real Steam store page once it's live -->
+      <a class="btn btn-steam" href="#">Get the Full Version on Steam</a>
+    </div>
+
+    <p class="demo-note">
+      This free browser demo includes a slice of the full game: 2 boss types, a handful of
+      their toughest attacks, and 2 starting weapons with their linked abilities. The full
+      version on Steam has the complete roster, all boss types and attacks, and every weapon.
+    </p>
+  </body>
+</html>
