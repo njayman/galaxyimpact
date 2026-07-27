@@ -16,12 +16,6 @@
 #include <optional>
 #include <vector>
 
-// frameScale converts the many speed/pull constants below - all originally
-// tuned as an implicit per-frame displacement assuming 60fps - into
-// per-second terms without rederiving every one by hand: multiplying a
-// per-frame delta by (deltaTime * frameScale) reproduces the original
-// 60fps-tuned distance exactly at 60fps, and scales correctly at the 120/240
-// FPS caps instead of moving proportionally faster.
 constexpr float frameScale = UpdateConstants::frameScale;
 
 constexpr float projectileSpeed = 10;
@@ -31,31 +25,23 @@ constexpr float blackHolePull = 2;
 constexpr float blackHoleSlow = 2.5F;
 constexpr float blackHoleAsteroidPull = 1.5F;
 constexpr float blackHoleChaseSpeed = 0.3F;
-// homingProjSpeed/spreadProjSpeed: comparable to the player's own baseline
-// move speed (game.player.speed = 5, up to ~6 with max Nerve, more with
-// Thrusters) so these don't trail hopelessly behind a player running in the
-// same direction - previously well under it (2.5/4), letting any straight
-// retreat trivially outrun them regardless of aim.
+
 constexpr float homingProjSpeed = 6.5F;
 constexpr float spreadProjSpeed = 6;
-constexpr int32_t baseBulletDamage = 5;
+constexpr int32_t baseBulletDamage = 6;
 constexpr float pickupMagnetSpeed = 7;
 constexpr float dashSpeed = 22;
 constexpr float dashDuration = 0.18F;
 constexpr int32_t dashDamage = 15;
 constexpr float dashKillChargeRefund = 0.6F;
 constexpr float shieldKillChargeRefund = 0.6F;
-constexpr float bossBodyLingerLimit = 1.0F; // grace window before lingering inside a boss kills you
-constexpr float emergencyActionNerveThreshold = 0.7F; // fraction of nerveMax required to trigger
+constexpr float bossBodyLingerLimit = 1.0F;
+constexpr float emergencyActionNerveThreshold = 0.7F;
 constexpr float damageMeterHoldDuration = 1.5F;
 
-// Charger enemy (EnemyPattern::Charge): telegraph window before the dash
-// actually moves, and the dash's own duration once it does.
 constexpr float chargeTelegraphDuration = 0.5F;
 constexpr float enemyChargeDashDuration = UpdateConstants::enemyChargeDashDuration;
-// Pickup expiry: XP is common/low-stakes and expires quickly; Shield/LifeOrb
-// are rarer and worth chasing a bit longer. Both blink in their last
-// pickupExpiryWarning seconds as a despawn warning.
+
 constexpr float xpPickupLifetime = 10.0F;
 constexpr float bonusPickupLifetime = 18.0F;
 constexpr float shieldBaseDuration = 1.2F;
@@ -63,10 +49,10 @@ constexpr float entityDespawnRadius = 1400;
 constexpr float asteroidDespawnRadius = 900;
 constexpr float turretFireRange = 700;
 constexpr int32_t crossfireProjectileDamage = 15;
-constexpr int32_t shieldDropChance = 15;  // 1.5%
-constexpr int32_t lifeOrbDropChance = 40; // 4%, i.e. rolls 15..54
+constexpr int32_t shieldDropChance = 15;
+constexpr int32_t lifeOrbDropChance = 40;
 constexpr int32_t settingsRowCount =
-    7; // Resolution, Difficulty, BGM, Sound, FPS, Display Mode, Back
+    7;
 constexpr float nerveKillGain = 6;
 constexpr float nerveDecayPerSec = 4;
 constexpr float nerveDamageBonusMax = 0.5F;
@@ -78,9 +64,6 @@ constexpr float mineSeekRadius = 320;
 constexpr float bossEngageDistance = 380;
 constexpr float bossKillCalmDuration = 6.0F;
 
-// Boss cadence: a miniboss every 5 waves, a mega boss every 10 (which
-// supersedes the miniboss on waves divisible by both). Every 50th boss
-// spawn (mini or mega) is a swarm of 3 instead of 1.
 constexpr int miniBossWaveInterval = 5;
 constexpr int megaBossWaveInterval = 10;
 constexpr int bossSwarmInterval = 50;
@@ -89,87 +72,56 @@ constexpr float miniBossSizeMult = 0.7F;
 constexpr float megaBossHealthMult = 1.5F;
 constexpr float megaBossSizeMult = 1.3F;
 
-// Boss kill rewards: miniboss XP is enough to guarantee (and slightly
-// overshoot, for a felt "boost") one level-up; megaboss overshoots enough to
-// usually chain a second level-up next frame once xpToNext is recalculated.
-// A swarm kill (every bossSwarmInterval-th spawn) additionally drops a
-// guaranteed Shield+LifeOrb jackpot per boss on top of its mega reward.
 constexpr float miniBossXpMult = 1.5F;
 constexpr float megaBossXpMult = 2.2F;
 
-// Enemy spawn-rate cycling: the base interval steps down (rate up) once per
-// 10-wave cycle; the back half of each cycle spawns faster than the front
-// half.
 constexpr int spawnRateCycleLength = 10;
 constexpr float spawnRateCycleStep = 0.1F;
 constexpr float spawnRateSecondHalfMultiplier = 0.6F;
 constexpr float spawnIntervalFloor = 0.15F;
 
-// Boss enrage: once a boss drops below enrageHealthFrac of its max HP, its
-// idle cooldown and windup telegraphs speed up.
 constexpr float enrageHealthFrac = 0.25F;
 constexpr float enrageSpeedMult = 0.5F;
 
-// Boss projectiles (Homing/Spread) pass through asteroids and enemies
-// unharmed - only sustained player fire can shoot them down. Their HP scales
-// with wave/difficulty like everything else so they stay a real threat.
 constexpr int32_t baseProjectileHealth = 3;
 
-// Wormhole mouths trigger this close; the pair spawns/despawns on a timer
-// like the black hole, and each lives lifetimeSeconds once active.
 constexpr float wormholeRadius = 26;
 constexpr float wormholeLifetime = 20.0F;
 constexpr float wormholeSpawnCooldownMin = 40.0F;
 constexpr float wormholeSpawnCooldownMax = 70.0F;
 
-// WormholeBeam: the boss fires its beam from a wormhole mouth flanking the
-// player instead of from its own position.
 constexpr float wormholeBeamDuration = 2.5F;
 constexpr float wormholeBeamFlankMinDist = 150;
 constexpr float wormholeBeamFlankMaxDist = 260;
 constexpr float beamAttackDuration = 4.0F;
 
-// Elite Hazards: rare, tough field hazards that hold near the screen edge
-// rather than chasing. Concurrent count is capped by difficulty; HP sits
-// strictly between a regular enemy and a miniboss.
 constexpr float eliteHazardSpawnIntervalMin = 45.0F;
 constexpr float eliteHazardSpawnIntervalMax = 90.0F;
-constexpr float eliteHazardOrbitDistFrac = 0.85F; // fraction of the screen half-extent
-constexpr float eliteHazardOrbitSpin = 6.0F;      // degrees/sec drift around the player
-constexpr float eliteHazardFollowRate = 1.2F;     // position lerp speed toward its orbit point
-constexpr int32_t eliteHazardBaseHealth = 220;    // above regular enemies, below a miniboss
+constexpr float eliteHazardOrbitDistFrac = 0.85F;
+constexpr float eliteHazardOrbitSpin = 6.0F;
+constexpr float eliteHazardFollowRate = 1.2F;
+constexpr int32_t eliteHazardBaseHealth = 220;
 constexpr int32_t eliteHazardScore = 150;
-constexpr int32_t eliteHazardXpBonus = 300; // deliberately well above a regular enemy's XP drop
+constexpr int32_t eliteHazardXpBonus = 300;
 constexpr int32_t eliteHazardContactDamage = 2;
 constexpr float warlordSpeedBuff = 1.35F;
 constexpr float suppressorCooldownPenalty = 1.4F;
 
-// New boss move constants (MineDrop/ChargeDash/SummonAdds/ShockwaveStomp/
-// Barrage/GravityWell) - see startBossAttack/updateBoss for how each fires.
 constexpr int mineDropCount = 4;
 constexpr float mineDropRadius = 30;
 constexpr int32_t mineDropDamage = 12;
-// chargeDashSpeed/Duration: the visible world viewport is ~screenWidth x
-// screenHeight world units (the pixelScale render-target downscale and the
-// 1/pixelScale camera zoom cancel out - see beginWorldCamera), so this is
-// tuned to close ~2200 units in half a second: a real edge-to-edge dash
-// across the arena, not a small nudge.
+
 constexpr float chargeDashSpeed = 4400;
 constexpr float chargeDashDuration = 0.5F;
-// SummonAdds spawns more adds on harder difficulties (Easy/Normal/Hard).
+
 constexpr std::array<int, static_cast<size_t>(Difficulty::Count)> summonAddsCountByDifficulty{2, 3,
                                                                                               4};
 constexpr float barrageFireInterval = 0.3F;
 constexpr float barrageDuration = 2.5F;
-// barrageProjSpeed must clear the player's own max move speed (game.player.speed
-// * (1 + nerveSpeedBonusMax), i.e. up to 6/frame-equivalent) or a straight
-// shot could never connect against a player retreating in a straight line.
+
 constexpr float barrageProjSpeed = 8;
 constexpr float homingBarrageFireInterval = 0.5F;
 
-// Spread fires spreadRoundsByDifficulty(Easy/Normal/Hard) rounds of
-// spreadBulletsPerRound each, spreadRoundInterval apart - a 10/30/60 total
-// bullet-hell wall that scales with difficulty instead of one fixed fan.
 constexpr int spreadBulletsPerRound = 10;
 constexpr std::array<int, static_cast<size_t>(Difficulty::Count)> spreadRoundsByDifficulty{1, 3, 6};
 constexpr float spreadRoundInterval = 0.25F;
@@ -177,7 +129,7 @@ constexpr float gravityWellPullStrength = 1.6F;
 constexpr float gravityWellDuration = 2.0F;
 
 constexpr std::array<float, static_cast<size_t>(WeaponType::Count)> weaponBaseCooldown{
-    0.45F, 1.0F, 1.2F, 0.8F, 0.7F, 1.8F};
+    0.38F, 0.85F, 1.0F, 0.7F, 0.6F, 1.5F};
 
 struct WaveHitResult
 {
@@ -264,9 +216,6 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter);
 void processBeamAttack(Game& game, Boss& boss, Vector2 beamStart, Vector2 beamEnd);
 void updateBgmLayers(Game& game, float deltaTime);
 
-// triggerShake raises the screen-shake amplitude/duration to at least the
-// given values (multiple simultaneous triggers don't stack, the strongest
-// wins).
 void triggerShake(Game& game, float intensity, float duration)
 {
     if (intensity > game.shakeIntensity)
@@ -280,8 +229,6 @@ void triggerShake(Game& game, float intensity, float duration)
     }
 }
 
-// triggerHitPause freezes gameplay for a brief moment to sell an impactful
-// hit.
 void triggerHitPause(Game& game, float duration)
 {
     if (duration > game.hitPauseTimer)
@@ -361,8 +308,7 @@ auto updatePaused(Game& game) -> bool
 
 auto updateGameOver(Game& game) -> bool
 {
-    // Sandbox runs (unlimited spawns, god-mode toggle, forced boss attacks)
-    // never touch the real high-score list - only a genuine playthrough can.
+
     if (!game.scoreRecorded && !game.sandbox)
     {
         game.highScores = highscore::record(*game.highScoreRepo, game.highScores, game.score);
@@ -392,8 +338,6 @@ auto updateGameOver(Game& game) -> bool
     return false;
 }
 
-// updateLevelUp handles the non-cancelable skill/evolve picker that pauses
-// the world when the player levels up.
 auto updateLevelUp(Game& game) -> bool
 {
     const auto [index, confirmed] = updateMenuSelectionWindow(
@@ -449,8 +393,6 @@ void playMenuSounds(Game& game, int32_t newIndex, bool confirmed)
     }
 }
 
-// playSFX is the single path all sound-effect playback flows through, so the
-// Sound on/off setting has one place to take effect.
 void playSFX(Game& game, Sound sound)
 {
     if (game.settings.soundOn)
@@ -459,8 +401,6 @@ void playSFX(Game& game, Sound sound)
     }
 }
 
-// updateSettings handles the settings screen: Up/Down selects a row,
-// Left/Right (or Enter/Space) changes that row's value.
 auto updateSettings(Game& game) -> bool
 {
     if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP))
@@ -484,10 +424,6 @@ auto updateSettings(Game& game) -> bool
     const bool right = IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT);
     bool confirm = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
 
-    // Mouse hover only steals the row when the mouse actually moved this
-    // frame - see updateMenuSelectionWindow for why (a keyboard Up/Down
-    // press would otherwise get overwritten by the mouse sitting on the old
-    // row).
     const Vector2 mouseDelta = GetMouseDelta();
     const bool mouseMoved = mouseDelta.x != 0 || mouseDelta.y != 0;
     if (mouseMoved)
@@ -520,7 +456,7 @@ auto updateSettings(Game& game) -> bool
 
     switch (game.menuIndex)
     {
-    case 0: // Resolution
+    case 0:
         if (left)
         {
             cycleResolution(game, -1);
@@ -530,11 +466,8 @@ auto updateSettings(Game& game) -> bool
             cycleResolution(game, 1);
         }
         break;
-    case 1: // Difficulty - locked mid-run: every difficulty-scaled formula
-            // reads game.settings.difficulty live, so changing it from the
-            // pause menu could otherwise be used to cash in Easy's
-            // boss-attack loot exception for one hit, then flip back to
-            // Hard's tougher stats immediately after.
+    case 1:
+
         if (game.settingsReturnState != GameState::PAUSED)
         {
             if (left)
@@ -547,20 +480,20 @@ auto updateSettings(Game& game) -> bool
             }
         }
         break;
-    case 2: // BGM
+    case 2:
         if (left || right || confirm)
         {
             game.settings.bgmOn = !game.settings.bgmOn;
             applyBGMState(game);
         }
         break;
-    case 3: // Sound
+    case 3:
         if (left || right || confirm)
         {
             game.settings.soundOn = !game.settings.soundOn;
         }
         break;
-    case 4: // FPS cap
+    case 4:
         if (left)
         {
             cycleFPS(game, -1);
@@ -570,13 +503,13 @@ auto updateSettings(Game& game) -> bool
             cycleFPS(game, 1);
         }
         break;
-    case 5: // Display mode
+    case 5:
         if (left || right || confirm)
         {
             toggleFullscreen(game);
         }
         break;
-    case 6: // Back
+    case 6:
         if (confirm)
         {
             game.state = game.settingsReturnState;
@@ -634,21 +567,13 @@ void applyBGMState(Game& game)
     }
 }
 
-// updateBgmLayers fades the intensity layer toward the current enemy count
-// and the upgrade layer in (permanently) once the player has any weapon
-// upgrade. calmTimer briefly caps intensity after a boss kill - "the fight's
-// not over, but take a breath" - unless enemies have already swarmed back to
-// a heavy count, in which case the calm is cut short.
 void updateBgmLayers(Game& game, float deltaTime)
 {
     constexpr float intensityEnemyThreshold = 25.0F;
     constexpr float volumeSmoothing = 1.5F;
     constexpr float calmCeiling = 0.35F;
     constexpr float swarmOverrideThreshold = 0.7F;
-    // A floor, not zero - with no enemies (title screen, a fresh run) the
-    // drone alone is just a held chord with no rhythm; keeping the beat
-    // layer audibly present at rest is what makes the score feel alive
-    // instead of a single sustained note, rising further as enemies swarm.
+
     constexpr float intensityFloor = 0.3F;
 
     float intensityTarget = std::clamp(
@@ -690,9 +615,6 @@ void gainNerve(Game& game)
         game.player.nerve = UpdateConstants::nerveMax;
     }
 
-    // Landing a kill also chips away at the ability-charge regen timer, so
-    // staying aggressive earns dash/shield charges back faster than turtling
-    // out the clock does.
     if (game.player.charges < UpdateConstants::maxCharges)
     {
         game.player.chargeRegenTimer -= 0.4F;
@@ -711,8 +633,6 @@ void updateNerve(Game& game, float deltaTime)
     }
 }
 
-// damagePlayer is the single path all player damage flows through: it
-// applies the hit and transitions to GAME_OVER if health runs out.
 void damagePlayer(Game& game, int32_t amount)
 {
     if (game.sandbox && !game.sandboxDeathEnabled)
@@ -750,10 +670,6 @@ void damagePlayer(Game& game, int32_t amount)
     }
 }
 
-// spawnDeathExplosion bursts debris outward from the player on death -
-// purely cosmetic, kept animating independent of game.state (see
-// updateDeathParticles's call site in UpdateGame) so it survives into the
-// Game Over screen instead of freezing.
 void spawnDeathExplosion(Game& game)
 {
     const std::array<Color, 3> debrisColors{Palette::Accent, Palette::Crit, Palette::Haze};
@@ -789,8 +705,7 @@ void updateDeathParticles(Game& game, float deltaTime)
 
 void updateGameplay(Game& game, float deltaTime)
 {
-    // The damage meter is this frame's damage only - reset before anything
-    // this frame has a chance to deal any, so a frame with no hits reads 0.
+
     game.damageMeter = DamageMeter{};
 
     if (IsKeyPressed(KEY_ESCAPE))
@@ -849,10 +764,6 @@ void updateGameplay(Game& game, float deltaTime)
 
     filterDeadEntities(game);
 
-    // Every boss that dropped to 0 HP this frame gets its own death
-    // shockwave and reward - bosses persist independently, so a fresh spawn
-    // never displaces one that's still fighting, and simultaneous kills each
-    // get their own effects rather than clobbering one another.
     bool anyBossKilledThisFrame = false;
     for (auto& boss : game.bosses)
     {
@@ -869,10 +780,6 @@ void updateGameplay(Game& game, float deltaTime)
         game.score += 1000;
         anyBossKilledThisFrame = true;
 
-        // Boss kill reward: miniboss XP guarantees a level-up (with a bit of
-        // leftover as a felt "boost"); megaboss XP overshoots enough to
-        // usually chain a second level-up once xpToNext recalculates next
-        // frame. A swarm kill also drops a guaranteed jackpot pickup.
         game.xp += static_cast<int>(static_cast<float>(game.xpToNext) *
                                      (boss.isMega ? megaBossXpMult : miniBossXpMult));
         if (boss.isSwarm)
@@ -907,9 +814,6 @@ void updateGameplay(Game& game, float deltaTime)
         startLevelUp(game);
     }
 
-    // Damage meter display: hold the last nonzero reading for a bit instead
-    // of flickering blank the instant a frame doesn't land a hit, so numbers
-    // are actually readable rather than a single-frame flash.
     if (game.damageMeter.total > 0)
     {
         game.damageMeterDisplay = game.damageMeter;
@@ -925,16 +829,6 @@ void updateGameplay(Game& game, float deltaTime)
     }
 }
 
-// resolveExpandingWaveHit checks a slow-expanding hazard (boss Slam / death
-// shockwave) against the player once per frame: if they're within the
-// hazard's eventual max radius and have a shield bubble, a shield stack, or
-// (if allowDash) an active dash up at any point before the growing radius
-// physically reaches them, that counts as dodging it - consuming a shield
-// stack if that's specifically what protected them. Only once the radius
-// itself crosses the player unprotected does it report a hit. A transient
-// post-hit immunityTimer deliberately does NOT count as protection here - it
-// has nothing to do with dodging this specific hazard, and treating it as a
-// free pass let an unrelated graze on the way in cancel the hazard entirely.
 auto resolveExpandingWaveHit(Game& game, Vector2 from, float radius,
                              bool allowDash) -> WaveHitResult
 {
@@ -959,12 +853,6 @@ auto resolveExpandingWaveHit(Game& game, Vector2 from, float radius,
     return WaveHitResult{.resolved = false, .hit = false};
 }
 
-// updateBossDeathShockwave expands a one-time ring from the boss's death
-// position, destroying every enemy/asteroid it passes over and damaging the
-// player once if it reaches them and they're not shielded. Unlike a boss's
-// regular attacks (which deny loot on Normal/Hard via killEnemyForBossAttack's
-// alwaysLoot=false), this always pays out score/XP/pickups regardless of
-// difficulty - the "cash-in" reward for actually finishing the boss.
 void updateBossDeathShockwave(Game& game, float deltaTime)
 {
     for (auto& wave : game.bossDeathShockwaves)
@@ -992,10 +880,6 @@ void updateBossDeathShockwave(Game& game, float deltaTime)
             }
         }
 
-        // A surviving boss caught in another boss's death ring only takes a
-        // one-time chip of damage as the ring passes through it (detected by
-        // the crossing between last frame's and this frame's radius) - a
-        // flinch, not a way to cascade-kill a multi-boss fight for free.
         const float prevProgress = std::clamp(
             1 - (wave.timer + deltaTime) / UpdateConstants::bossDeathShockwaveDuration, 0.0F, 1.0F);
         const float prevRadius = bossConstants::maxSlamRadius * prevProgress;
@@ -1116,11 +1000,6 @@ void updatePlayerMovement(Game& game, float deltaTime)
             Vector2Scale(Vector2Normalize(game.player.position), GameConstants::arenaHalf);
     }
 
-    // Standing inside a boss's body is not an instant hit: dashing through it
-    // (Shield+Dash hardest) rams and punishes the boss for free, but
-    // lingering there un-dashed for too long gets you destroyed - the same
-    // "get in, get out" tension as the black hole core, just with a boss
-    // that fights back if you commit to the hit.
     bool touchingAnyBoss = false;
     for (auto& boss : game.bosses)
     {
@@ -1171,8 +1050,6 @@ void updatePlayerMovement(Game& game, float deltaTime)
     }
 }
 
-// updateShieldAndBarrier counts down the shield's active/cooldown timers.
-// Activation itself is manual (right-click, see updateAbilityCharges).
 void updateShieldAndBarrier(Game& game, float deltaTime)
 {
     if (game.player.shieldCooldownTimer > 0)
@@ -1192,8 +1069,6 @@ void updateShieldAndBarrier(Game& game, float deltaTime)
     }
 }
 
-// chargeRegenDuration is how long one charge takes to regenerate, sped up by
-// the Barrier Mastery skill.
 auto chargeRegenDuration(const Game& game) -> float
 {
     const float duration =
@@ -1202,8 +1077,6 @@ auto chargeRegenDuration(const Game& game) -> float
     return duration < 1 ? 1 : duration;
 }
 
-// updateAbilityCharges regenerates the shared 2-charge pool and handles the
-// left-click dash / right-click shield triggers, each spending one charge.
 void updateAbilityCharges(Game& game, float deltaTime)
 {
     if (game.player.charges < UpdateConstants::maxCharges)
@@ -1216,15 +1089,6 @@ void updateAbilityCharges(Game& game, float deltaTime)
         }
     }
 
-    // Snapshotting charges here (rather than re-reading live game.player.charges
-    // in each block below) means the emergency Nerve fallback only kicks in
-    // for an ability that was ALREADY out of charges at the start of this
-    // frame - not one that's out of charges only because the other ability
-    // (dash/shield) just spent the last one earlier in this same frame. Without
-    // this, clicking both buttons in one frame with 1 charge + full Nerve
-    // banked would spend the 1 real charge on the first ability and get the
-    // second for free off the emergency reserve, turning a rare safety net
-    // into a routine 2-for-1.
     const int32_t chargesAtFrameStart = game.player.charges;
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !game.player.dashing)
@@ -1235,11 +1099,7 @@ void updateAbilityCharges(Game& game, float deltaTime)
             game.player.nerve >= UpdateConstants::nerveMax * emergencyActionNerveThreshold;
         if (hasCharge || emergency)
         {
-            // Out of charges: burn your whole built-up Nerve for an
-            // emergency dash instead - real mobility when you need it, at
-            // the cost of the damage/speed bonus you'd built up. Only
-            // available once Nerve is mostly full (>=70%), so it's a
-            // deliberate reserve to cash in, not a routine substitute.
+
             if (hasCharge)
             {
                 game.player.charges--;
@@ -1290,8 +1150,6 @@ void updateAbilityCharges(Game& game, float deltaTime)
     }
 }
 
-// aimAtMouse returns the normalized direction from screen-center (where the
-// player always renders) to the current mouse position.
 auto aimAtMouse(const Game& game) -> Vector2
 {
     const Vector2 mouse = GetMousePosition();
@@ -1305,11 +1163,6 @@ auto aimAtMouse(const Game& game) -> Vector2
     return Vector2Normalize(dir);
 }
 
-// nearestEnemy is the shared "what should this home in on" target picker for
-// homing missiles, mine seeking, etc. - considers both regular enemies and
-// elite hazards (Warlord/Suppressor), which are otherwise valid, damageable
-// targets (see aoePulse/beamPulse/updateProjectiles) but a separate entity
-// list from game.enemies.
 auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>
 {
     float best = -1;
@@ -1365,8 +1218,6 @@ auto shockwaveRadius(int32_t level, bool evolved) -> float
     return radius;
 }
 
-// weaponCooldown returns the fire interval for a weapon kind at a given
-// level, scaled by the Overclock passive.
 auto weaponCooldown(const Game& game, WeaponType kind, int32_t level, bool evolved) -> float
 {
     float base = weaponBaseCooldown.at(static_cast<size_t>(kind));
@@ -1382,10 +1233,6 @@ auto weaponCooldown(const Game& game, WeaponType kind, int32_t level, bool evolv
         base *= 0.8F;
     }
 
-    // A Suppressor's debuff applies to the player across the whole screen,
-    // not just within EliteHazardConstants::auraRadius - the aura ring drawn
-    // around it (see drawEliteHazard) is a visual read on which hazard is
-    // doing it, not a range gate.
     for (const auto& hazard : game.eliteHazards)
     {
         if (hazard.active && hazard.role == EliteHazardRole::Suppressor)
@@ -1434,9 +1281,6 @@ auto mineDamage(const Game& game, int32_t level, bool evolved) -> int32_t
     return dmg;
 }
 
-// spawnMines scatters mineCount mines at random offsets around the player;
-// they home toward the nearest enemy/asteroid (see updateMines) rather than
-// detonating immediately.
 void spawnMines(Game& game, const Weapon& weapon)
 {
     const int count = mineCount(weapon.level, weapon.evolved);
@@ -1498,14 +1342,6 @@ auto nearestAsteroidWithin(const Game& game, Vector2 from, float maxDist) -> std
     return target;
 }
 
-// updateMines detonates each mine (an aoePulse at the mine's own position,
-// hitting enemies, elite hazards, and asteroids alike) the instant something
-// enters its blast ring (mine.radius - the same ring drawn around it, see
-// drawGameplayWorld) or once its fuse runs out. Base (non-evolved) mines
-// stay exactly where they were dropped (see spawnMines) and just wait for
-// something to wander into the ring; evolved mines actively home in on the
-// nearest enemy/hazard (or asteroid, if none in range) within mineSeekRadius
-// until it's inside the ring.
 void updateMines(Game& game, float deltaTime)
 {
     for (auto& mine : game.mines)
@@ -1547,12 +1383,7 @@ void updateMines(Game& game, float deltaTime)
         }
         else if (nearestEnemyWithin(game, mine.position, mine.radius).has_value())
         {
-            // Base mines don't chase - they sit exactly where they were
-            // dropped (see spawnMines) and only trigger as a passive
-            // proximity mine, going off the instant anything (enemy or
-            // elite hazard) enters the blast ring drawn around it (see
-            // drawGameplayWorld) - the ring is the actual trigger, not just
-            // a decoration.
+
             detonate = true;
         }
 
@@ -1570,8 +1401,6 @@ void updateMines(Game& game, float deltaTime)
     }
 }
 
-// updateWeapons auto-fires every equipped weapon on its own cooldown - there
-// is no manual fire key, matching the bullet-heaven auto-combat feel.
 void updateWeapons(Game& game, float deltaTime)
 {
     for (auto& w : game.weapons)
@@ -1707,17 +1536,12 @@ void updateWeapons(Game& game, float deltaTime)
     }
 }
 
-// recordDamage feeds the live damage meter (see DamageMeter) - this frame's
-// outgoing damage only, broken down by source.
 void recordDamage(Game& game, DamageSource source, int32_t amount)
 {
     game.damageMeter.bySource.at(static_cast<size_t>(source)) += amount;
     game.damageMeter.total += amount;
 }
 
-// aoePulse damages/destroys everything within radius of the player in one
-// instantaneous pulse - shared by Orbit, Shockwave, and Mine Layer, which
-// differ only in radius/damage/cooldown numbers and visuals.
 void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSource source)
 {
     bool hitAny = false;
@@ -1765,8 +1589,6 @@ void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSourc
     }
 }
 
-// beamPulse damages everything along a line from the player toward dir, out
-// to length - Beam Sweep's attack.
 void beamPulse(Game& game, Vector2 dir, float length, int32_t dmg, DamageSource source)
 {
     const Vector2 start = game.player.position;
@@ -1816,9 +1638,6 @@ void beamPulse(Game& game, Vector2 dir, float length, int32_t dmg, DamageSource 
     }
 }
 
-// updateWaveSpawner escalates wave number/spawn rate over time and spawns
-// enemies from the roster on a ring just outside the screen around the
-// player; every 5th wave also brings the boss in.
 void updateWaveSpawner(Game& game, float deltaTime)
 {
     if (game.sandbox)
@@ -1846,11 +1665,9 @@ void updateWaveSpawner(Game& game, float deltaTime)
     if (game.enemySpawnTimer <= 0 &&
         static_cast<int>(game.enemies.size()) < UpdateConstants::maxEnemies)
     {
-        // The base spawn rate steps up once per 10-wave cycle; within a
-        // cycle, the first half spawns at that steady rate and the second
-        // half spawns faster.
+
         const int cycleIndex = (game.waveNumber - 1) / spawnRateCycleLength;
-        const int cyclePosition = (game.waveNumber - 1) % spawnRateCycleLength + 1; // 1..10
+        const int cyclePosition = (game.waveNumber - 1) % spawnRateCycleLength + 1;
 
         const float baseInterval = std::max(
             1.2F - static_cast<float>(cycleIndex) * spawnRateCycleStep, spawnIntervalFloor);
@@ -1904,10 +1721,6 @@ void updateWaveSpawner(Game& game, float deltaTime)
     }
 }
 
-// asteroidIntervalMultiplier/asteroidCap tune how annoying the asteroid
-// field is per difficulty: Hard keeps today's baseline pace, Normal/Easy
-// spawn slower and cap lower; Easy is additionally locked out entirely
-// before wave 10 (see asteroidsUnlocked above).
 auto asteroidIntervalMultiplier(const Game& game) -> float
 {
     return game.settings.difficulty == Difficulty::Hard ? 1.0F : 1.6F;
@@ -1944,9 +1757,6 @@ auto waveEnemyScale(const Game& game) -> float
     return 1 + static_cast<float>(game.waveNumber - 1) * UpdateConstants::waveEnemyScalePerWave;
 }
 
-// enemyDamage scales a base enemy damage amount by the difficulty's damage
-// multiplier (Easy hits softer, Hard hits harder) and the wave's continuous
-// scale-up.
 auto enemyDamage(const Game& game, int32_t base) -> int32_t
 {
     return static_cast<int32_t>(
@@ -1955,8 +1765,6 @@ auto enemyDamage(const Game& game, int32_t base) -> int32_t
         waveEnemyScale(game));
 }
 
-// spawnEnemy picks a weighted-random kind (eligible for the current wave)
-// and places it just outside the screen around the player.
 void spawnEnemy(Game& game)
 {
     std::vector<int> eligible;
@@ -2020,9 +1828,6 @@ void spawnEnemyAt(Game& game, int kindIndex, Vector2 pos)
                                  .hitByDash = false});
 }
 
-// bossMoveCountForDifficulty is how many moves get sampled into a boss's
-// moveset at spawn - "loads of moves" in the shared pool, but each fight
-// only draws a few, sized by difficulty.
 auto bossMoveCountForDifficulty(Difficulty difficulty) -> int
 {
     switch (difficulty)
@@ -2036,10 +1841,6 @@ auto bossMoveCountForDifficulty(Difficulty difficulty) -> int
     }
 }
 
-// sampleBossMoveset picks count distinct moves from the full shared
-// BossAttack pool via a partial Fisher-Yates shuffle (same technique as
-// sampleDistinct/rollRewardChoices) - this is the "mix and match" a boss
-// gets at spawn.
 auto sampleBossMoveset(int count) -> std::vector<BossAttack>
 {
     std::vector<BossAttack> pool;
@@ -2062,12 +1863,6 @@ auto sampleBossMoveset(int count) -> std::vector<BossAttack>
     return pool;
 }
 
-// spawnBossInstance places a single boss, its health/size scaled by
-// healthMult/sizeMult (mini vs mega) and by its randomly-picked BossType's
-// own multipliers, off the shared mega-boss cadence's tier progression
-// (waveNumber / megaBossWaveInterval) so mini and mega bosses keep climbing
-// together as waves go on, just at different strengths. Its moveset is
-// sampled fresh from the shared move pool, sized by difficulty.
 void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega, bool isSwarm)
 {
     const int32_t tier = game.waveNumber / megaBossWaveInterval;
@@ -2117,9 +1912,6 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
                                .isSwarm = isSwarm});
 }
 
-// spawnBossWave spawns one boss of the given tier, except every
-// bossSwarmInterval-th boss spawn (mini or mega, counted together) brings 3
-// at once.
 void spawnBossWave(Game& game, float healthMult, float sizeMult, bool isMega)
 {
     game.bossSpawnCount++;
@@ -2136,8 +1928,6 @@ void spawnBoss(Game& game) { spawnBossWave(game, megaBossHealthMult, megaBossSiz
 
 void spawnMiniboss(Game& game) { spawnBossWave(game, miniBossHealthMult, miniBossSizeMult, false); }
 
-// spawnSwarmBoss forces the every-50th-spawn 3-boss swarm on demand (sandbox
-// only) without waiting for game.bossSpawnCount to naturally reach it.
 void spawnSwarmBoss(Game& game)
 {
     for (int i = 0; i < 3; i++)
@@ -2147,11 +1937,6 @@ void spawnSwarmBoss(Game& game)
     playSFX(game, game.sounds.bossWindUp);
 }
 
-// updateBossMovement has the boss approach from wherever it spawned (usually
-// far off-camera) toward the player - a bit faster than the player's own
-// (possibly skill-boosted) move speed, so it can't be outrun forever - but it
-// settles at bossEngageDistance rather than closing in all the way to melee
-// range; if the player runs further off, it resumes closing.
 void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 {
     const Vector2 toPlayer = Vector2Subtract(game.player.position, bossCenter);
@@ -2163,9 +1948,6 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
     }
 }
 
-// updatePickups magnet-pulls XP gems within pickup radius toward the player
-// and collects any that reach them. Pickups expire if left too long, and a
-// black hole destroys (not collects) anything that drifts into it.
 void updatePickups(Game& game, float deltaTime)
 {
     const float magnetRadius =
@@ -2230,8 +2012,6 @@ void updatePickups(Game& game, float deltaTime)
     }
 }
 
-// collectLifeOrb: two orbs make one extra heart; a single orb alone doesn't
-// count toward health yet (see Player::halfLifeOrb).
 void collectLifeOrb(Game& game)
 {
     if (!game.player.halfLifeOrb)
@@ -2259,12 +2039,6 @@ void startLevelUp(Game& game)
     playSFX(game, game.sounds.menuConfirm);
 }
 
-// isFusedPassive reports whether id is the linked passive of an already
-// -evolved weapon: once fused, that passive's level/effect is still exactly
-// what weaponDamage/chargeRegenDuration/etc. already read from
-// game.skillLevels (nothing is reset), but it no longer counts as its own
-// ability slot or gets offered for further leveling - it's now embedded in
-// the evolved weapon's single slot.
 auto isFusedPassive(const Game& game, SkillType id) -> bool
 {
     return std::ranges::any_of(
@@ -2272,9 +2046,6 @@ auto isFusedPassive(const Game& game, SkillType id) -> bool
         { return w.evolved && skillLinkedPassive.at(static_cast<size_t>(w.type)) == id; });
 }
 
-// equippedSlotCount is how many of the 6 ability slots are currently filled
-// (any skill - weapon-grant or passive - with a level above 0, excluding
-// passives already fused into an evolved weapon).
 auto equippedSlotCount(const Game& game) -> int
 {
     int count = 0;
@@ -2294,9 +2065,6 @@ auto hasWeapon(const Game& game, WeaponType kind) -> bool
     return std::ranges::any_of(game.weapons, [kind](const Weapon& w) { return w.type == kind; });
 }
 
-// sampleDistinct returns up to count random, non-repeating entries from ids
-// (fewer if the pool is smaller) via a partial Fisher-Yates shuffle - this is
-// what stops the level-up picker from ever offering the same skill twice.
 auto sampleDistinct(std::vector<SkillType> ids, int count) -> std::vector<SkillType>
 {
     if (count > static_cast<int>(ids.size()))
@@ -2312,10 +2080,6 @@ auto sampleDistinct(std::vector<SkillType> ids, int count) -> std::vector<SkillT
     return ids;
 }
 
-// demoSkillAllowed hides a weapon's grant-skill and linked-passive skill
-// alike once that weapon itself isn't in the demo's allowed set - "two
-// weapons and linked abilities" (see democonfig.hpp), a no-op outside demo
-// builds.
 auto demoSkillAllowed(SkillType id) -> bool
 {
     for (size_t i = 0; i < weaponGrantSkill.size(); i++)
@@ -2328,13 +2092,6 @@ auto demoSkillAllowed(SkillType id) -> bool
     return true;
 }
 
-// rollLevelUpChoices rolls up to 3 distinct skill picks (new skills only
-// offered if there's a free ability slot; owned-but-unmaxed skills are
-// always offerable) plus, if any weapon+linked-passive pair has both reached
-// level 3, one guaranteed Evolve choice as a 4th option. Once literally
-// nothing is left to offer (every slot full and every one of those skills
-// maxed), falls back to a choice of direct Life Orb / Shield rewards instead
-// of repeating an already-maxed pick.
 auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
 {
     const bool slotsFull = equippedSlotCount(game) >= ItemConstants::maxAbilitySlots;
@@ -2359,9 +2116,7 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
     if (eligible.empty())
     {
         choices = rollRewardChoices();
-        // Nothing left to level - waves keep escalating regardless (see
-        // waveEnemyScale), so grant a small permanent damage bump each time
-        // instead of leaving the player stuck at a fixed power level forever.
+
         game.postCapDamageLevels++;
     }
     else
@@ -2395,8 +2150,6 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
     return choices;
 }
 
-// rollRewardChoices offers 3 of the 6 direct Life Orb/Shield rewards
-// (1/2/3 of each) - the fallback once every ability slot is full and maxed.
 auto rollRewardChoices() -> std::vector<LevelUpChoice>
 {
     std::vector<LevelUpChoice> pool{
@@ -2450,9 +2203,7 @@ void applySkill(Game& game, SkillType id)
         game.player.health = game.player.maxHealth;
         break;
     default:
-        // Damage, PickupRadius, Cooldown, Barrier are read directly from
-        // game.skillLevels where needed (weaponDamage, magnetRadius,
-        // weaponCooldown, updateShieldAndBarrier) - no extra state here.
+
         break;
     }
 }
@@ -2482,9 +2233,6 @@ void grantOrLevelWeapon(Game& game, WeaponType kind)
     game.weapons.push_back(Weapon{.type = kind, .level = 1});
 }
 
-// applyEvolution fuses a weapon with its linked passive into a super weapon:
-// same slot, but a flat power/behavior bonus applied at fire time (see
-// updateWeapons) plus a distinct look (see draw.cpp).
 void applyEvolution(Game& game, WeaponType kind)
 {
     for (auto& w : game.weapons)
@@ -2524,9 +2272,7 @@ void updateBullets(Game& game, float deltaTime)
                 bullet.active = false;
                 boss.health -= bullet.damage;
                 recordDamage(game, DamageSource::Forward, bullet.damage);
-                // Score for a boss kill is awarded once, at the end-of-frame
-                // boss-death sweep in updateGameplay - not here - so every
-                // kill method (bullet, ram, AoE) pays out exactly once.
+
             }
         }
 
@@ -2607,8 +2353,6 @@ void spawnPickup(Game& game, Vector2 position, int value, PickupType type)
                                   .maxLifetime = lifetime});
 }
 
-// damageEnemy applies damage, handles death (score/XP/split/explode), and
-// plays feedback - the single path all enemy damage flows through.
 void damageEnemy(Game& game, size_t index, int32_t amount)
 {
     const auto kind = enemyKinds.at(static_cast<size_t>(game.enemies.at(index).kind));
@@ -2660,12 +2404,6 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
     }
 }
 
-// killEnemyForBossAttack destroys the enemy at index without going through
-// contact/bullet damage. On Normal/Hard, a boss's own attacks (Slam, Beam,
-// ShockwaveStomp, ...) clearing enemies out of their blast is free for the
-// boss - no score/XP/pickups - so players can't just farm boss AoE for loot;
-// alwaysLoot (the boss's own death shockwave, and Easy difficulty) is the
-// deliberate exception, paying out normally as a "cash-in" reward.
 void killEnemyForBossAttack(Game& game, size_t index, bool alwaysLoot)
 {
     if (alwaysLoot || game.settings.difficulty == Difficulty::Easy)
@@ -2736,17 +2474,9 @@ void updateAsteroids(Game& game, float deltaTime)
     }
 }
 
-// updateEnemies dispatches movement/attack behavior per EnemyKind::pattern
-// and resolves player contact damage.
 void updateEnemies(Game& game, float deltaTime)
 {
-    // Spawner spawns more enemies mid-loop (spawnEnemyAt push_back's into
-    // this same vector); reserving up front to the hard population cap
-    // guarantees that push_back never reallocates, so the `enemy` reference
-    // taken below stays valid for the rest of this iteration. Also reserved
-    // once in game.cpp's resetRun, so this is idempotent defense-in-depth
-    // for the (currently never hit) case where a boss AoE kill triggers a
-    // splits-on-death spawn before updateEnemies has run yet this run.
+
     game.enemies.reserve(static_cast<size_t>(UpdateConstants::maxEnemies));
 
     for (size_t i = 0; i < game.enemies.size(); i++)
@@ -2760,10 +2490,6 @@ void updateEnemies(Game& game, float deltaTime)
         const auto& kind = enemyKinds.at(static_cast<size_t>(enemy.kind));
         float speedMod = enemy.isElite ? 1.2F : 1.0F;
 
-        // A Warlord's buff applies to every enemy on screen, not just within
-        // EliteHazardConstants::auraRadius - the aura ring drawn around it
-        // (see drawEliteHazard) is a visual read on which hazard is doing
-        // it, not a range gate.
         for (const auto& hazard : game.eliteHazards)
         {
             if (hazard.active && hazard.role == EliteHazardRole::Warlord)
@@ -2806,9 +2532,7 @@ void updateEnemies(Game& game, float deltaTime)
             enemy.stateTimer -= deltaTime;
             if (enemy.telegraphing)
             {
-                // Direction is already locked in below - just visibly
-                // winding up (see drawEnemy's linear indicator) so there's a
-                // real window to read and dodge before it actually moves.
+
                 if (enemy.stateTimer <= 0)
                 {
                     enemy.telegraphing = false;
@@ -2844,10 +2568,7 @@ void updateEnemies(Game& game, float deltaTime)
             enemy.orbitAngle += 1.5F * speedMod * deltaTime;
             if (enemy.orbitDist > kind.radius + 20)
             {
-                // 9/sec, matching the frame-based rate this replaced (was
-                // -0.15/frame at the assumed 60fps) so the spiral-in speed
-                // stays in sync with orbitAngle's already-deltaTime-scaled
-                // rotation at any frame rate.
+
                 enemy.orbitDist -= 9 * speedMod * deltaTime;
             }
             enemy.position = Vector2Add(game.player.position,
@@ -2892,7 +2613,7 @@ void updateEnemies(Game& game, float deltaTime)
             }
             break;
         case EnemyPattern::Stationary:
-            // doesn't move; pure contact hazard - never falls into a wormhole.
+
             break;
         }
 
@@ -2926,11 +2647,6 @@ void updateEnemies(Game& game, float deltaTime)
                               CheckCollisionCircles(game.player.position, game.player.radius,
                                                     enemy.position, kind.radius);
 
-        // Dashing takes priority over normal contact rules: shield+dash plows
-        // through and destroys everything in the path with no self-damage;
-        // dashing alone still damages the enemy but costs the player health
-        // per enemy hit (ignores the usual post-hit immunity window, since
-        // it's meant to sting for every enemy plowed through in one dash).
         if (collides && game.player.dashing && !enemy.hitByDash)
         {
             enemy.hitByDash = true;
@@ -2945,9 +2661,7 @@ void updateEnemies(Game& game, float deltaTime)
                 recordDamage(game, DamageSource::Dash, dashDamage);
                 damagePlayer(game, enemyDamage(game, kind.contactDamage));
             }
-            // Dash-refund-on-kill: plowing an enemy down mid-dash knocks a
-            // chunk off the charge-regen timer, rewarding chaining dashes
-            // through a crowd instead of one-and-done.
+
             if (!enemy.active)
             {
                 game.player.chargeRegenTimer =
@@ -2969,9 +2683,7 @@ void updateEnemies(Game& game, float deltaTime)
                 game.player.shieldActive = false;
                 game.player.shieldCooldownTimer = UpdateConstants::shieldCooldownDuration;
                 damageEnemy(game, i, 999);
-                // Same reward as a dash-kill: blocking a hit with your
-                // shield's timing and destroying the attacker on impact
-                // knocks a chunk off the charge-regen timer.
+
                 if (!enemy.active)
                 {
                     game.player.chargeRegenTimer =
@@ -2999,8 +2711,7 @@ void updateProjectiles(Game& game, float deltaTime)
         {
             if (projectile.fromPlayer)
             {
-                // Player-fired: keep chasing the nearest enemy; if none, keep
-                // flying straight (never retarget the player who fired it).
+
                 if (const auto target = nearestEnemy(game, projectile.position); target.has_value())
                 {
                     const Vector2 direction =
@@ -3026,10 +2737,6 @@ void updateProjectiles(Game& game, float deltaTime)
             continue;
         }
 
-        // Boss-fired projectiles destroy every obstacle/enemy they touch but
-        // are never stopped by them - only sustained player fire (see
-        // updateBullets) can shoot one down. The player's own homing
-        // missiles keep the old explode-on-first-hit behavior.
         for (auto& asteroid : game.asteroids)
         {
             if (!asteroid.active || !CheckCollisionCircles(projectile.position, projectile.radius,
@@ -3066,7 +2773,7 @@ void updateProjectiles(Game& game, float deltaTime)
                 break;
             }
 
-            enemy.active = false; // the boss's own projectile, no player reward
+            enemy.active = false;
         }
 
         if (projectile.fromPlayer)
@@ -3110,8 +2817,6 @@ void filterDeadEntities(Game& game)
     std::erase_if(game.mines, [](const Mine& m) { return !m.active; });
 }
 
-// updateBgParticles drifts the decorative background motes. Positions are
-// tile-space offsets (see tiledWorldPos in draw.cpp), not world positions.
 void updateBgParticles(Game& game)
 {
     const auto tileW = static_cast<float>(game.screenWidth);
@@ -3154,30 +2859,14 @@ void damageEliteHazard(Game& game, size_t index, int32_t amount)
     playSFX(game, game.sounds.explosion);
     gainNerve(game);
 
-    // A deliberate risk/reward kill, not a routine one - guaranteed reward.
     spawnPickup(game, hazard.position, 0,
                 GetRandomValue(0, 1) == 0 ? PickupType::Shield : PickupType::LifeOrb);
     spawnPickup(game, hazard.position, eliteHazardXpBonus, PickupType::XP);
 }
 
-// updateEliteHazards spawns/despawns hazards on a long timer (capped
-// concurrently by difficulty) and drifts each one toward a point near the
-// edge of the player's screen, slowly orbiting - it holds position rather
-// than chasing, and applies its buff/debuff aura for as long as it's alive
-// (see weaponCooldown for Suppressor, updateEnemies for Warlord).
-// spawnEliteHazard places one hazard of the given role out on the
-// screen-edge orbit ring (not on top of the player, so it doesn't land an
-// unavoidable free hit the instant it appears - see updateEliteHazards'
-// follow loop). Shared by the natural auto-spawn path and the sandbox's
-// on-command hotkey (see updateSandboxInput); the sandbox path ignores
-// eliteHazardCap by design (spawn whatever's asked for, for testing).
 void spawnEliteHazard(Game& game, EliteHazardRole role)
 {
-    // The visible world viewport is ~screenWidth x screenHeight world units -
-    // the pixelScale render-target downscale and the 1/pixelScale camera
-    // zoom cancel out (see beginWorldCamera) - so half-extents are just
-    // screenWidth/2 x screenHeight/2, NOT multiplied by pixelScale again
-    // (that placed hazards ~3x past the actual screen edge, off-camera).
+
     const float halfExtentX = static_cast<float>(game.screenWidth) / 2;
     const float halfExtentY = static_cast<float>(game.screenHeight) / 2;
     const float orbitDist = std::min(halfExtentX, halfExtentY) * eliteHazardOrbitDistFrac;
@@ -3203,18 +2892,13 @@ void spawnEliteHazard(Game& game, EliteHazardRole role)
 
 void updateEliteHazards(Game& game, float deltaTime)
 {
-    // The visible world viewport is ~screenWidth x screenHeight world units -
-    // the pixelScale render-target downscale and the 1/pixelScale camera
-    // zoom cancel out (see beginWorldCamera) - so half-extents are just
-    // screenWidth/2 x screenHeight/2, NOT multiplied by pixelScale again
-    // (that placed hazards ~3x past the actual screen edge, off-camera).
+
     const float halfExtentX = static_cast<float>(game.screenWidth) / 2;
     const float halfExtentY = static_cast<float>(game.screenHeight) / 2;
     const float orbitDist = std::min(halfExtentX, halfExtentY) * eliteHazardOrbitDistFrac;
 
     game.eliteHazardSpawnTimer -= deltaTime;
-    // Sandbox has no auto-spawns (see enterSandbox) - hazards only ever
-    // appear there via the sandbox's own spawn command.
+
     if (!game.sandbox && game.eliteHazardSpawnTimer <= 0)
     {
         if (static_cast<int>(game.eliteHazards.size()) < eliteHazardCap(game))
@@ -3252,9 +2936,6 @@ void updateEliteHazards(Game& game, float deltaTime)
     }
 }
 
-// spawnBlackHole activates the black hole at a random point near the player
-// - the natural auto-spawn path (updateBlackHole) and the sandbox's
-// on-command hotkey (see updateSandboxInput) both funnel through this.
 void spawnBlackHole(Game& game)
 {
     const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
@@ -3271,8 +2952,6 @@ void updateBlackHole(Game& game, float deltaTime)
 {
     game.blackhole.timer -= deltaTime;
 
-    // Sandbox has no auto-spawns (see enterSandbox) - the black hole only
-    // ever appears there via the sandbox's own spawn command.
     if (!game.sandbox && !game.blackhole.active && game.blackhole.timer <= 0)
     {
         spawnBlackHole(game);
@@ -3297,12 +2976,6 @@ void updateBlackHole(Game& game, float deltaTime)
     }
 }
 
-// updateWormhole spawns/despawns a linked pair of portal mouths on a timer,
-// the same way updateBlackHole does. Each mouth faces one of the 4 cardinal
-// directions, rolled independently.
-// spawnWormholePair activates a linked pair of portal mouths near the player
-// - shared by the natural auto-spawn path (updateWormhole) and the sandbox's
-// on-command hotkey (see updateSandboxInput).
 void spawnWormholePair(Game& game)
 {
     const float angleA = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
@@ -3327,8 +3000,6 @@ void updateWormhole(Game& game, float deltaTime)
 {
     game.wormhole.timer -= deltaTime;
 
-    // Sandbox has no auto-spawns (see enterSandbox) - the wormhole only ever
-    // appears there via the sandbox's own spawn command.
     if (!game.sandbox && !game.wormhole.active && game.wormhole.timer <= 0)
     {
         spawnWormholePair(game);
@@ -3342,11 +3013,6 @@ void updateWormhole(Game& game, float deltaTime)
     }
 }
 
-// applyWormholeTransit teleports anything that touches either mouth to the
-// other: position moves to the far mouth (offset outward along its facing so
-// it doesn't immediately re-trigger), and velocity is rotated by the facing
-// difference between the two mouths - a real portal, not a blink. Returns
-// true if a transit happened.
 auto applyWormholeTransit(const Game& game, Vector2& position, Vector2& velocity,
                           float entityRadius) -> bool
 {
@@ -3373,17 +3039,6 @@ auto applyWormholeTransit(const Game& game, Vector2& position, Vector2& velocity
 
     const Vector2 exitDir = wormholeFacingVector(exitFacing);
 
-    // A mouth is a plain proximity trigger, not an oriented surface - a
-    // bullet (or anything else) can wander in from any angle, not just
-    // "through" the mouth along its facing. Blindly rotating by the facing
-    // difference doesn't guarantee the result points away from the exit: if
-    // the entry velocity happened to be angled opposite the entry facing,
-    // the rotated exit velocity ends up angled opposite the exit facing too
-    // - i.e. back toward the mouth it just exited - so it drifts straight
-    // back in and re-triggers every frame (bullets getting "stuck" in a
-    // wormhole). Reflect the inward component so the exit velocity always
-    // has a component carrying it away from the mouth, regardless of the
-    // angle it entered at.
     if (const float outward = Vector2DotProduct(velocity, exitDir); outward < 0)
     {
         velocity = Vector2Subtract(velocity, Vector2Scale(exitDir, 2 * outward));
@@ -3397,7 +3052,7 @@ auto applyWormholeTransit(const Game& game, Vector2& position, Vector2& velocity
 
 void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 {
-    // Enraged in its last stretch of health: cooldowns and telegraphs speed up.
+
     const bool enraged =
         boss.health > 0 &&
         static_cast<float>(boss.health) <= static_cast<float>(boss.maxHealth) * enrageHealthFrac;
@@ -3522,9 +3177,6 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 playSFX(game, game.sounds.spreadBurst);
                 triggerShake(game, 5, 0.2F);
 
-                // Re-aimed at the player's current position each round, so
-                // the wall of bullets tracks you round to round even though
-                // no single bullet in it homes.
                 const Vector2 aimDir =
                     Vector2Normalize(Vector2Subtract(game.player.position, bossCenter));
                 const float baseAngle = std::atan2(aimDir.y, aimDir.x);
@@ -3583,13 +3235,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 boss.barrageTimer = barrageFireInterval;
                 const Vector2 direction =
                     Vector2Normalize(Vector2Subtract(game.player.position, bossCenter));
-                // Straight-line, not homing: aimed fresh at the player's
-                // current position each shot, at a speed above the player's
-                // own move speed so a direct retreat can still be run down -
-                // but since it's not homing, moving off that line dodges it.
-                // The boss itself keeps closing distance the whole time
-                // (updateBossMovement runs regardless of attack state), so
-                // it stays in range to keep firing rather than falling behind.
+
                 game.bossProjectiles.push_back(
                     BossProjectile{.position = bossCenter,
                                    .velocity = Vector2Scale(direction, barrageProjSpeed),
@@ -3661,12 +3307,6 @@ auto bossWindupDuration(BossAttack attack) -> float
     }
 }
 
-// processBeamAttack is shared by Beam and WormholeBeam: it always destroys
-// every asteroid/enemy the line touches (no line-of-sight blocking - a boss
-// beam clears whatever's in its way) and damages the player if they're in
-// it. A player who shields the beam and lets the shield expire while still
-// standing in it eats a single heavy hit instead of the usual chip damage -
-// shielding is a delay to get clear, not a way to facetank the whole attack.
 void processBeamAttack(Game& game, Boss& boss, Vector2 beamStart, Vector2 beamEnd)
 {
     for (auto& asteroid : game.asteroids)
@@ -3719,9 +3359,6 @@ void processBeamAttack(Game& game, Boss& boss, Vector2 beamStart, Vector2 beamEn
     }
 }
 
-// forceBossAttack is the sandbox command-center hook: skips the normal
-// random-pick-from-moveset roll and puts the boss straight into its windup
-// for a specific attack, so every move can be tested on demand.
 void forceBossAttack(Game& game, Boss& boss, BossAttack attack)
 {
     boss.attack = attack;
@@ -3796,7 +3433,7 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
             spreadRoundsByDifficulty.at(static_cast<size_t>(game.settings.difficulty));
         boss.stateTimer = static_cast<float>(rounds) * spreadRoundInterval + 0.2F;
         boss.barrageTimer = 0;
-        game.spreadWindupShots = 0; // rounds fired so far this attack
+        game.spreadWindupShots = 0;
         break;
     }
     case BossAttack::Slam:

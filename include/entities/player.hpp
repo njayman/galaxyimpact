@@ -21,7 +21,7 @@ class Player
     float shieldCooldownTimer;
     float immunityTimer;
     float blackHoleCoreTimer;
-    float bossBodyTimer; // seconds spent lingering inside a boss's hitbox undashed
+    float bossBodyTimer;
     float slowTimer;
     int charges;
     float chargeRegenTimer;
@@ -53,7 +53,6 @@ class Mine
     float radius;
     int damage;
     bool active;
-    bool evolved; // base mines only home on enemies and need near-contact to
-                  // trigger; evolved mines also seek asteroids and trigger
-                  // at their full blast radius
+    bool evolved;
+
 };

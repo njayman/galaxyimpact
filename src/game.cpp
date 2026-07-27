@@ -14,11 +14,6 @@
 namespace
 {
 
-// generateBoundaryClouds builds an irregular nebula ring around arenaHalf -
-// clusters of overlapping soft blobs, jittered in angle/distance/size, so
-// the world's edge reads as an organic gas cloud rather than a perfect
-// circle or an invisible wall. The actual clamp is still just a circular
-// distance check (see updatePlayerMovement) - this is decoration only.
 auto generateBoundaryClouds() -> std::vector<GasCloud>
 {
     const std::array<Color, 3> cloudColors{Fade(Palette::Haze, 0.12F),
@@ -50,10 +45,6 @@ auto generateBoundaryClouds() -> std::vector<GasCloud>
     return clouds;
 }
 
-// loadReadableFont picks a real, legible system sans-serif over raylib's tiny
-// built-in bitmap font. Loaded at a large base size and downsampled at draw
-// time for crisp text at any size. Falls back to the default font if none of
-// the common paths exist.
 auto loadReadableFont() -> Font
 {
     const std::array<const char*, 5> candidates{
@@ -80,7 +71,7 @@ auto loadReadableFont() -> Font
     return GetFontDefault();
 }
 
-} // namespace
+}
 
 auto InitGame() -> Game
 {
@@ -116,9 +107,6 @@ auto InitGame() -> Game
                 static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(bgColors.size() - 1))))};
     }
 
-    // borderStars cover a large virtual area (up to 8K) at native resolution
-    // so the letterbox bars around the pixel-art frame show more starfield
-    // instead of flat black, on any window/monitor size.
     game.borderStars.resize(400);
     for (auto& star : game.borderStars)
     {
@@ -151,10 +139,7 @@ auto InitGame() -> Game
     SetTextureFilter(game.worldTarget.texture, TEXTURE_FILTER_POINT);
 
     game.pixelTarget = LoadRenderTexture(game.screenWidth, game.screenHeight);
-    // Point: pixelTarget now holds the pixel-art game world only (UI/text is
-    // drawn separately, straight to the window through a letterbox camera -
-    // see drawGame) so point filtering keeps the chunky world crisp-edged at
-    // any window size instead of blurring it.
+
     SetTextureFilter(game.pixelTarget.texture, TEXTURE_FILTER_POINT);
 
     resetRun(game);
@@ -163,11 +148,6 @@ auto InitGame() -> Game
     return game;
 }
 
-// toggleFullscreen switches between windowed and fullscreen. Going
-// fullscreen resizes the window to the current monitor's native resolution
-// first (so it fills displays up to 8K), then hands off to raylib's
-// fullscreen mode. The game's own logical resolution never changes - see
-// syncScreenSize.
 void toggleFullscreen(Game& game)
 {
     if (IsWindowFullscreen())
@@ -185,20 +165,12 @@ void toggleFullscreen(Game& game)
     syncScreenSize(game);
 }
 
-// syncScreenSize tracks the actual window size (whether it changed via
-// toggleFullscreen or the player dragging the resizable window's edges) so
-// drawGame can scale+letterbox the fixed-resolution frame to fit it.
 void syncScreenSize(Game& game)
 {
     game.windowWidth = GetScreenWidth();
     game.windowHeight = GetScreenHeight();
 }
 
-// resetRun (re)initializes everything needed for a fresh playthrough,
-// without touching window-level state (screen size, starfield, loaded high
-// scores). The player always starts at the world origin - the camera keeps
-// them pinned at screen center regardless (see beginWorldCamera in
-// draw.cpp).
 void resetRun(Game& game)
 {
     game.player = Player{.position = Vector2{},
@@ -227,14 +199,11 @@ void resetRun(Game& game)
 
     game.bullets.clear();
     game.asteroids.clear();
-    // Reserved to the hard maxAsteroid cap so breakAsteroid's push_back
-    // (called while update.cpp iterates game.asteroids by reference) never
-    // reallocates and dangles the loop's in-flight asteroid reference.
+
     game.asteroids.reserve(static_cast<size_t>(maxAsteroid));
     game.bossProjectiles.clear();
     game.enemies.clear();
-    // Same reasoning as asteroids above - guards spawnEnemyAt's push_back
-    // (Spawner pattern, splits-on-death) against reallocating mid-iteration.
+
     game.enemies.reserve(static_cast<size_t>(UpdateConstants::maxEnemies));
     game.eliteHazards.clear();
     game.eliteHazardSpawnTimer = static_cast<float>(GetRandomValue(45, 90));

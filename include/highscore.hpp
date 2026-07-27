@@ -33,9 +33,7 @@ class FileRepository : public Repository
     std::string path;
 };
 
-// Record inserts score into scores, keeps it sorted descending, truncates to
-// the top maxEntries, persists via repo, and returns the updated list.
 auto record(Repository& repo, const std::vector<int32_t>& scores,
             int32_t score) -> std::vector<int32_t>;
 
-} // namespace highscore
+}

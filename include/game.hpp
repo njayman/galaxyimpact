@@ -22,18 +22,12 @@ const float arenaHalf = 20000;
 const float waveDuration = 25;
 const std::string highScoreFile = "highscore.txt";
 
-// pixelScale downscales worldTarget before it's scaled back up with
-// nearest-neighbor filtering onto pixelTarget - the deliberate chunky
-// pixel-art look.
 constexpr int pixelScale = 3;
 
-// defaultWindowWidth/Height is the default logical resolution and starting
-// window size - Full HD, so text/HUD have plenty of native pixels to work
-// with even before any fullscreen/letterbox scaling.
 constexpr int defaultWindowWidth = 1920;
 constexpr int defaultWindowHeight = 1080;
 
-} // namespace GameConstants
+}
 
 enum class GameState : std::uint8_t
 {
@@ -66,8 +60,8 @@ struct Game
     std::array<int, static_cast<size_t>(SkillType::Count)> skillLevels;
     std::vector<LevelUpChoice> pendingChoices;
     int postCapDamageLevels;
-    DamageMeter damageMeter;        // this frame's raw damage only
-    DamageMeter damageMeterDisplay; // held/decayed value the HUD actually shows
+    DamageMeter damageMeter;
+    DamageMeter damageMeterDisplay;
     float damageMeterHoldTimer;
     std::vector<BossDeathShockwave> bossDeathShockwaves;
     BlackHole blackhole;
@@ -111,15 +105,8 @@ struct Game
 
 auto InitGame() -> Game;
 
-// resetRun (re)initializes everything needed for a fresh playthrough, without
-// touching window-level state (screen size, starfield, loaded high scores).
 void resetRun(Game& game);
 
-// toggleFullscreen switches between windowed and fullscreen, syncing
-// windowWidth/windowHeight to match afterward.
 void toggleFullscreen(Game& game);
 
-// syncScreenSize tracks the actual window size (whether it changed via
-// toggleFullscreen or the player dragging the resizable window's edges) so
-// drawGame can scale+letterbox the fixed-resolution frame to fit it.
 void syncScreenSize(Game& game);

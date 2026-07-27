@@ -22,14 +22,12 @@ auto main(int argc, char* argv[]) -> int
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
     InitWindow(GameConstants::defaultWindowWidth, GameConstants::defaultWindowHeight,
                "Galaxy Impact");
-    SetExitKey(KEY_NULL); // Escape is our own pause key, not the window-close key
+    SetExitKey(KEY_NULL);
     SetWindowMinSize(minWindowWidth, minWindowHeight);
     SetTargetFPS(targetFPS);
 
     InitAudioDevice();
 
-    // Must run before InitGame() reads settings.txt/highscore.txt - on Web
-    // this mounts+loads IndexedDB first; everywhere else it's a no-op.
     platformInitSaveData();
 
     Game game = InitGame();

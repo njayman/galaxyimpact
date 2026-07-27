@@ -19,9 +19,6 @@ enum class BossState : std::uint8_t
     SHOOTING
 };
 
-// BossAttack is the shared move pool every boss (and miniboss) draws from -
-// see BossType below for the "20 types, mix-and-match moves" split: a type
-// is flavor only, the moveset is sampled from this pool at spawn.
 enum class BossAttack : std::uint8_t
 {
     Beam,
@@ -49,29 +46,26 @@ class Boss
     Vector2 position;
     Vector2 size;
     Color color;
-    Color baseColor; // the type's idle color, restored between attacks
+    Color baseColor;
     int health;
     int maxHealth;
     BossState state;
     BossAttack attack;
-    std::vector<BossAttack> moveset; // sampled at spawn; attack is always drawn from this
+    std::vector<BossAttack> moveset;
     float attackTimer;
     float stateTimer;
     Vector2 targetPosition;
     float beamRotation;
     bool slamHit;
-    bool beamShieldLatched;     // player was shielded while standing in the beam this attack
-    Vector2 wormholeBeamOrigin; // flank point WormholeBeam fires its beam from
-    Vector2 chargeVelocity;     // ChargeDash's fixed dash direction*speed for the attack
-    float barrageTimer;         // next-shot/round countdown, shared by Barrage/HomingBarrage/Spread
-    bool hitByDash; // guards a single dash from ramming this boss every frame it's active
-    bool isMega;    // false = miniboss; determines the level-up/XP reward paid out on death
-    bool isSwarm;   // true for the every-50th-spawn 3-at-once wave; pays an extra jackpot drop
+    bool beamShieldLatched;
+    Vector2 wormholeBeamOrigin;
+    Vector2 chargeVelocity;
+    float barrageTimer;
+    bool hitByDash;
+    bool isMega;
+    bool isSwarm;
 };
 
-// BossType is flavor only (name/color/stat multipliers) - the 20 types share
-// one global move pool (BossAttack) rather than each hand-authoring its own
-// moveset, so new moves added to the pool enrich every type for free.
 struct BossType
 {
     std::string_view name;
@@ -138,15 +132,12 @@ class BossProjectile
     float radius;
     bool homing;
     bool active;
-    bool fromPlayer; // true for the player's own homing missiles: targets enemies, can't hurt the
-                     // player who fired it
+    bool fromPlayer;
+
     int damage;
-    int health; // hits (from player bullets) needed to shoot it down; immune to obstacles/enemies
+    int health;
 };
 
-// BossDeathShockwave is the expanding ring left behind by a killed boss - one
-// instance per boss death, so multiple simultaneous boss kills each get their
-// own independent shockwave.
 class BossDeathShockwave
 {
   public:

@@ -28,7 +28,7 @@ class Pickup
     int value;
     PickupType type;
     bool active;
-    float lifetime; // counts down; despawns at 0 if never collected
+    float lifetime;
     float maxLifetime;
 };
 
@@ -134,9 +134,6 @@ struct LevelUpChoice
     int count = 0;
 };
 
-// DamageSource identifies what dealt a hit, for the live damage meter (see
-// DamageMeter). Mirrors WeaponType's order with one extra entry for dash
-// contact damage, which isn't tied to a weapon.
 enum class DamageSource : std::uint8_t
 {
     Forward,
@@ -153,9 +150,6 @@ enum class DamageSource : std::uint8_t
 constexpr std::array<std::string_view, static_cast<size_t>(DamageSource::Count)> damageSourceNames{
     "Forward", "Orbit", "Homing", "Mine", "Beam", "Shock", "Dash"};
 
-// DamageMeter is the player's outgoing damage this frame only - reset at the
-// top of every gameplay frame, populated as hits land, drawn as-is (see
-// drawDamageMeter). Zero when nothing was hit this frame, by design.
 struct DamageMeter
 {
     std::array<int32_t, static_cast<size_t>(DamageSource::Count)> bySource{};

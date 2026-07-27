@@ -34,4 +34,4 @@ auto isWeaponAllowed(WeaponType type) -> bool
     return std::find(allowedWeapons.begin(), allowedWeapons.end(), type) != allowedWeapons.end();
 }
 
-} // namespace DemoConfig
+}

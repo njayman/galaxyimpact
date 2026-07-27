@@ -9,8 +9,6 @@ namespace
 {
 auto settingsFilePath() -> std::string { return getSaveDataDir() + "settings.txt"; }
 
-// defaultResolutionIndex finds the 1920x1080 entry in resolutionOptions so
-// the settings menu starts in sync with the actual default window size.
 auto defaultResolutionIndex() -> int32_t
 {
     for (size_t i = 0; i < resolutionOptions.size(); i++)
@@ -24,7 +22,7 @@ auto defaultResolutionIndex() -> int32_t
     }
     return 0;
 }
-} // namespace
+}
 
 auto loadSettings() -> Settings
 {
@@ -60,8 +58,6 @@ auto loadSettings() -> Settings
     settings.bgmOn = bgmOn != 0;
     settings.soundOn = soundOn != 0;
 
-    // fpsIndex was added after the original 4-field format; older
-    // settings.txt files simply won't have it, which is fine (defaults to 0).
     if (int32_t fpsIdx = 0; file >> fpsIdx)
     {
         if (fpsIdx >= 0 && static_cast<size_t>(fpsIdx) < fpsOptions.size())

@@ -41,8 +41,6 @@ void setupGuiTheme(const Game& game)
     GuiSetStyle(DEFAULT, BASE_COLOR_DISABLED, ColorToInt(Palette::Void));
     GuiSetStyle(DEFAULT, TEXT_COLOR_DISABLED, ColorToInt(Palette::StructMid));
 
-    // Buttons read as flat accent-bordered panels rather than raygui's stock
-    // bevelled look - matches the rest of the game's flat vector style.
     GuiSetStyle(BUTTON, BORDER_WIDTH, 2);
     GuiSetStyle(BUTTON, TEXT_ALIGNMENT, TEXT_ALIGN_CENTER);
 

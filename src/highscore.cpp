@@ -33,7 +33,7 @@ auto FileRepository::load() -> std::vector<int32_t>
             continue;
         }
         int32_t value = 0;
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+
         const auto [ptr, ec] = std::from_chars(line.data(), line.data() + line.size(), value);
         if (ec == std::errc{})
         {
@@ -88,4 +88,4 @@ auto record(Repository& repo, const std::vector<int32_t>& scores,
     return updated;
 }
 
-} // namespace highscore
+}

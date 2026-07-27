@@ -12,7 +12,7 @@ constexpr float SmallRadius = 12.0F;
 constexpr int LargeScore = 10;
 constexpr int MediumScore = 20;
 constexpr int SmallScore = 30;
-} // namespace SpaceConstants
+}
 
 class Star
 {
@@ -59,9 +59,6 @@ class BlackHole
     float timer;
 };
 
-// WormholeFacing is one of the 4 axis-aligned directions a mouth can face,
-// in clockwise order (each step is +90 degrees). Values are used directly as
-// a rotation count, so the order must not change.
 enum class WormholeFacing : std::uint8_t
 {
     East,
@@ -72,11 +69,6 @@ enum class WormholeFacing : std::uint8_t
 
 auto wormholeFacingVector(WormholeFacing facing) -> Vector2;
 
-// Wormhole is a pair of linked mouths, each facing one of the 4 cardinal
-// directions. Anything passing through one mouth exits the other, its
-// velocity rotated by the facing difference between the two mouths (see
-// wormholeFacingVector/the transit helper in update.cpp) - a real portal,
-// not a teleport-in-place.
 class Wormhole
 {
   public:
@@ -111,6 +103,4 @@ const int maxAsteroid = 40;
 auto asteroidRadius(AsteroidTier tier) -> float;
 auto asteroidScore(AsteroidTier tier) -> int;
 
-// breakAsteroid shatters a non-small asteroid into 3 smaller ones flying
-// outward, appended to asteroids; no-ops once maxAsteroid is reached.
 void breakAsteroid(std::vector<Asteroid>& asteroids, const Asteroid& asteroid);

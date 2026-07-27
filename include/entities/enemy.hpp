@@ -29,7 +29,7 @@ class Enemy
     bool active;
     float stateTimer;
     bool charging;
-    bool telegraphing; // Charge pattern only: winding up, direction locked but not yet moving
+    bool telegraphing;
     bool phased;
     float orbitAngle;
     float orbitDist;
@@ -37,10 +37,6 @@ class Enemy
     bool hitByDash;
 };
 
-// EliteHazard is a rare, tough field hazard distinct from the regular
-// enemyKinds roster: it doesn't chase, it holds a position near the edge of
-// the player's screen and either buffs nearby enemies (Warlord) or debuffs
-// the player (Suppressor) for as long as it's alive.
 enum class EliteHazardRole : std::uint8_t
 {
     Warlord,
@@ -51,13 +47,13 @@ namespace EliteHazardConstants
 {
 constexpr float radius = 26;
 constexpr float auraRadius = 220;
-} // namespace EliteHazardConstants
+}
 
 class EliteHazard
 {
   public:
     Vector2 position;
-    float angle; // orbit angle around the player, for the screen-edge-follow drift
+    float angle;
     EliteHazardRole role;
     int health;
     int maxHealth;
@@ -83,14 +79,13 @@ struct EnemyKind
     float explodeRadius = 0;
     bool isLeech = false;
     bool phaseCycle = false;
-    float fireInterval = 0;    // PatternTurret only
-    float projectileSpeed = 0; // PatternTurret only
-    int spawnKind = 0;         // PatternSpawner only
-    int spawnCount = 0;        // PatternSpawner only
-    float spawnInterval = 0;   // PatternSpawner only
+    float fireInterval = 0;
+    float projectileSpeed = 0;
+    int spawnKind = 0;
+    int spawnCount = 0;
+    float spawnInterval = 0;
 };
 
-// Index into enemyKinds, referenced by splitKind/spawnKind below.
 constexpr int enemyKindSwarmling = 1;
 
 constexpr std::array<EnemyKind, 17> enemyKinds{

@@ -21,4 +21,4 @@ constexpr Color BossIdle{.r = 70, .g = 90, .b = 120, .a = 255};
 constexpr Color BossHoming{.r = 150, .g = 95, .b = 55, .a = 255};
 constexpr Color BossSpread{.r = 140, .g = 70, .b = 95, .a = 255};
 constexpr Color BossBeam{.r = 90, .g = 150, .b = 165, .a = 255};
-} // namespace Palette
+}

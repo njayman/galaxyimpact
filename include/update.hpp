@@ -16,15 +16,15 @@ constexpr float slamDuration = 1.6F;
 constexpr float bossDeathShockwaveDuration = 3.0F;
 constexpr float shockFlashDuration = 0.4F;
 constexpr float waveEnemyScalePerWave = 0.035F;
-constexpr float pickupExpiryWarning = 2.5F; // pickups blink in their last this-many seconds
-constexpr float shockwaveStompRadius = 220; // shared with draw.cpp's telegraph/impact visual
+constexpr float pickupExpiryWarning = 2.5F;
+constexpr float shockwaveStompRadius = 220;
 constexpr float shockwaveStompDuration = 0.5F;
-constexpr float shieldCooldownDuration = 2.0F; // shared with draw.cpp's cooldown-arc visual
-constexpr int maxEnemies = 200; // hard population cap; also game.cpp's reserve() target
+constexpr float shieldCooldownDuration = 2.0F;
+constexpr int maxEnemies = 200;
 constexpr float enemyChargeDashDuration = 0.4F;
-constexpr float enemyChargeDashSpeedMult = 6.0F; // Charger's dash velocity is kind.speed * this
-constexpr float frameScale = 60.0F;              // see update.cpp for the full explanation
-} // namespace UpdateConstants
+constexpr float enemyChargeDashSpeedMult = 6.0F;
+constexpr float frameScale = 60.0F;
+}
 
 auto nerveFrac(const Game& game) -> float;
 auto chargeRegenDuration(const Game& game) -> float;
@@ -37,8 +37,6 @@ auto hasWeapon(const Game& game, WeaponType kind) -> bool;
 auto weaponForGrantSkill(SkillType id) -> std::optional<WeaponType>;
 auto bossWindupDuration(BossAttack attack) -> float;
 
-// UpdateGame advances the game by one frame and reports whether the player
-// chose to exit.
 auto UpdateGame(Game& game, float deltaTime) -> bool;
 
 void applyBGMState(Game& game);

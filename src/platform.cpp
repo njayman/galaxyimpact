@@ -10,19 +10,16 @@ auto getSaveDataDir() -> std::string { return "/save/"; }
 
 namespace
 {
-// Flipped by onIdbfsSynced once the browser's IndexedDB round-trip
-// (mount+load, or a later save) actually completes - syncfs is asynchronous
-// in JS, so without this the very first frame's settings/highscore load
-// would race the load and always see an empty filesystem.
+
 volatile bool idbfsSyncPending = false;
-} // namespace
+}
 
 extern "C" EMSCRIPTEN_KEEPALIVE void onIdbfsSynced() { idbfsSyncPending = false; }
 
 void platformInitSaveData()
 {
     idbfsSyncPending = true;
-    // clang-format off
+
     EM_ASM(
         FS.mkdir('/save');
         FS.mount(IDBFS, {}, '/save');
@@ -31,7 +28,7 @@ void platformInitSaveData()
             _onIdbfsSynced();
         });
     );
-    // clang-format on
+
     while (idbfsSyncPending)
     {
         emscripten_sleep(10);
@@ -41,22 +38,20 @@ void platformInitSaveData()
 void platformSyncSaveData()
 {
     idbfsSyncPending = true;
-    // clang-format off
+
     EM_ASM(
         FS.syncfs(false, function (err) {
             if (err) { console.error('Galaxy Impact: IDBFS save failed', err); }
             _onIdbfsSynced();
         });
     );
-    // clang-format on
+
     while (idbfsSyncPending)
     {
         emscripten_sleep(10);
     }
 }
 
-// index.html is the landing page - see web/landing.html, copied alongside
-// GalaxyImpact.html/.js/.wasm by CMakeLists.txt's EMSCRIPTEN post-build step.
 void platformExitToLanding() { EM_ASM(window.location.href = 'index.html';); }
 
 #else
@@ -75,7 +70,7 @@ auto getSaveDataDir() -> std::string
     {
         dir = std::filesystem::path(home) / "Library" / "Application Support" / "GalaxyImpact";
     }
-#else // Linux and other POSIX desktops (also covers the Steam Deck)
+#else
     if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg != nullptr && *xdg != '\0')
     {
         dir = std::filesystem::path(xdg) / "GalaxyImpact";
@@ -88,9 +83,7 @@ auto getSaveDataDir() -> std::string
 
     if (dir.empty())
     {
-        // No environment to resolve a proper user-data dir from (unusual,
-        // but shouldn't crash) - fall back to the working directory, the
-        // old behavior.
+
         return "";
     }
 

@@ -89,9 +89,6 @@ void drawDebuffIndicator(const Game& game, int32_t x, int32_t y);
 void drawSandboxHUD(const Game& game);
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius);
 
-// beginPixelZoom starts a 2D camera that scales the (unchanged) drawing calls
-// down to fit the low-resolution render target, with no camera follow - used
-// for UI (menus, title, overlays) which never scrolls.
 void beginPixelZoom()
 {
     BeginMode2D(Camera2D{.offset = Vector2{},
@@ -100,9 +97,6 @@ void beginPixelZoom()
                          .zoom = 1.0F / static_cast<float>(GameConstants::pixelScale)});
 }
 
-// beginWorldCamera is beginPixelZoom plus following the player (who always
-// renders pinned at screen center while the world scrolls past) and the
-// screen-shake jolt on top of that centering.
 void beginWorldCamera(const Game& game)
 {
     const float zoom = 1.0F / static_cast<float>(GameConstants::pixelScale);
@@ -121,10 +115,6 @@ void beginWorldCamera(const Game& game)
         Camera2D{.offset = offset, .target = game.player.position, .rotation = 0, .zoom = zoom});
 }
 
-// tiledWorldPos maps a BgParticle/Star's tile-space offset to the nearest
-// copy of it relative to the given world position, so a small fixed set of
-// decorations reads as an infinite tiling backdrop around wherever that
-// position roams.
 auto tiledWorldPos(Vector2 relativeTo, Vector2 offset, float tileW, float tileH) -> Vector2
 {
     float relX = std::fmod(offset.x - relativeTo.x, tileW);
@@ -166,11 +156,6 @@ void drawBackgroundStars(const Game& game, Vector2 relativeTo)
     }
 }
 
-// windowText/measureWindowText are drawText/measureText scaled by
-// guiUiScale - the raygui-driven menu screens live in real window space (see
-// menu.hpp's menuColumnRect), not the fixed logical canvas the rest of
-// drawText's callers use, so their own text needs to grow/shrink with the
-// window too instead of staying pinned to a fixed pixel size.
 void windowText(const Game& game, const char* text, int32_t centerX, int32_t y, int32_t size,
                 Color color)
 {
@@ -206,20 +191,11 @@ void drawGameOver(const Game& game)
     drawMenu(game, "", {"New Game", "Exit"}, MenuLayout::gameOverMenuY);
 }
 
-// drawOverlay dims the whole real window (not just the logical canvas) - the
-// HUD/world drawn underneath is still in logical/letterboxed space, but
-// everything drawn on top of this (the raygui menus) is in real window
-// space, so the dim needs to cover the same area they do.
 void drawOverlay(const Game& game)
 {
     DrawRectangle(0, 0, game.windowWidth, game.windowHeight, Fade(Palette::Void, 0.75F));
 }
 
-// drawSettings shows each settings row as a raygui control: a real
-// GuiCheckBox for the two booleans (BGM/Sound), a button styled like a
-// "< value >" stepper for the cyclable ones, and a plain button for Back.
-// The actual value changes still happen in updateSettings (Left/Right/
-// Enter/click) - this only renders the current state.
 void drawSettings(const Game& game)
 {
     applyGuiScale(game);
@@ -257,7 +233,7 @@ void drawSettings(const Game& game)
             GuiSetState(STATE_FOCUSED);
         }
 
-        if (i == 2 || i == 3) // BGM / Sound - real checkboxes
+        if (i == 2 || i == 3)
         {
             const bool on = i == 2 ? game.settings.bgmOn : game.settings.soundOn;
             bool checked = on;
@@ -268,7 +244,7 @@ void drawSettings(const Game& game)
                                 .height = 24 * scale};
             GuiCheckBox(box, label, &checked);
         }
-        else if (i == rowCount - 1) // Back
+        else if (i == rowCount - 1)
         {
             GuiButton(rect, "Back");
         }
@@ -289,8 +265,6 @@ void drawSettings(const Game& game)
                hintY, 16, Palette::StructMid);
 }
 
-// drawSkillIcon draws a small vector glyph for a weapon or passive skill,
-// consistent with the game's shape-based art style (no image assets).
 void drawSkillIcon(SkillType id, Vector2 c, float s, Color color)
 {
     if (const auto kind = weaponForGrantSkill(id); kind.has_value())
@@ -381,10 +355,6 @@ void drawPassiveIcon(SkillType id, Vector2 c, float s, Color color)
     }
 }
 
-// evolutionHint returns the evolved weapon name if picking this skill (a
-// passive whose linked weapon is already equipped) contributes toward that
-// weapon's fusion - lets the level-up picker show what a passive is building
-// toward instead of it just reading as a flat stat bump.
 auto evolutionHint(const Game& game, SkillType id) -> std::string
 {
     for (size_t i = 0; i < weaponGrantSkill.size(); i++)
@@ -398,9 +368,6 @@ auto evolutionHint(const Game& game, SkillType id) -> std::string
     return "";
 }
 
-// drawAbilitySlots shows all maxAbilitySlots ability slots as a row of icons
-// - filled for equipped weapons/passives (bright if evolved), empty outlined
-// boxes for open slots - so slot pressure is visible at a glance.
 void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
 {
     constexpr float boxSize = 28;
@@ -489,11 +456,6 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
     }
 }
 
-// drawLevelUp shows the rolled skill/evolve choices as a non-cancelable picker.
-// drawLevelUp shows each choice as a raygui button spanning its whole row
-// (background/border/focus styling only - GuiButton's own text is left
-// empty), with the icon/name/description drawn manually on top for the
-// finer-grained layout a single centered button label can't give.
 void drawLevelUp(const Game& game)
 {
     applyGuiScale(game);
@@ -558,10 +520,6 @@ void drawLevelUp(const Game& game)
         }
         }
 
-        // No button background/border here - a filled box behind text drawn
-        // in the same accent color as the box's own border made the text
-        // unreadable. Selection is shown by the text color change alone,
-        // like the pre-raygui menu did.
         if (i == game.menuIndex)
         {
             color = choice.type == ChoiceType::Evolve ? Palette::Crit : Palette::Accent;
@@ -589,9 +547,6 @@ void drawLevelUp(const Game& game)
     }
 }
 
-// drawMenu renders an optional heading followed by a vertical column of
-// raygui buttons in real window space, highlighting the currently selected
-// one (see menu.hpp's updateMenuSelectionWindow for how that's chosen).
 void drawMenu(const Game& game, const std::string& heading, const std::vector<std::string>& options,
               int32_t y)
 {
@@ -686,7 +641,7 @@ void drawGameplayWorld(const Game& game)
 
     for (const auto& p : game.pickups)
     {
-        // Blink as an expiry warning in the last few seconds of its lifetime.
+
         const float alpha =
             p.lifetime <= UpdateConstants::pickupExpiryWarning
                 ? 0.35F + 0.65F * (0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 12.0F))
@@ -840,9 +795,7 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
         DrawCircleLines(static_cast<int32_t>(enemy.position.x),
                         static_cast<int32_t>(enemy.position.y), kind.radius + 4, Palette::Crit);
     }
-    // Warlord's buff is screen-wide (see updateEnemies), so every active
-    // enemy gets this little upward chevron overhead while any Warlord
-    // hazard is alive - the visible tell that they're currently sped up.
+
     if (buffed)
     {
         const Vector2 tip{.x = enemy.position.x, .y = enemy.position.y - kind.radius - 14};
@@ -851,16 +804,11 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
         DrawTriangle(left, tip, right, Palette::Accent);
     }
 
-    // Charge pattern telegraphs a blinking linear indicator along its locked
-    // dash direction before it actually moves - a real read-and-dodge
-    // window instead of the dash just appearing already in motion.
     if (kind.pattern == EnemyPattern::Charge && enemy.telegraphing)
     {
         const Vector2 dir = Vector2Normalize(enemy.velocity);
         const float blink = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 14.0F);
-        // Matches the actual distance the dash will travel (velocity * frameScale
-        // integrated over enemyChargeDashDuration - see updateEnemies) so the
-        // telegraph doesn't promise a longer dash than the enemy actually does.
+
         const float dashDistance = Vector2Length(enemy.velocity) * UpdateConstants::frameScale *
                                    UpdateConstants::enemyChargeDashDuration;
         const Vector2 lineEnd = Vector2Add(enemy.position, Vector2Scale(dir, dashDistance));
@@ -890,9 +838,6 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     }
 }
 
-// drawEliteHazard renders a Warlord (red aura ring, buffs enemies) or
-// Suppressor (blue aura ring, debuffs the player) as a spiked hex-ish core
-// with its aura radius shown faintly so the danger zone reads at a glance.
 void drawEliteHazard(const EliteHazard& hazard)
 {
     const Color auraColor =
@@ -946,10 +891,6 @@ void drawBoss(const Game& game, const Boss& boss)
             std::clamp(1 - boss.stateTimer / bossWindupDuration(boss.attack), 0.0F, 1.0F);
         drawChargeParticles(bossCenter, progress, boss.color, 100, 65);
 
-        // Beam/WormholeBeam telegraph a slow-blinking ring on the player
-        // instead of an aim-preview line - you know a beam is coming and
-        // roughly when, not its exact line, so shield-and-move is a real
-        // read rather than a free sidestep.
         if (boss.attack == BossAttack::Beam || boss.attack == BossAttack::WormholeBeam)
         {
             const float blink = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 10.0F);
@@ -1028,8 +969,6 @@ void drawBoss(const Game& game, const Boss& boss)
         const Vector2 beamOrigin{.x = 0, .y = beamRec.height / 2};
         DrawRectanglePro(beamRec, beamOrigin, rotation, Fade(Palette::Shield, 0.7F));
 
-        // Portal markers at both ends so it reads as "coming through" rather
-        // than appearing from nowhere.
         DrawCircleV(bossCenter, 14, Fade(Palette::Shield, 0.6F));
         DrawCircleV(boss.wormholeBeamOrigin, 18, Fade(Palette::Shield, 0.5F));
         DrawCircleLinesV(boss.wormholeBeamOrigin, 18, Palette::Haze);
@@ -1077,10 +1016,6 @@ void drawBoss(const Game& game, const Boss& boss)
     }
 }
 
-// drawOrbitBlades draws decorative reach indicators for the AoE/beam weapons
-// - Orbit Blades as rotating dots, Shockwave/Mine Layer as a faint radius
-// ring, Beam Sweep as a faint line toward the cursor - all purely visual,
-// the actual damage is the periodic pulse in updateWeapons.
 void drawOrbitBlades(const Game& game)
 {
     for (const auto& w : game.weapons)
@@ -1115,9 +1050,7 @@ void drawOrbitBlades(const Game& game)
             const float maxRadius = shockwaveRadius(w.level, w.evolved);
             if (w.flashTimer > 0)
             {
-                // Pulse expands outward and fades as flashTimer counts down from
-                // shockFlashDuration, so it reads as a wave moving with the player
-                // rather than a static ring.
+
                 const float progress = 1 - w.flashTimer / UpdateConstants::shockFlashDuration;
                 const float pulseRadius = maxRadius * progress;
                 DrawCircleLines(static_cast<int32_t>(game.player.position.x),
@@ -1147,9 +1080,6 @@ void drawOrbitBlades(const Game& game)
     }
 }
 
-// drawShieldIndicator shows shield readiness when the shield isn't currently
-// up: an arc filling in as the cooldown counts down, or a steady ring once
-// ready.
 void drawShieldIndicator(const Player& player)
 {
     const float ringRadius = player.radius + 10;
@@ -1173,8 +1103,6 @@ void drawShieldIndicator(const Player& player)
     }
 }
 
-// drawChargeParticles draws small motes spiraling inward toward center, closing
-// in as fraction approaches 1 (fully charged) to read as energy being gathered.
 void drawChargeParticles(Vector2 center, float fraction, Color color, float maxRadius,
                          float minRadius)
 {
@@ -1192,8 +1120,6 @@ void drawChargeParticles(Vector2 center, float fraction, Color color, float maxR
     }
 }
 
-// drawComet renders a homing projectile as a bright head with a fading tail
-// streaming back opposite its direction of travel.
 void drawComet(const BossProjectile& projectile)
 {
     const float speed = Vector2Length(projectile.velocity);
@@ -1218,9 +1144,6 @@ void drawComet(const BossProjectile& projectile)
     DrawCircleV(projectile.position, projectile.radius * 0.6F, Palette::BossHoming);
 }
 
-// drawWormholeMouth renders one portal mouth as a spinning ring with a
-// directional chevron pointing along its facing, so which way things exit
-// (or should enter) reads at a glance.
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius)
 {
     DrawCircleV(position, radius, Fade(Palette::Shield, 0.25F));
@@ -1252,13 +1175,8 @@ void drawHUD(const Game& game)
     DrawRectangle(10, 64, static_cast<int32_t>(300 * xpFrac), 10, Palette::Charge);
     DrawRectangleLines(10, 64, 300, 10, Palette::StructDark);
 
-    // Nerve directly under XP; damage counter beside it. Everything below
-    // this row stacks dynamically off the damage meter's actual height (it
-    // grows with the number of active damage sources this frame) so a busy
-    // meter pushes the charge pips/debuff line down instead of overlapping
-    // them - fixed gaps only work for the meter's minimum size.
-    constexpr int32_t nerveBarHeight = 18; // bar + a little breathing room
-    constexpr int32_t damageMeterX = 210;  // clears the "Nerve" label beside the bar
+    constexpr int32_t nerveBarHeight = 18;
+    constexpr int32_t damageMeterX = 210;
     drawNerveBar(game, 10, 82);
     const int32_t meterHeight = drawDamageMeter(game, damageMeterX, 82);
 
@@ -1267,7 +1185,6 @@ void drawHUD(const Game& game)
     y += 24;
     drawDebuffIndicator(game, 10, y);
 
-    // Skills live in their own corner, away from the health/nerve cluster.
     constexpr int32_t abilitySlotCount = ItemConstants::maxAbilitySlots;
     constexpr int32_t abilityBoxSize = 28;
     constexpr int32_t abilityGap = 34;
@@ -1283,10 +1200,6 @@ void drawHUD(const Game& game)
     }
 }
 
-// drawDownwardTriangleIcon is the shared pip shape for both health and
-// shield-stack: points downward - apex at the bottom, base along the top -
-// filled when active, outlined when empty. Shared so the two rows read as
-// one consistent icon language rather than two different shapes.
 void drawDownwardTriangleIcon(float cx, int32_t y, float size, Color fillColor, bool filled)
 {
     const Vector2 bottom{.x = cx, .y = static_cast<float>(y) + size * 2};
@@ -1303,10 +1216,6 @@ void drawDownwardTriangleIcon(float cx, int32_t y, float size, Color fillColor, 
     }
 }
 
-// drawHealthPips shows health as a row of downward-pointing "lives" (full
-// maxHealth count) instead of a number - filled/accent for current health,
-// outlined and dim for missing ones. A collected-but-not-yet-converted life
-// orb shows as a faint half-filled icon in the next empty slot.
 void drawHealthPips(const Game& game, int32_t x, int32_t y)
 {
     constexpr float size = 11;
@@ -1331,9 +1240,6 @@ void drawHealthPips(const Game& game, int32_t x, int32_t y)
     }
 }
 
-// healthPipsWidth is how far drawHealthPips' row extends from its own x, so
-// callers (drawShieldStackPips, positioned beside it) can start right after
-// it regardless of the player's current maxHealth.
 auto healthPipsWidth(const Game& game) -> int32_t
 {
     constexpr float size = 11;
@@ -1342,8 +1248,6 @@ auto healthPipsWidth(const Game& game) -> int32_t
                                 size * 0.8F);
 }
 
-// drawShieldStackPips shows the rare-drop damage shields (0-3), same
-// downward-triangle shape as health, shown beside it in the HUD.
 void drawShieldStackPips(const Game& game, int32_t x, int32_t y)
 {
     constexpr float size = 11;
@@ -1358,9 +1262,6 @@ void drawShieldStackPips(const Game& game, int32_t x, int32_t y)
     }
 }
 
-// drawNerveBar shows the aggression meter that grants bonus damage/speed the
-// longer you kill without getting hit - fills toward Crit as it climbs, so
-// the "hesitation is defeat" payoff reads as an escalating hot streak.
 void drawNerveBar(const Game& game, int32_t x, int32_t y)
 {
     constexpr int32_t width = 120;
@@ -1374,14 +1275,6 @@ void drawNerveBar(const Game& game, int32_t x, int32_t y)
     drawText(game, "Nerve", x + width + 8, y - 6, 16, Palette::StructMid);
 }
 
-// drawDamageMeter shows the held/decayed reading from damageMeterDisplay
-// (see updateGameplay - a hit refreshes it and holds briefly, so it's
-// actually readable instead of flickering blank between frames) next to the
-// Nerve bar, broken down by source, so the nerve bonus to weaponDamage is
-// directly visible as the total climbing while Nerve is high. Its height
-// grows with the number of active sources this frame - returns that height
-// so the caller (drawHUD) can push whatever comes next down to make room,
-// instead of a fixed gap that overlaps once enough sources are active.
 auto drawDamageMeter(const Game& game, int32_t x, int32_t y) -> int32_t
 {
     const auto& meter = game.damageMeterDisplay;
@@ -1405,8 +1298,6 @@ auto drawDamageMeter(const Game& game, int32_t x, int32_t y) -> int32_t
     return lineY - y;
 }
 
-// drawChargePips shows the shared dash/shield charge pool as two pips: full
-// bright when available, or a fill-arc showing regen progress when spent.
 void drawChargePips(const Game& game, int32_t x, int32_t y)
 {
     constexpr float pipRadius = 9;
@@ -1440,10 +1331,6 @@ void drawChargePips(const Game& game, int32_t x, int32_t y)
     }
 }
 
-// drawDebuffIndicator shows what's currently being applied to the player by
-// an active Suppressor elite hazard (see weaponCooldown/suppressorCooldownPenalty
-// in update.cpp) - screen-wide and for as long as any Suppressor is alive, so
-// this is the only on-screen tell of it besides the hazard's own aura ring.
 void drawDebuffIndicator(const Game& game, int32_t x, int32_t y)
 {
     const bool suppressed = std::any_of(
@@ -1460,8 +1347,6 @@ void drawDebuffIndicator(const Game& game, int32_t x, int32_t y)
     drawText(game, "SUPPRESSED: weapon cooldowns +40%", x + 20, y, 16, Palette::Shield);
 }
 
-// drawSandboxHUD shows the sandbox-only hotkey reference and currently
-// selected enemy kind/wave/boss attack.
 void drawSandboxHUD(const Game& game)
 {
     const std::string kindName(enemyKinds.at(static_cast<size_t>(game.sandboxKindIndex)).name);
@@ -1485,7 +1370,7 @@ void drawSandboxHUD(const Game& game)
     }
 }
 
-} // namespace
+}
 
 auto drawGame(Game& game) -> void
 {
@@ -1552,17 +1437,6 @@ auto drawGame(Game& game) -> void
         }
     }
 
-    // pixelTarget (world only now, no UI baked in) stays point-filtered, so
-    // this blit keeps the chunky pixel-art world crisp-edged at any window
-    // size. UI/text is drawn next, directly to the window through a camera
-    // that maps the same logical screenWidth/screenHeight coordinates onto
-    // the letterboxed area - it never passes through a low-res intermediate
-    // texture, so it stays sharp independent of the world's chunkiness. This
-    // is what "text drawn separately, straight onto native resolution"
-    // originally meant - baking it into pixelTarget alongside the world
-    // still put it through this same final letterbox scale, which either
-    // jagged the text (point filter) or blurred the pixel-art (bilinear
-    // filter); only fully separating the two draw passes satisfies both.
     const auto srcRec = Rectangle{.x = 0,
                                   .y = 0,
                                   .width = static_cast<float>(game.pixelTarget.texture.width),
@@ -1576,13 +1450,6 @@ auto drawGame(Game& game) -> void
                          .rotation = 0,
                          .zoom = uiScale});
 
-    // Only the gameplay HUD (health/nerve/damage meter/ability slots/
-    // sandbox debug text) draws here, through the same logical-canvas ->
-    // letterbox camera as the pixel-art world, so it scales in lockstep
-    // with it. The raygui-driven menu screens draw next, after EndMode2D,
-    // directly in real window space (see menu.hpp's menuColumnRect) so
-    // raygui's own mouse hit-testing (GetMousePosition(), always in window
-    // space) lines up with what's drawn at any window size.
     switch (game.state)
     {
     case GameState::GAMEPLAY:
