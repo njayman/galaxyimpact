@@ -64,6 +64,7 @@ class Boss
     bool hitByDash;
     bool isMega;
     bool isSwarm;
+    float strafePhase;
 };
 
 struct BossType

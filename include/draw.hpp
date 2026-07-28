@@ -25,7 +25,9 @@ constexpr int32_t settingsGap = 10;
 constexpr int32_t settingsMenuY = 260;
 }
 
+void drawText(const Font& font, const char* text, int32_t x, int32_t y, int32_t size, Color color);
 void drawText(const Game& game, const char* text, int32_t x, int32_t y, int32_t size, Color color);
+auto measureText(const Font& font, const char* text, int32_t size) -> int32_t;
 auto measureText(const Game& game, const char* text, int32_t size) -> int32_t;
 
 auto letterBoxRect(const Game& game) -> Rectangle;

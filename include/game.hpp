@@ -22,7 +22,7 @@ const float arenaHalf = 20000;
 const float waveDuration = 25;
 const std::string highScoreFile = "highscore.txt";
 
-constexpr int pixelScale = 3;
+constexpr int pixelScale = 1;
 
 constexpr int defaultWindowWidth = 1920;
 constexpr int defaultWindowHeight = 1080;

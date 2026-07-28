@@ -41,19 +41,9 @@ target_include_directories(GalaxyImpact PRIVATE include "${raygui_SOURCE_DIR}/sr
 
 target_link_libraries(GalaxyImpact PRIVATE raylib)
 
-target_compile_options(GalaxyImpact PRIVATE -Wall -Wextra)
+target_compile_options(GalaxyImpact PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 
 if (EMSCRIPTEN)
-    # -sASYNCIFY: lets platformInitSaveData/platformSyncSaveData (src/platform.cpp)
-    #   block with emscripten_sleep() until the async IndexedDB round-trip
-    #   finishes, instead of needing every caller restructured into callbacks.
-    # -sFORCE_FILESYSTEM: keeps IDBFS's FS.* JS API linked in even though no
-    #   C++ code calls a filesystem function Emscripten can statically see
-    #   (the save/load path goes through EM_ASM's inline JS instead).
-    # No --preload-file: the game has no asset files to bundle (the font
-    # falls back to raylib's built-in default when no system font is found,
-    # and all audio is synthesized in sound.cpp, not loaded from disk) - add
-    # one here if that changes.
     set_target_properties(GalaxyImpact PROPERTIES SUFFIX ".html")
     target_link_options(GalaxyImpact PRIVATE
         -sUSE_GLFW=3
@@ -62,15 +52,18 @@ if (EMSCRIPTEN)
         -sALLOW_MEMORY_GROWTH=1
         -lidbfs.js
         --shell-file "${CMAKE_SOURCE_DIR}/web/shell.html"
+        --preload-file "${CMAKE_SOURCE_DIR}/assets@assets"
     )
 
-    # index.html: the landing/store page a browser hits first (see
-    # web/landing.html) - its "Play" button links to GalaxyImpact.html, and
-    # platformExitToLanding() (src/platform.cpp) navigates back to it when the
-    # player exits from the title screen.
     add_custom_command(TARGET GalaxyImpact POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
             "${CMAKE_SOURCE_DIR}/web/landing.html"
             "$<TARGET_FILE_DIR:GalaxyImpact>/index.html"
+    )
+else()
+    add_custom_command(TARGET GalaxyImpact POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:GalaxyImpact>/assets"
     )
 endif()

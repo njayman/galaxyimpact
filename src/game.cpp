@@ -45,26 +45,18 @@ auto generateBoundaryClouds() -> std::vector<GasCloud>
     return clouds;
 }
 
-auto loadReadableFont() -> Font
+auto loadGameFont() -> Font
 {
-    const std::array<const char*, 5> candidates{
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
-        "/Library/Fonts/Arial Bold.ttf",
-        R"(C:\Windows\Fonts\arialbd.ttf)",
-    };
+    const std::string path =
+        std::string(GetApplicationDirectory()) + "assets/fonts/HeavyDataNerdFont-Regular.ttf";
 
-    for (const auto* path : candidates)
+    if (std::filesystem::exists(path))
     {
-        if (std::filesystem::exists(path))
+        const Font font = LoadFontEx(path.c_str(), 96, nullptr, 0);
+        if (font.texture.id != 0)
         {
-            const Font font = LoadFontEx(path, 96, nullptr, 0);
-            if (font.texture.id != 0)
-            {
-                SetTextureFilter(font.texture, TEXTURE_FILTER_BILINEAR);
-                return font;
-            }
+            SetTextureFilter(font.texture, TEXTURE_FILTER_BILINEAR);
+            return font;
         }
     }
 
@@ -122,17 +114,21 @@ auto InitGame() -> Game
     game.highScores = game.highScoreRepo->load();
 
     game.sounds = LoadSounds();
-    game.font = loadReadableFont();
+    game.font = loadGameFont();
 
     game.settings = loadSettings();
 
     game.bgm = loadBGM();
-    PlayMusicStream(game.bgm.drone);
+    PlayMusicStream(game.bgm.base);
     PlayMusicStream(game.bgm.intensity);
-    PlayMusicStream(game.bgm.upgrade);
-    SetMusicVolume(game.bgm.drone, SoundConstants::droneVolume);
+    PlayMusicStream(game.bgm.miniboss);
+    PlayMusicStream(game.bgm.megaboss);
+    PlayMusicStream(game.bgm.swarmBoss);
+    SetMusicVolume(game.bgm.base, SoundConstants::baseVolume);
     SetMusicVolume(game.bgm.intensity, 0);
-    SetMusicVolume(game.bgm.upgrade, 0);
+    SetMusicVolume(game.bgm.miniboss, 0);
+    SetMusicVolume(game.bgm.megaboss, 0);
+    SetMusicVolume(game.bgm.swarmBoss, 0);
 
     game.worldTarget = LoadRenderTexture(game.screenWidth / GameConstants::pixelScale,
                                          game.screenHeight / GameConstants::pixelScale);

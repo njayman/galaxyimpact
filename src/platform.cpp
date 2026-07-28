@@ -20,14 +20,14 @@ void platformInitSaveData()
 {
     idbfsSyncPending = true;
 
-    EM_ASM(
-        FS.mkdir('/save');
-        FS.mount(IDBFS, {}, '/save');
-        FS.syncfs(true, function (err) {
-            if (err) { console.error('Galaxy Impact: IDBFS load failed', err); }
+    EM_ASM(FS.mkdir('/save'); FS.mount(IDBFS, {}, '/save'); FS.syncfs(
+        true, function(err) {
+            if (err)
+            {
+                console.error('Galaxy Impact: IDBFS load failed', err);
+            }
             _onIdbfsSynced();
-        });
-    );
+        }););
 
     while (idbfsSyncPending)
     {
@@ -39,12 +39,14 @@ void platformSyncSaveData()
 {
     idbfsSyncPending = true;
 
-    EM_ASM(
-        FS.syncfs(false, function (err) {
-            if (err) { console.error('Galaxy Impact: IDBFS save failed', err); }
+    EM_ASM(FS.syncfs(
+        false, function(err) {
+            if (err)
+            {
+                console.error('Galaxy Impact: IDBFS save failed', err);
+            }
             _onIdbfsSynced();
-        });
-    );
+        }););
 
     while (idbfsSyncPending)
     {

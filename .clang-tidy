@@ -4,10 +4,25 @@ Checks: >
   readability-*,
   modernize-*,
   cppcoreguidelines-*,
-  clang-analyzer-*
+  clang-analyzer-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-unchecked-optional-access,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -readability-function-cognitive-complexity,
+  -readability-magic-numbers
 
 WarningsAsErrors: ''
 
-HeaderFilterRegex: '.*'
+HeaderFilterRegex: '^(include|src)/.*'
 
 FormatStyle: file
+
+CheckOptions:
+  - key: readability-identifier-length.MinimumVariableNameLength
+    value: '1'
+  - key: readability-identifier-length.MinimumParameterNameLength
+    value: '1'
+  - key: readability-identifier-length.MinimumLoopCounterNameLength
+    value: '1'

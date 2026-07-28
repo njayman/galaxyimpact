@@ -54,5 +54,4 @@ class Mine
     int damage;
     bool active;
     bool evolved;
-
 };

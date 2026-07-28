@@ -60,9 +60,11 @@ auto main(int argc, char* argv[]) -> int
 
     platformExitToLanding();
 
-    UnloadMusicStream(game.bgm.drone);
+    UnloadMusicStream(game.bgm.base);
     UnloadMusicStream(game.bgm.intensity);
-    UnloadMusicStream(game.bgm.upgrade);
+    UnloadMusicStream(game.bgm.miniboss);
+    UnloadMusicStream(game.bgm.megaboss);
+    UnloadMusicStream(game.bgm.swarmBoss);
     UnloadRenderTexture(game.pixelTarget);
     UnloadRenderTexture(game.worldTarget);
     UnloadFont(game.font);

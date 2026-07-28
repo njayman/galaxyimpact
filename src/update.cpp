@@ -48,11 +48,13 @@ constexpr float shieldBaseDuration = 1.2F;
 constexpr float entityDespawnRadius = 1400;
 constexpr float asteroidDespawnRadius = 900;
 constexpr float turretFireRange = 700;
-constexpr int32_t crossfireProjectileDamage = 15;
+auto crossfireProjectileDamage(const Game& game) -> int32_t
+{
+    return game.settings.difficulty == Difficulty::Hard ? 5 : 3;
+}
 constexpr int32_t shieldDropChance = 15;
 constexpr int32_t lifeOrbDropChance = 40;
-constexpr int32_t settingsRowCount =
-    7;
+constexpr int32_t settingsRowCount = 7;
 constexpr float nerveKillGain = 6;
 constexpr float nerveDecayPerSec = 4;
 constexpr float nerveDamageBonusMax = 0.5F;
@@ -555,15 +557,19 @@ void applyBGMState(Game& game)
 {
     if (game.settings.bgmOn)
     {
-        ResumeMusicStream(game.bgm.drone);
+        ResumeMusicStream(game.bgm.base);
         ResumeMusicStream(game.bgm.intensity);
-        ResumeMusicStream(game.bgm.upgrade);
+        ResumeMusicStream(game.bgm.miniboss);
+        ResumeMusicStream(game.bgm.megaboss);
+        ResumeMusicStream(game.bgm.swarmBoss);
     }
     else
     {
-        PauseMusicStream(game.bgm.drone);
+        PauseMusicStream(game.bgm.base);
         PauseMusicStream(game.bgm.intensity);
-        PauseMusicStream(game.bgm.upgrade);
+        PauseMusicStream(game.bgm.miniboss);
+        PauseMusicStream(game.bgm.megaboss);
+        PauseMusicStream(game.bgm.swarmBoss);
     }
 }
 
@@ -592,17 +598,43 @@ void updateBgmLayers(Game& game, float deltaTime)
         }
     }
 
-    const bool hasWeaponUpgrade =
-        game.weapons.size() > 1 ||
-        std::ranges::any_of(game.weapons, [](const Weapon& w) { return w.level > 1; });
-    const float upgradeTarget = hasWeaponUpgrade ? 1.0F : 0.0F;
+    constexpr float minibossFullVolume = 0.6F;
+    constexpr float megabossFullVolume = 0.8F;
+    constexpr float swarmBossFullVolume = 1.0F;
+
+    bool minibossActive = false;
+    bool megabossActive = false;
+    bool swarmBossActive = false;
+    for (const auto& boss : game.bosses)
+    {
+        if (boss.isSwarm)
+        {
+            swarmBossActive = true;
+        }
+        else if (boss.isMega)
+        {
+            megabossActive = true;
+        }
+        else
+        {
+            minibossActive = true;
+        }
+    }
+    const float swarmBossTarget = swarmBossActive ? swarmBossFullVolume : 0.0F;
+    const float megabossTarget = (megabossActive && !swarmBossActive) ? megabossFullVolume : 0.0F;
+    const float minibossTarget =
+        (minibossActive && !swarmBossActive && !megabossActive) ? minibossFullVolume : 0.0F;
 
     const float rate = 1 - std::exp(-volumeSmoothing * deltaTime);
     game.bgm.intensityVolume += (intensityTarget - game.bgm.intensityVolume) * rate;
-    game.bgm.upgradeVolume += (upgradeTarget - game.bgm.upgradeVolume) * rate;
+    game.bgm.minibossVolume += (minibossTarget - game.bgm.minibossVolume) * rate;
+    game.bgm.megabossVolume += (megabossTarget - game.bgm.megabossVolume) * rate;
+    game.bgm.swarmBossVolume += (swarmBossTarget - game.bgm.swarmBossVolume) * rate;
 
     SetMusicVolume(game.bgm.intensity, game.bgm.intensityVolume);
-    SetMusicVolume(game.bgm.upgrade, game.bgm.upgradeVolume);
+    SetMusicVolume(game.bgm.miniboss, game.bgm.minibossVolume);
+    SetMusicVolume(game.bgm.megaboss, game.bgm.megabossVolume);
+    SetMusicVolume(game.bgm.swarmBoss, game.bgm.swarmBossVolume);
 }
 
 auto nerveFrac(const Game& game) -> float { return game.player.nerve / UpdateConstants::nerveMax; }
@@ -781,7 +813,7 @@ void updateGameplay(Game& game, float deltaTime)
         anyBossKilledThisFrame = true;
 
         game.xp += static_cast<int>(static_cast<float>(game.xpToNext) *
-                                     (boss.isMega ? megaBossXpMult : miniBossXpMult));
+                                    (boss.isMega ? megaBossXpMult : miniBossXpMult));
         if (boss.isSwarm)
         {
             spawnPickup(game, bossCenter, 0, PickupType::Shield);
@@ -1872,7 +1904,7 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
     const Vector2 spawnPos = Vector2Add(
         game.player.position, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
 
-    size_t typeIndex =
+    auto typeIndex =
         static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(bossTypes.size()) - 1));
     if constexpr (DemoConfig::isDemoBuild)
     {
@@ -1909,7 +1941,8 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
                                .barrageTimer = 0,
                                .hitByDash = false,
                                .isMega = isMega,
-                               .isSwarm = isSwarm});
+                               .isSwarm = isSwarm,
+                               .strafePhase = static_cast<float>(GetRandomValue(0, 628)) / 100.0F});
 }
 
 void spawnBossWave(Game& game, float healthMult, float sizeMult, bool isMega)
@@ -1939,12 +1972,38 @@ void spawnSwarmBoss(Game& game)
 
 void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 {
-    const Vector2 toPlayer = Vector2Subtract(game.player.position, bossCenter);
-    if (const float dist = Vector2Length(toPlayer); dist > bossEngageDistance)
+    if (boss.state == BossState::SHOOTING &&
+        (boss.attack == BossAttack::ChargeDash || boss.attack == BossAttack::Slam ||
+         boss.attack == BossAttack::WormholeBeam))
     {
-        const float chaseSpeed = game.player.speed * 1.15F + 1;
-        const Vector2 drift = Vector2Scale(Vector2Normalize(toPlayer), chaseSpeed);
-        boss.position = Vector2Add(boss.position, Vector2Scale(drift, deltaTime * frameScale));
+        return;
+    }
+
+    const Vector2 toPlayer = Vector2Subtract(game.player.position, bossCenter);
+    const float dist = Vector2Length(toPlayer);
+    if (dist <= 1.0F)
+    {
+        return;
+    }
+
+    const Vector2 dirToPlayer = Vector2Scale(toPlayer, 1.0F / dist);
+    const Vector2 perp{.x = -dirToPlayer.y, .y = dirToPlayer.x};
+
+    const bool enraged =
+        boss.health > 0 &&
+        static_cast<float>(boss.health) <= static_cast<float>(boss.maxHealth) * enrageHealthFrac;
+    const float speedMult = enraged ? 1.6F : 1.0F;
+
+    const float radialAmount =
+        std::clamp((dist - bossEngageDistance) / bossEngageDistance, -1.5F, 1.5F);
+    const float strafe = std::sin(static_cast<float>(GetTime()) * 0.9F + boss.strafePhase);
+
+    Vector2 move = Vector2Add(Vector2Scale(dirToPlayer, radialAmount), Vector2Scale(perp, strafe));
+    if (Vector2Length(move) > 0)
+    {
+        const float chaseSpeed = (game.player.speed * 1.15F + 1) * speedMult;
+        move = Vector2Scale(Vector2Normalize(move), chaseSpeed);
+        boss.position = Vector2Add(boss.position, Vector2Scale(move, deltaTime * frameScale));
     }
 }
 
@@ -2272,7 +2331,6 @@ void updateBullets(Game& game, float deltaTime)
                 bullet.active = false;
                 boss.health -= bullet.damage;
                 recordDamage(game, DamageSource::Forward, bullet.damage);
-
             }
         }
 
@@ -2576,9 +2634,31 @@ void updateEnemies(Game& game, float deltaTime)
                                                 .y = std::sin(enemy.orbitAngle) * enemy.orbitDist});
             break;
         case EnemyPattern::Turret:
+        {
+            const Vector2 toPlayer = Vector2Subtract(game.player.position, enemy.position);
+            const float playerDist = Vector2Length(toPlayer);
+            constexpr float kiteDistance = turretFireRange * 0.55F;
+            if (playerDist > 1.0F)
+            {
+                const Vector2 dirToPlayer = Vector2Scale(toPlayer, 1.0F / playerDist);
+                const Vector2 perp{.x = -dirToPlayer.y, .y = dirToPlayer.x};
+                const float strafe =
+                    std::sin(static_cast<float>(GetTime()) * 0.8F + static_cast<float>(i)) * 0.6F;
+                const float radial = playerDist < kiteDistance
+                                         ? -1.0F
+                                         : (playerDist > turretFireRange ? 1.0F : 0.0F);
+                Vector2 move =
+                    Vector2Add(Vector2Scale(dirToPlayer, radial), Vector2Scale(perp, strafe));
+                if (Vector2Length(move) > 0)
+                {
+                    move = Vector2Scale(Vector2Normalize(move), kind.speed * speedMod);
+                    enemy.position =
+                        Vector2Add(enemy.position, Vector2Scale(move, deltaTime * frameScale));
+                }
+            }
+
             enemy.stateTimer -= deltaTime;
-            if (enemy.stateTimer <= 0 &&
-                Vector2Distance(game.player.position, enemy.position) < turretFireRange)
+            if (enemy.stateTimer <= 0 && playerDist < turretFireRange)
             {
                 enemy.stateTimer = kind.fireInterval / speedMod;
                 const Vector2 dir =
@@ -2595,10 +2675,11 @@ void updateEnemies(Game& game, float deltaTime)
                                    .homing = false,
                                    .active = true,
                                    .fromPlayer = false,
-                                   .damage = crossfireProjectileDamage,
+                                   .damage = crossfireProjectileDamage(game),
                                    .health = turretProjectileHealth});
             }
             break;
+        }
         case EnemyPattern::Spawner:
             enemy.stateTimer -= deltaTime;
             if (enemy.stateTimer <= 0)
@@ -3199,7 +3280,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                                        .homing = false,
                                        .active = true,
                                        .fromPlayer = false,
-                                       .damage = crossfireProjectileDamage,
+                                       .damage = crossfireProjectileDamage(game),
                                        .health = roundProjectileHealth});
                 }
             }
@@ -3243,7 +3324,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                                    .homing = false,
                                    .active = true,
                                    .fromPlayer = false,
-                                   .damage = crossfireProjectileDamage,
+                                   .damage = crossfireProjectileDamage(game),
                                    .health = 1});
                 playSFX(game, game.sounds.spreadBurst);
             }
@@ -3264,7 +3345,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                                    .homing = true,
                                    .active = true,
                                    .fromPlayer = false,
-                                   .damage = crossfireProjectileDamage,
+                                   .damage = crossfireProjectileDamage(game),
                                    .health = 1});
                 playSFX(game, game.sounds.spreadBurst);
             }
@@ -3553,9 +3634,11 @@ auto UpdateGame(Game& game, float deltaTime) -> bool
     updateBgParticles(game);
     updateDeathParticles(game, deltaTime);
     updateBgmLayers(game, deltaTime);
-    UpdateMusicStream(game.bgm.drone);
+    UpdateMusicStream(game.bgm.base);
     UpdateMusicStream(game.bgm.intensity);
-    UpdateMusicStream(game.bgm.upgrade);
+    UpdateMusicStream(game.bgm.miniboss);
+    UpdateMusicStream(game.bgm.megaboss);
+    UpdateMusicStream(game.bgm.swarmBoss);
 
     if (game.shakeTimer > 0)
     {

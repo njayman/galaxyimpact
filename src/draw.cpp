@@ -23,15 +23,25 @@
 #include <string>
 #include <vector>
 
+void drawText(const Font& font, const char* text, int32_t x, int32_t y, int32_t size, Color color)
+{
+    DrawTextEx(font, text, Vector2{.x = static_cast<float>(x), .y = static_cast<float>(y)},
+               static_cast<float>(size), 1, color);
+}
+
 void drawText(const Game& game, const char* text, int32_t x, int32_t y, int32_t size, Color color)
 {
-    DrawTextEx(game.font, text, Vector2{.x = static_cast<float>(x), .y = static_cast<float>(y)},
-               static_cast<float>(size), 1, color);
+    drawText(game.font, text, x, y, size, color);
+}
+
+auto measureText(const Font& font, const char* text, int32_t size) -> int32_t
+{
+    return static_cast<int32_t>(MeasureTextEx(font, text, static_cast<float>(size), 1).x);
 }
 
 auto measureText(const Game& game, const char* text, int32_t size) -> int32_t
 {
-    return static_cast<int32_t>(MeasureTextEx(game.font, text, static_cast<float>(size), 1).x);
+    return measureText(game.font, text, size);
 }
 
 auto letterBoxRect(const Game& game) -> Rectangle
@@ -156,14 +166,20 @@ void drawBackgroundStars(const Game& game, Vector2 relativeTo)
     }
 }
 
-void windowText(const Game& game, const char* text, int32_t centerX, int32_t y, int32_t size,
-                Color color)
+void windowText(const Font& font, const Game& game, const char* text, int32_t centerX, int32_t y,
+                int32_t size, Color color)
 {
     const float scale = guiUiScale(game);
     const auto scaledSize = static_cast<int32_t>(static_cast<float>(size) * scale);
-    const int32_t width = measureText(game, text, scaledSize);
-    drawText(game, text, centerX - width / 2, static_cast<int32_t>(static_cast<float>(y) * scale),
+    const int32_t width = measureText(font, text, scaledSize);
+    drawText(font, text, centerX - width / 2, static_cast<int32_t>(static_cast<float>(y) * scale),
              scaledSize, color);
+}
+
+void windowText(const Game& game, const char* text, int32_t centerX, int32_t y, int32_t size,
+                Color color)
+{
+    windowText(game.font, game, text, centerX, y, size, color);
 }
 
 void drawTitle(const Game& game)
@@ -441,7 +457,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
         const int32_t boxWidth = std::max(measureText(game, name.c_str(), nameFontSize),
                                           measureText(game, desc.c_str(), descFontSize)) +
                                  16;
-        int32_t tipX = static_cast<int32_t>(hoveredBoxPos.x);
+        auto tipX = static_cast<int32_t>(hoveredBoxPos.x);
         if (tipX + boxWidth > game.screenWidth)
         {
             tipX = game.screenWidth - boxWidth;
@@ -813,6 +829,13 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
                                    UpdateConstants::enemyChargeDashDuration;
         const Vector2 lineEnd = Vector2Add(enemy.position, Vector2Scale(dir, dashDistance));
         DrawLineEx(enemy.position, lineEnd, 3, Fade(Palette::Crit, blink));
+    }
+
+    if (kind.pattern == EnemyPattern::Turret &&
+        Vector2Distance(enemy.position, game.player.position) < 700.0F)
+    {
+        float blink = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 12.0F);
+        DrawLineEx(enemy.position, game.player.position, 2, Fade(Palette::Crit, blink * 0.5F));
     }
 
     DrawCircleV(enemy.position, kind.radius, color);
