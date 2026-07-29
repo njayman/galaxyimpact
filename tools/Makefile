@@ -6,5 +6,8 @@ LDLIBS = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
 bgm_prototype: bgm_prototype.cpp
 	$(CXX) $(CXXFLAGS) $< -o $@ -I $(RAYLIB_DIR) -L $(RAYLIB_LIB) $(LDLIBS)
 
+synth: synth.cpp
+	$(CXX) $(CXXFLAGS) $< -o $@ -I $(RAYLIB_DIR) -L $(RAYLIB_LIB) $(LDLIBS)
+
 clean:
-	rm -f bgm_prototype
+	rm -f bgm_prototype synth

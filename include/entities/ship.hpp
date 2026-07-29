@@ -39,12 +39,16 @@ struct ShipDef
     float dashDistanceMult;
     DashQuirk dashQuirk;
     WeaponType defaultWeapon;
+    float orbitSpinMult;
+    float bulletSpeedMult;
+    float beamLengthMult;
 };
 
 constexpr std::array<ShipDef, static_cast<size_t>(ShipClass::Count)> ships{
     ShipDef{.name = "Bastion",
             .description =
-                "Heavy hull. Shield-dash shoves enemies aside instead of cutting through.",
+                "Heavy hull. Shield-dash shoves enemies aside instead of cutting through. "
+                "Orbit blades spin much faster.",
             .color = Palette::Shield,
             .radius = 18,
             .speed = 4,
@@ -54,9 +58,12 @@ constexpr std::array<ShipDef, static_cast<size_t>(ShipClass::Count)> ships{
             .maxShieldStacks = 4,
             .dashDistanceMult = 0.75F,
             .dashQuirk = DashQuirk::Push,
-            .defaultWeapon = WeaponType::Orbit},
+            .defaultWeapon = WeaponType::Orbit,
+            .orbitSpinMult = 2.2F,
+            .bulletSpeedMult = 1.0F,
+            .beamLengthMult = 1.0F},
     ShipDef{.name = "Ranger",
-            .description = "All-rounder. Dash both pushes and damages.",
+            .description = "All-rounder. Dash both pushes and damages. Faster bullets.",
             .color = Palette::Accent,
             .radius = 15,
             .speed = 5,
@@ -66,10 +73,14 @@ constexpr std::array<ShipDef, static_cast<size_t>(ShipClass::Count)> ships{
             .maxShieldStacks = 3,
             .dashDistanceMult = 1.0F,
             .dashQuirk = DashQuirk::Hybrid,
-            .defaultWeapon = WeaponType::Forward},
+            .defaultWeapon = WeaponType::Forward,
+            .orbitSpinMult = 1.0F,
+            .bulletSpeedMult = 1.4F,
+            .beamLengthMult = 1.0F},
     ShipDef{.name = "Interceptor",
             .description =
-                "Light frame. Dash cuts through everything in its path and reaches further.",
+                "Light frame. Dash cuts through everything in its path and reaches further. "
+                "Longer laser.",
             .color = Palette::Crit,
             .radius = 12,
             .speed = 6.5F,
@@ -79,7 +90,10 @@ constexpr std::array<ShipDef, static_cast<size_t>(ShipClass::Count)> ships{
             .maxShieldStacks = 2,
             .dashDistanceMult = 1.3F,
             .dashQuirk = DashQuirk::Damage,
-            .defaultWeapon = WeaponType::Beam},
+            .defaultWeapon = WeaponType::Beam,
+            .orbitSpinMult = 1.0F,
+            .bulletSpeedMult = 1.0F,
+            .beamLengthMult = 1.5F},
 };
 
 inline auto currentShip(const Game& game) -> const ShipDef&

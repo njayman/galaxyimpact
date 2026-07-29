@@ -5,6 +5,7 @@ A top-down, bullet-heaven space shooter. Survive escalating waves, build out you
 ## Table of contents
 
 - [Controls](#controls)
+- [Ships](#ships)
 - [Player](#player)
 - [Weapons](#weapons)
 - [Skills & leveling up](#skills--leveling-up)
@@ -28,46 +29,79 @@ A top-down, bullet-heaven space shooter. Survive escalating waves, build out you
 | Action | Input |
 |---|---|
 | Move | `W` `A` `S` `D` |
-| Aim (Forward Shot / Beam Sweep) | Mouse position |
+| Aim (Forward Shot / Beam Sweep / Overdrive Burst) | Mouse position |
 | Dash | Left Click |
 | Shield | Right Click |
+| Overdrive Burst | Hold `Space` (once Nerve is full) |
 | Pause | `Esc` |
 | Fullscreen toggle | `F11` |
 | Menu navigate | `W`/`S`/`Up`/`Down`, or mouse hover |
 | Menu confirm | `Enter` / `Space`, or Left Click |
 | Settings adjust | `A`/`D`/`Left`/`Right` |
 
-Movement and aiming are independent — you walk in one direction while your Forward Shot and Beam Sweep both fire toward the mouse cursor. The ship is camera-locked to screen center; the world scrolls under you.
+Movement and aiming are independent — you walk in one direction while your Forward Shot, Beam Sweep, and Overdrive Burst all fire toward the mouse cursor. The ship is camera-locked to screen center; the world scrolls under you.
+
+---
+
+## Ships
+
+Picking "Start" from the title screen (or "New Game" from the pause or game-over menus) opens a ship-select screen before the run begins. Each ship has its own stats, dash behavior, starting weapon, a passive weapon specialty, and its own [Overdrive Burst](#nerve). Your choice persists between runs (saved to disk) until you pick a different one.
+
+| Ship | HP | Armor | Damage | Shield Stacks | Dash | Starting weapon | Specialty |
+|---|---|---|---|---|---|---|---|
+| **Bastion** | 8 | 2 | ×0.8 | 4 | Shorter reach; shoves enemies/bosses aside instead of damaging them | Orbit Blades | Orbit blades spin 2.2× faster |
+| **Ranger** | 5 | 1 | ×1.0 | 3 | Normal reach; damages *and* shoves (half of each) | Forward Shot | Bullets fly 1.4× faster |
+| **Interceptor** | 4 | 0 | ×1.3 | 2 | Longer reach; damages everything in its path | Beam Sweep | Laser reaches 1.5× further |
+
+- **Armor** flatly reduces incoming damage (always chips at least 1 HP — it can't grant full immunity).
+- **Damage** multiplies all weapon damage output (Forward Shot, Orbit Blades, Homing Missiles, Mines, Beam Sweep, Shockwave alike).
+- **Shield Stacks** cap replaces a single fixed number — see [Player](#player).
+- **Dash** behavior ties into the shared dash mechanic below; see [Player → Dash](#player) for how the push/damage/hybrid quirks work in combat.
+- Each ship also has its own distinct hull silhouette (Bastion: wide hexagon hull with wing pods; Ranger: the classic triangle plus a diamond plate; Interceptor: a slim dart with swept fins) and color.
 
 ---
 
 ## Player
 
-- **Health**: shown as a row of ship-icon "lives." Starts at 5.
+- **Health**: shown as a single bar rather than discrete hearts. Max HP, armor, and starting stats all come from your chosen [ship](#ships); Life Orbs and the Hull Plating skill add to it directly, so partial HP is normal and visible, not rounded to whole hearts.
 - **Shield** (Right Click): a temporary invulnerability bubble. Costs one charge. While active, it blocks all contact and beam damage. If you're standing in a boss beam when your shield expires, you take one heavy hit instead of the beam's usual gradual chip damage — the shield buys you time to move, not a way to facetank the whole attack.
-- **Dash** (Left Click): a short burst of speed in your aim direction. Costs one charge. While dashing you have contact immunity and plow through enemies, dealing damage to each one you pass through (once per enemy per dash). Dashing while your Shield is also active turns every enemy you plow through into an instant kill.
+- **Dash** (Left Click): a short burst of speed in your aim direction, whose distance is scaled by your ship (Bastion shorter, Interceptor longer). Costs one charge. While dashing you have contact immunity, and what happens to anything you plow through depends on your ship's dash quirk:
+  - **Damage** (Interceptor): full damage to every enemy/boss you pass through, once per target per dash.
+  - **Push** (Bastion): no damage — instead shoves enemies and bosses away from you.
+  - **Hybrid** (Ranger): half damage plus a smaller shove.
+  - Dashing while your Shield is also active still turns every enemy you plow through into an instant kill, regardless of ship.
   - **Dash-refund-on-kill**: killing an enemy mid-dash knocks time off your charge-regen timer, rewarding chaining dashes through a crowd instead of a single hit-and-run.
-- **Charges**: a shared pool of 2, used by both Dash and Shield. Regenerate over time (faster with the Barrier Mastery skill, and further sped up by kills via Nerve).
-- **Shield Stacks** (0–3): a separate resource from the Shield ability — rare drops that each absorb exactly one hit (from any source) with no cooldown. Shown as small ring pips in the HUD.
-- **Life Orbs**: two orbs collected convert into +1 max health (fully healed). A single collected orb shows as a faint half-filled health icon until the second arrives.
+- **Charges**: a shared pool of 2, used by both Dash and Shield. Regenerate over time (faster with the Barrier Mastery skill), and further sped up by [Charge Feed](#nerve) whenever you're missing one and have Nerve banked.
+- **Shield Stacks**: a separate resource from the Shield ability — rare drops that each absorb exactly one hit (from any source) with no cooldown. Shown as small ring pips in the HUD; the cap is ship-dependent (2/3/4 — see [Ships](#ships)) rather than a fixed number.
+- **Life Orbs**: each orb collected heals +0.5 HP directly (capped at max HP) — no more two-orbs-per-heal-point pairing, since HP is now a continuous bar.
 - **Arena boundary**: the play area is a large circle (radius 20,000 units) — you're clamped to it, though in practice it reads as effectively open.
 
 ---
 
 ## Weapons
 
-You start with **Forward Shot** at level 1. Level-up picks grant new weapons or level up ones you already have. All weapons auto-fire on their own cooldown — there's no manual fire button.
+You start with your [ship](#ships)'s default weapon at level 1 (Bastion: Orbit Blades, Ranger: Forward Shot, Interceptor: Beam Sweep). Level-up picks grant new weapons or level up ones you already have. Most weapons auto-fire on their own cooldown; Orbit Blades and Beam Sweep are always active instead (see below) — there's no manual fire button for anything.
 
 | Weapon | Behavior | Notes |
 |---|---|---|
-| **Forward Shot** | Fires toward your cursor. | Levels add extra simultaneous shots in a spread. |
-| **Orbit Blades** | Periodic damage pulse to anything circling you. | Radius grows with level. |
+| **Forward Shot** | Fires toward your cursor. | Levels add extra simultaneous shots in a spread; bullet speed is ship-dependent (Ranger's fly 1.4× faster). |
+| **Orbit Blades** | Always-spinning blades that damage on contact, plus periodic ranged shots. | See [Orbit Blades](#orbit-blades) below. |
 | **Homing Missiles** | Auto-fires at the nearest enemy. | Fire-and-forget; missiles retarget in flight. |
 | **Mine Layer** | Drops mines that scatter near you. | See [Mines](#mines) below — base and evolved mines behave differently. |
-| **Beam Sweep** | Fires a piercing beam toward your cursor. | Length grows with level. |
+| **Beam Sweep** | An always-on piercing laser toward your cursor. | See [Beam Sweep](#beam-sweep) below. |
 | **Shockwave** | A slow, heavy-hitting pulse around you. | Evolved version also heals 1 HP per pulse. |
 
 Every weapon's cooldown shortens with level and with the Overclock skill, and evolved weapons fire 20% faster and hit harder. Standing near an Elite Hazard **Suppressor** applies a cooldown penalty to all your weapons for as long as you're in its aura.
+
+### Orbit Blades
+
+Unlike other weapons, Orbit Blades don't fire on a cooldown — they're always active. A ring of blades (count grows with level) spins around you, and anything a blade actually touches takes damage: first contact lands an instant hit, and staying in contact ticks extra damage per second on top of that. This now damages bosses too, which it never used to.
+
+Separately, roughly every 2.2 seconds (faster with the Cooldown skill), one or more blades launch off the ring toward your cursor as a piercing shot that punches through everything in its path — enemies, elite hazards, bosses, asteroids — until it leaves the camera's view. The number launched at once scales with how many blades you currently have, and each launches from wherever that blade actually sits on the ring (not the ship's center), with a replacement blade visibly growing back out from the ship to refill the vacated slot.
+
+### Beam Sweep
+
+A continuous laser toward your cursor rather than a periodic pulse. Like Orbit Blades, anything it touches takes an instant hit on first contact, then continues taking damage per second for as long as it stays in the beam. Length grows with level (and 1.5× further on Interceptor). Its per-target damage is intentionally much lower than a single-target weapon's, since a full-length beam can be touching an entire crowd at once — full single-target damage per target there would delete crowds instantly.
 
 ### Mines
 
@@ -209,8 +243,8 @@ A linked pair of portal mouths that spawn/despawn on a timer like black holes. E
 | Pickup | Effect | Lifetime |
 |---|---|---|
 | XP orb | Adds to your XP bar | 10s |
-| Shield | +1 shield stack (max 3) | 18s |
-| Life Orb | Half of a max-health increase (2 orbs = +1 max HP) | 18s |
+| Shield | +1 shield stack (cap is ship-dependent — see [Ships](#ships)) | 18s |
+| Life Orb | +0.5 max-health-capped healing | 18s |
 
 All pickups magnet toward you within a radius (increased by the Tractor Beam skill) and **expire if left uncollected** — they blink in their last 2.5 seconds as a despawn warning. Anything that drifts into a black hole is destroyed instead of collected.
 
@@ -226,18 +260,31 @@ All pickups magnet toward you within a radius (increased by the Tractor Beam ski
 
 ## Nerve
 
-An aggression meter (0–100) that climbs 6 points per kill and bleeds away on its own over time — it doesn't bank indefinitely if you idle. Getting hit resets it to zero immediately. While high, Nerve grants:
+Nerve (0–100) fills +6 per kill. Unlike its old design, it no longer decays on its own and no longer grants a passive damage/speed buff — instead it's spent on two concrete effects:
 
-- Up to **+50% weapon damage**
-- Up to **+20% move speed**
+### Charge Feed (passive)
 
-The "hesitation is defeat" identity: staying aggressive and landing kills keeps your damage and speed climbing, but one mistake (getting hit) wipes it out — not just the HP cost, but the momentum too.
+Whenever you're missing a Dash/Shield charge and have any Nerve banked, it starts draining after a short 0.6s delay (so a momentary charge dip doesn't instantly start feeding) at ~12/sec, tripling the speed of that charge's regeneration. It stops the instant the charge is full again or Nerve hits 0. The charge pip being fed visibly glows differently while this is active. This replaces the old "free emergency dash/shield at 70% Nerve" backdoor with something continuous and visible.
+
+### Overdrive Burst (active)
+
+Once Nerve reaches 100 it stops draining and visibly pulses to signal it's ready, with a flashing `SPACE` hint near the ability slots. Hold `Space` to begin a ~0.35s charge windup (your ship glows, a rising-pitch tone plays); it fires automatically the moment the windup completes, consuming the full meter. Taking a hit while charging cancels it instead — a descending fizzle tone plays and Nerve drops to 0. This is now the *only* way a hit resets Nerve; taking damage while not mid-charge no longer touches it at all.
+
+The burst itself is ship-specific:
+
+| Ship | Burst |
+|---|---|
+| **Bastion** | A ring of blades (count matches your current Orbit Blade count) spins around a center that travels forward in your aim direction like a thrown top — pierces everything along its path, including bosses. |
+| **Ranger** | A large ball thrown forward that pierces everything in its way as it travels. |
+| **Interceptor** | An instant long-range piercing beam toward your cursor. |
+
+The Bastion spiral and Ranger ball both keep travelling in whatever direction you were aiming the instant you released — they don't re-steer if you move the mouse afterward — and persist until they actually leave the camera's view rather than expiring on a fixed timer or range.
 
 ---
 
 ## Damage meter
 
-A live readout next to the Nerve bar showing your outgoing damage, broken down by source (Forward / Orbit / Homing / Mine / Beam / Shock / Dash), so you can directly watch how Nerve's damage bonus affects your numbers in real time. Defaults to `DMG: 0`. A hit refreshes the reading and holds it for a short moment before it decays back to 0, instead of flickering blank between frames.
+A live readout next to the Nerve bar showing your outgoing damage, broken down by source (Forward / Orbit / Homing / Mine / Beam / Shock / Dash / Nerve). Defaults to `DMG: 0`. A hit refreshes the reading and holds it for a short moment before it decays back to 0, instead of flickering blank between frames.
 
 ---
 
@@ -278,14 +325,20 @@ Launch with `-sandbox` (or `--sandbox`) for a clean, empty arena with no waves o
 |---|---|
 | `[` / `]` | Cycle the enemy kind to spawn |
 | `E` | Spawn one of the selected enemy kind |
-| `B` | Spawn a boss |
+| `B` (hold `Shift` for miniboss) | Spawn a boss |
+| `Y` | Spawn a 3-boss swarm |
 | `K` | Clear the board (enemies, asteroids, projectiles, mines, bosses) |
 | `L` | Open the level-up picker on demand |
 | `H` | Full heal + max shield stacks + max Nerve |
-| `R` | Reset weapons/skills back to starting Forward Shot only |
+| `R` | Reset weapons/skills back to the current ship's starting weapon |
+| `I` / `Shift+I` | Cycle ship forward/backward (applies immediately via a full reset) |
 | `G` | Toggle death (god mode) — off by default, so damage doesn't matter until you turn it on |
 | `,` / `.` | Cycle the boss attack to command |
 | `O` | Force the nearest boss to immediately wind up and use the selected attack |
+| `N` | Spawn a black hole |
+| `M` | Spawn a wormhole pair |
+| `U` (hold `Shift` for Suppressor) | Spawn an Elite Hazard (Warlord by default) |
+| `=` / `-` | Increase/decrease the wave number |
 
 Current sandbox state (selected enemy kind, god-mode on/off, selected boss attack) is always shown at the bottom of the screen.
 

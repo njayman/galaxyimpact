@@ -76,11 +76,16 @@ void drawMenu(const Game& game, const std::string& heading, const std::vector<st
               int32_t y);
 void drawHighScores(const Game& game, int32_t x, int32_t y, const std::vector<int32_t>& scores);
 void drawGameplayWorld(const Game& game);
+void drawShipHull(ShipClass shipClass, Vector2 p, float r, float angle, Color shipColor);
 void drawShip(const Game& game);
+void drawNerveBurstFlash(const Game& game);
 void drawEnemy(const Game& game, const Enemy& enemy, bool buffed);
 void drawEliteHazard(const EliteHazard& hazard);
 void drawBoss(const Game& game, const Boss& boss);
 void drawOrbitBlades(const Game& game);
+void drawOrbitBladeProjectiles(const Game& game);
+void drawNerveBallProjectiles(const Game& game);
+void drawNerveSpiralProjectiles(const Game& game);
 void drawShieldIndicator(const Player& player);
 void drawChargeParticles(Vector2 center, float fraction, Color color, float maxRadius,
                          float minRadius);
@@ -197,6 +202,17 @@ void drawShipSelect(const Game& game)
     applyGuiScale(game);
     windowText(game, "SELECT SHIP", game.resources.windowWidth / 2, 80, 40, Palette::Accent);
 
+    const ShipDef& highlighted = ships.at(static_cast<size_t>(game.menuIndex));
+
+    const float scale = guiUiScale(game);
+    const Vector2 previewPos{.x = static_cast<float>(game.resources.windowWidth) / 2,
+                             .y = 260 * scale};
+    const float previewRadius = 70 * scale;
+    const Vector2 dir = aimAtMouse(game);
+    const float previewAngle = std::atan2(dir.y, dir.x) + std::numbers::pi_v<float> / 2;
+    const auto shipClass = static_cast<ShipClass>(game.menuIndex);
+    drawShipHull(shipClass, previewPos, previewRadius, previewAngle, highlighted.color);
+
     std::vector<std::string> names;
     names.reserve(ships.size());
     for (const auto& ship : ships)
@@ -205,7 +221,6 @@ void drawShipSelect(const Game& game)
     }
     drawMenu(game, "", names, MenuLayout::titleMenuY);
 
-    const ShipDef& highlighted = ships.at(static_cast<size_t>(game.menuIndex));
     const int32_t descY =
         MenuLayout::titleMenuY +
         (MenuLayout::buttonHeight + MenuLayout::buttonGap) * static_cast<int32_t>(ships.size()) +
@@ -772,6 +787,9 @@ void drawGameplayWorld(const Game& game)
     }
 
     drawOrbitBlades(game);
+    drawOrbitBladeProjectiles(game);
+    drawNerveBallProjectiles(game);
+    drawNerveSpiralProjectiles(game);
 
     const bool shipVisible =
         game.run.player.health > 0 &&
@@ -783,11 +801,7 @@ void drawGameplayWorld(const Game& game)
 
     if (game.run.nerveBurstFlashTimer > 0)
     {
-        const float flashFrac = game.run.nerveBurstFlashTimer / 0.15F;
-        DrawLineEx(game.run.player.position, game.run.nerveBurstFlashEnd, 10 * flashFrac,
-                   Fade(WHITE, flashFrac));
-        DrawLineEx(game.run.player.position, game.run.nerveBurstFlashEnd, 20 * flashFrac,
-                   Fade(Palette::Charge, flashFrac * 0.6F));
+        drawNerveBurstFlash(game);
     }
 
     if (game.run.player.shieldActive)
@@ -814,46 +828,14 @@ void drawGameplayWorld(const Game& game)
     }
 }
 
-void drawShip(const Game& game)
+void drawShipHull(ShipClass shipClass, Vector2 p, float r, float angle, Color shipColor)
 {
-    const Vector2 p = game.run.player.position;
-    const float r = game.run.player.radius;
-
-    const Vector2 dir = aimAtMouse(game);
-    const float angle = std::atan2(dir.y, dir.x) + std::numbers::pi_v<float> / 2;
-
     const auto rotate = [angle](Vector2 v) -> Vector2
     {
         const float cosA = std::cos(angle);
         const float sinA = std::sin(angle);
         return Vector2{.x = v.x * cosA - v.y * sinA, .y = v.x * sinA + v.y * cosA};
     };
-
-    if (game.run.player.dashing)
-    {
-        const Vector2 dashDir = Vector2Normalize(game.run.player.dashVelocity);
-        for (int i = 1; i <= 3; i++)
-        {
-            const Vector2 trailPos =
-                Vector2Subtract(p, Vector2Scale(dashDir, static_cast<float>(i) * 10));
-            DrawCircleV(trailPos, r * (1 - static_cast<float>(i) * 0.2F),
-                        Fade(Palette::Crit, 0.35F / static_cast<float>(i)));
-        }
-    }
-
-    const Color shipColor = game.run.player.dashing ? Palette::Crit : game.run.player.color;
-
-    const float flicker = 0.65F + 0.35F * std::sin(static_cast<float>(GetTime()) * 28.0F);
-    const Vector2 flameTip =
-        Vector2Add(p, rotate(Vector2{.x = 0, .y = r * (1.5F + 0.6F * flicker)}));
-    const Vector2 flameLeft = Vector2Add(p, rotate(Vector2{.x = -r * 0.35F, .y = r * 0.85F}));
-    const Vector2 flameRight = Vector2Add(p, rotate(Vector2{.x = r * 0.35F, .y = r * 0.85F}));
-    DrawTriangle(flameLeft, flameTip, flameRight, Fade(Palette::Charge, 0.75F * flicker));
-    DrawTriangle(flameLeft,
-                 Vector2Add(p, rotate(Vector2{.x = 0, .y = r * (1.0F + 0.3F * flicker)})),
-                 flameRight, Fade(Palette::StructLight, 0.6F * flicker));
-
-    const auto shipClass = static_cast<ShipClass>(game.resources.settings.shipIndex);
 
     switch (shipClass)
     {
@@ -913,6 +895,49 @@ void drawShip(const Game& game)
     }
 
     DrawCircleV(p, r * 0.3F, Palette::StructLight);
+}
+
+void drawShip(const Game& game)
+{
+    const Vector2 p = game.run.player.position;
+    const float r = game.run.player.radius;
+
+    const Vector2 dir = aimAtMouse(game);
+    const float angle = std::atan2(dir.y, dir.x) + std::numbers::pi_v<float> / 2;
+
+    const auto rotate = [angle](Vector2 v) -> Vector2
+    {
+        const float cosA = std::cos(angle);
+        const float sinA = std::sin(angle);
+        return Vector2{.x = v.x * cosA - v.y * sinA, .y = v.x * sinA + v.y * cosA};
+    };
+
+    if (game.run.player.dashing)
+    {
+        const Vector2 dashDir = Vector2Normalize(game.run.player.dashVelocity);
+        for (int i = 1; i <= 3; i++)
+        {
+            const Vector2 trailPos =
+                Vector2Subtract(p, Vector2Scale(dashDir, static_cast<float>(i) * 10));
+            DrawCircleV(trailPos, r * (1 - static_cast<float>(i) * 0.2F),
+                        Fade(Palette::Crit, 0.35F / static_cast<float>(i)));
+        }
+    }
+
+    const Color shipColor = game.run.player.dashing ? Palette::Crit : game.run.player.color;
+
+    const float flicker = 0.65F + 0.35F * std::sin(static_cast<float>(GetTime()) * 28.0F);
+    const Vector2 flameTip =
+        Vector2Add(p, rotate(Vector2{.x = 0, .y = r * (1.5F + 0.6F * flicker)}));
+    const Vector2 flameLeft = Vector2Add(p, rotate(Vector2{.x = -r * 0.35F, .y = r * 0.85F}));
+    const Vector2 flameRight = Vector2Add(p, rotate(Vector2{.x = r * 0.35F, .y = r * 0.85F}));
+    DrawTriangle(flameLeft, flameTip, flameRight, Fade(Palette::Charge, 0.75F * flicker));
+    DrawTriangle(flameLeft,
+                 Vector2Add(p, rotate(Vector2{.x = 0, .y = r * (1.0F + 0.3F * flicker)})),
+                 flameRight, Fade(Palette::StructLight, 0.6F * flicker));
+
+    const auto shipClass = static_cast<ShipClass>(game.resources.settings.shipIndex);
+    drawShipHull(shipClass, p, r, angle, shipColor);
 
     if (game.run.player.nerveCharging)
     {
@@ -922,6 +947,56 @@ void drawShip(const Game& game)
         DrawCircleLines(static_cast<int32_t>(p.x), static_cast<int32_t>(p.y),
                         r * (1.2F + flare * 0.6F), Fade(Palette::Charge, flare));
         DrawCircleV(p, r * 0.5F * flare, Fade(WHITE, flare));
+    }
+}
+
+// Only the Interceptor's nerve burst is an instant hit (a beam); the Bastion spiral and Ranger
+// ball are travelling projectiles drawn every frame by drawNerveSpiralProjectiles()/
+// drawNerveBallProjectiles() instead, so this only ever fires for Interceptor.
+void drawNerveBurstFlash(const Game& game)
+{
+    const float flashFrac = game.run.nerveBurstFlashTimer / 0.15F;
+    const Vector2 start = game.run.player.position;
+    const Vector2 end = game.run.nerveBurstFlashEnd;
+
+    DrawLineEx(start, end, 10 * flashFrac, Fade(WHITE, flashFrac));
+    DrawLineEx(start, end, 20 * flashFrac, Fade(Palette::Charge, flashFrac * 0.6F));
+}
+
+void drawNerveBallProjectiles(const Game& game)
+{
+    for (const auto& proj : game.run.nerveBallProjectiles)
+    {
+        if (!proj.active)
+        {
+            continue;
+        }
+        DrawCircleV(proj.position, proj.radius, Fade(Palette::Accent, 0.55F));
+        DrawCircleLines(static_cast<int32_t>(proj.position.x),
+                        static_cast<int32_t>(proj.position.y), proj.radius, Fade(WHITE, 0.8F));
+    }
+}
+
+void drawNerveSpiralProjectiles(const Game& game)
+{
+    for (const auto& spiral : game.run.nerveSpiralProjectiles)
+    {
+        if (!spiral.active)
+        {
+            continue;
+        }
+        const Vector2& center = spiral.origin;
+
+        for (int32_t s = 0; s < spiral.bladeCount; s++)
+        {
+            const float angle = spiral.age * 14.0F + static_cast<float>(s) * 2 *
+                                                         std::numbers::pi_v<float> /
+                                                         static_cast<float>(spiral.bladeCount);
+            const Vector2 bladePos =
+                Vector2Add(center, Vector2{.x = std::cos(angle) * spiral.spinRadius,
+                                           .y = std::sin(angle) * spiral.spinRadius});
+            DrawCircleV(bladePos, 7, Palette::Shield);
+        }
     }
 }
 
@@ -1289,18 +1364,42 @@ void drawOrbitBlades(const Game& game)
             {
                 radius *= 1.4F;
             }
-            const int32_t count = 2 + w.level / 2;
+            const int32_t count = orbitBladeCount(w.level);
 
             for (int32_t s = 0; s < count; s++)
             {
-                const float angle = static_cast<float>(GetTime()) * 2 +
-                                    static_cast<float>(s) * 2 * std::numbers::pi_v<float> /
-                                        static_cast<float>(count);
                 const Vector2 pos =
-                    Vector2Add(game.run.player.position, Vector2{.x = std::cos(angle) * radius,
-                                                                 .y = std::sin(angle) * radius});
+                    orbitBladePosition(game, game.run.player.position, radius, s, count);
                 DrawCircleV(pos, 5, color);
             }
+
+            if (w.flashTimer > 0)
+            {
+                // Matches the shot count in updateOrbitBladeLaunch() so every launched slot
+                // regrows, not just one.
+                const int32_t shots = std::max(1, count / 2);
+                constexpr float regrowDuration = 0.35F;
+                const float progress = 1 - w.flashTimer / regrowDuration;
+
+                for (int32_t s = 0; s < shots; s++)
+                {
+                    const Vector2 regrowTarget =
+                        orbitBladePosition(game, game.run.player.position, radius, s, count);
+                    const Vector2 regrowPos =
+                        Vector2Lerp(game.run.player.position, regrowTarget, progress);
+                    DrawCircleV(regrowPos, 5 * progress, Fade(WHITE, 1 - progress));
+                }
+            }
+            break;
+        }
+        case WeaponType::Beam:
+        {
+            const Vector2 dir = aimAtMouse(game);
+            const float length = beamLength(game, w.level, w.evolved);
+            const Vector2 start = game.run.player.position;
+            const Vector2 end = Vector2Add(start, Vector2Scale(dir, length));
+            DrawLineEx(start, end, 4, Fade(color, 0.85F));
+            DrawLineEx(start, end, 9, Fade(color, 0.2F));
             break;
         }
         case WeaponType::Shock:
@@ -1320,21 +1419,23 @@ void drawOrbitBlades(const Game& game)
                             Fade(color, 0.15F));
             break;
         }
-        case WeaponType::Beam:
-        {
-            float length = 300 + static_cast<float>(w.level) * 15;
-            if (w.evolved)
-            {
-                length *= 1.3F;
-            }
-            const Vector2 dir = aimAtMouse(game);
-            const Vector2 end = Vector2Add(game.run.player.position, Vector2Scale(dir, length));
-            DrawLineEx(game.run.player.position, end, 2, Fade(color, 0.3F));
-            break;
-        }
         default:
             break;
         }
+    }
+}
+
+void drawOrbitBladeProjectiles(const Game& game)
+{
+    for (const auto& proj : game.run.orbitBladeProjectiles)
+    {
+        if (!proj.active)
+        {
+            continue;
+        }
+        const float angle = static_cast<float>(GetTime()) * 720.0F;
+        DrawPoly(proj.position, 4, proj.radius, angle, Palette::Shield);
+        DrawCircleV(proj.position, proj.radius * 0.4F, Fade(WHITE, 0.8F));
     }
 }
 
@@ -1662,7 +1763,6 @@ auto drawGame(Game& game) -> void
     switch (game.state)
     {
     case GameState::TITLE:
-    case GameState::SHIP_SELECT:
         beginPixelZoom(game);
         drawBackgroundStars(game, Vector2{});
         EndMode2D();
@@ -1675,8 +1775,10 @@ auto drawGame(Game& game) -> void
         drawGameplayWorld(game);
         EndMode2D();
         break;
+    case GameState::SHIP_SELECT:
     case GameState::SETTINGS:
-        if (game.settingsReturnState == GameState::PAUSED)
+        if (game.settingsReturnState == GameState::PAUSED ||
+            game.settingsReturnState == GameState::GAME_OVER)
         {
             beginWorldCamera(game);
             drawGameplayWorld(game);
@@ -1745,6 +1847,7 @@ auto drawGame(Game& game) -> void
     case GameState::LEVEL_UP:
         drawHUD(game);
         break;
+    case GameState::SHIP_SELECT:
     case GameState::SETTINGS:
         if (game.settingsReturnState == GameState::PAUSED)
         {
@@ -1752,7 +1855,6 @@ auto drawGame(Game& game) -> void
         }
         break;
     case GameState::TITLE:
-    case GameState::SHIP_SELECT:
     case GameState::GAME_OVER:
         break;
     }
@@ -1765,6 +1867,10 @@ auto drawGame(Game& game) -> void
         drawTitle(game);
         break;
     case GameState::SHIP_SELECT:
+        if (game.settingsReturnState != GameState::TITLE)
+        {
+            drawOverlay(game);
+        }
         drawShipSelect(game);
         break;
     case GameState::GAMEPLAY:

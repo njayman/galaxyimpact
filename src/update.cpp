@@ -14,6 +14,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <numbers>
 #include <optional>
 #include <vector>
 
@@ -38,6 +39,20 @@ constexpr float dashSpeed = 22;
 constexpr float dashDuration = 0.18F;
 constexpr int32_t dashDamage = 15;
 constexpr float dashPushDistance = 60.0F;
+// DPS while a continuous weapon (orbit blades, beam) stays in contact, as a multiple of its
+// one-time first-contact hit.
+constexpr float continuousDpsMultiplier = 1.2F;
+constexpr float orbitBladeHitRadius = 10.0F;
+// Beam hits every target along its full length at once, so its per-target damage needs to be much
+// lower than a single-target weapon's or it deletes whole crowds simultaneously.
+constexpr float beamDamageMult = 0.35F;
+
+constexpr float orbitProjectileSpeed = 11.0F;
+constexpr float orbitProjectileRadius = 7.0F;
+constexpr float orbitLaunchInterval = 2.2F;
+constexpr float orbitRegrowDuration = 0.35F;
+constexpr float nerveSpiralSpinSpeed = 14.0F;
+constexpr float cameraDespawnMargin = 80.0F;
 constexpr float dashKillChargeRefund = 0.6F;
 constexpr float shieldKillChargeRefund = 0.6F;
 constexpr float bossBodyLingerLimit = 1.0F;
@@ -166,6 +181,19 @@ void gainNerve(Game& game);
 void updateNerve(Game& game, float deltaTime);
 void updateNerveBurstInput(Game& game);
 void fireNerveBurst(Game& game);
+void fireNerveBeam(Game& game);
+void fireNerveBladeTornado(Game& game);
+void fireNerveBall(Game& game);
+void nerveLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg, float extraRadius = 0);
+void updateOrbitBladeContact(Game& game, float deltaTime);
+void updateOrbitBladeLaunch(Game& game, float deltaTime);
+void updatePiercingProjectiles(Game& game, float deltaTime,
+                               std::vector<OrbitBladeProjectile>& projectiles, DamageSource source,
+                               bool despawnOnCameraExit);
+void updateOrbitBladeProjectiles(Game& game, float deltaTime);
+void updateNerveBallProjectiles(Game& game, float deltaTime);
+void updateNerveSpiralProjectiles(Game& game, float deltaTime);
+void updateBeamContact(Game& game, float deltaTime);
 void damagePlayer(Game& game, int32_t amount);
 void spawnDeathExplosion(Game& game);
 void updateDeathParticles(Game& game, float deltaTime);
@@ -189,7 +217,6 @@ auto nearestAsteroidWithin(const Game& game, Vector2 from, float maxDist) -> std
 void updateWeapons(Game& game, float deltaTime);
 void recordDamage(Game& game, DamageSource source, int32_t amount);
 void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSource source);
-void beamPulse(Game& game, Vector2 dir, float length, int32_t dmg, DamageSource source);
 void updateWaveSpawner(Game& game, float deltaTime);
 auto asteroidIntervalMultiplier(const Game& game) -> float;
 auto asteroidCap(const Game& game) -> int;
@@ -268,6 +295,7 @@ auto updateTitle(Game& game) -> bool
         {
         case 0:
             game.menuIndex = game.resources.settings.shipIndex;
+            game.settingsReturnState = GameState::TITLE;
             game.state = GameState::SHIP_SELECT;
             break;
         case 1:
@@ -290,7 +318,7 @@ auto updateShipSelect(Game& game) -> bool
     if (IsKeyPressed(KEY_ESCAPE))
     {
         game.menuIndex = 0;
-        game.state = GameState::TITLE;
+        game.state = game.settingsReturnState;
         return false;
     }
 
@@ -337,7 +365,9 @@ auto updatePaused(Game& game) -> bool
             game.state = GameState::SETTINGS;
             break;
         case 2:
-            resetRun(game);
+            game.menuIndex = game.resources.settings.shipIndex;
+            game.settingsReturnState = GameState::PAUSED;
+            game.state = GameState::SHIP_SELECT;
             break;
         case 3:
             return true;
@@ -370,7 +400,9 @@ auto updateGameOver(Game& game) -> bool
         switch (index)
         {
         case 0:
-            resetRun(game);
+            game.menuIndex = game.resources.settings.shipIndex;
+            game.settingsReturnState = GameState::GAME_OVER;
+            game.state = GameState::SHIP_SELECT;
             break;
         case 1:
             return true;
@@ -887,6 +919,12 @@ void updateGameplay(Game& game, float deltaTime)
     updatePlayerMovement(game, deltaTime);
     updateShieldAndBarrier(game, deltaTime);
     updateWeapons(game, deltaTime);
+    updateOrbitBladeContact(game, deltaTime);
+    updateOrbitBladeLaunch(game, deltaTime);
+    updateOrbitBladeProjectiles(game, deltaTime);
+    updateNerveBallProjectiles(game, deltaTime);
+    updateNerveSpiralProjectiles(game, deltaTime);
+    updateBeamContact(game, deltaTime);
     updateWaveSpawner(game, deltaTime);
     updateBlackHole(game, deltaTime);
     updateWormhole(game, deltaTime);
@@ -1368,6 +1406,28 @@ auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>
 
 auto orbitRadius(int32_t level) -> float { return 55 + static_cast<float>(level) * 4; }
 
+auto orbitBladeCount(int32_t level) -> int32_t { return 2 + level / 2; }
+
+auto orbitBladePosition(const Game& game, Vector2 center, float radius, int32_t index,
+                        int32_t count) -> Vector2
+{
+    const float angle =
+        static_cast<float>(GetTime()) * 2 * currentShip(game).orbitSpinMult +
+        static_cast<float>(index) * 2 * std::numbers::pi_v<float> / static_cast<float>(count);
+    return Vector2Add(center,
+                      Vector2{.x = std::cos(angle) * radius, .y = std::sin(angle) * radius});
+}
+
+auto beamLength(const Game& game, int32_t level, bool evolved) -> float
+{
+    float length = (150 + static_cast<float>(level) * 20) * currentShip(game).beamLengthMult;
+    if (evolved)
+    {
+        length *= 1.3F;
+    }
+    return length;
+}
+
 auto shockwaveRadius(int32_t level, bool evolved) -> float
 {
     float radius = 90 + static_cast<float>(level) * 8;
@@ -1571,6 +1631,13 @@ void updateWeapons(Game& game, float deltaTime)
             w.flashTimer -= deltaTime;
         }
 
+        if (w.type == WeaponType::Orbit || w.type == WeaponType::Beam)
+        {
+            // Continuous contact weapons: handled every frame by updateOrbitBladeContact()/
+            // updateBeamContact(), not on this fire-and-cooldown cadence.
+            continue;
+        }
+
         w.timer -= deltaTime;
         if (w.timer > 0)
         {
@@ -1604,13 +1671,14 @@ void updateWeapons(Game& game, float deltaTime)
                 const float sinA = std::sin(angleOffset);
                 const Vector2 rotated{.x = dir.x * cosA - dir.y * sinA,
                                       .y = dir.x * sinA + dir.y * cosA};
-                game.run.bullets.push_back(
-                    Bullet{.position = game.run.player.position,
-                           .velocity = Vector2Scale(rotated, projectileSpeed),
-                           .radius = projectileSize,
-                           .color = color,
-                           .active = true,
-                           .damage = dmg});
+                game.run.bullets.push_back(Bullet{
+                    .position = game.run.player.position,
+                    .velocity =
+                        Vector2Scale(rotated, projectileSpeed * currentShip(game).bulletSpeedMult),
+                    .radius = projectileSize,
+                    .color = color,
+                    .active = true,
+                    .damage = dmg});
             }
             playSFX(game, game.resources.sounds.shoot);
             break;
@@ -1648,18 +1716,6 @@ void updateWeapons(Game& game, float deltaTime)
             }
             break;
         }
-        case WeaponType::Orbit:
-        {
-            float radius = orbitRadius(w.level);
-            int32_t dmg = weaponDamage(game, w.level) / 2;
-            if (w.evolved)
-            {
-                radius *= 1.4F;
-                dmg = static_cast<int32_t>(static_cast<float>(dmg) * 1.5F);
-            }
-            aoePulse(game, game.run.player.position, radius, dmg, DamageSource::Orbit);
-            break;
-        }
         case WeaponType::Shock:
         {
             const float radius = shockwaveRadius(w.level, w.evolved);
@@ -1679,19 +1735,8 @@ void updateWeapons(Game& game, float deltaTime)
         case WeaponType::Mine:
             spawnMines(game, w);
             break;
+        case WeaponType::Orbit:
         case WeaponType::Beam:
-        {
-            const Vector2 dir = aimAtMouse(game);
-            float length = 300 + static_cast<float>(w.level) * 15;
-            int32_t dmg = weaponDamage(game, w.level);
-            if (w.evolved)
-            {
-                length *= 1.3F;
-                dmg = static_cast<int32_t>(static_cast<float>(dmg) * 1.5F);
-            }
-            beamPulse(game, dir, length, dmg, DamageSource::Beam);
-            break;
-        }
         case WeaponType::Count:
             break;
         }
@@ -1751,34 +1796,569 @@ void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSourc
     }
 }
 
-void beamPulse(Game& game, Vector2 dir, float length, int32_t dmg, DamageSource source)
+void updateOrbitBladeContact(Game& game, float deltaTime)
 {
-    const Vector2 start = game.run.player.position;
-    const Vector2 end = Vector2Add(start, Vector2Scale(dir, length));
-    bool hitAny = false;
+    const auto it = std::ranges::find_if(game.run.weapons, [](const Weapon& w)
+                                         { return w.type == WeaponType::Orbit; });
+
+    if (it == game.run.weapons.end())
+    {
+        for (auto& enemy : game.run.enemies)
+        {
+            enemy.orbitContact = false;
+            enemy.orbitDamageAccum = 0;
+        }
+        for (auto& hazard : game.run.eliteHazards)
+        {
+            hazard.orbitContact = false;
+            hazard.orbitDamageAccum = 0;
+        }
+        for (auto& boss : game.run.bosses)
+        {
+            boss.orbitContact = false;
+            boss.orbitDamageAccum = 0;
+        }
+        return;
+    }
+
+    const Weapon& w = *it;
+    float radius = orbitRadius(w.level);
+    auto firstHit = static_cast<float>(weaponDamage(game, w.level));
+    if (w.evolved)
+    {
+        radius *= 1.4F;
+        firstHit *= 1.5F;
+    }
+    const float dps = firstHit * continuousDpsMultiplier;
+    const int32_t count = orbitBladeCount(w.level);
+
+    std::vector<Vector2> bladePositions;
+    bladePositions.reserve(static_cast<size_t>(count));
+    for (int32_t s = 0; s < count; s++)
+    {
+        bladePositions.push_back(
+            orbitBladePosition(game, game.run.player.position, radius, s, count));
+    }
+
+    const auto touchesAnyBlade = [&](Vector2 pos, float targetRadius)
+    {
+        return std::ranges::any_of(
+            bladePositions, [&](const Vector2& bp)
+            { return CheckCollisionCircles(bp, orbitBladeHitRadius, pos, targetRadius); });
+    };
 
     for (size_t j = 0; j < game.run.enemies.size(); j++)
     {
-        const auto& enemy = game.run.enemies.at(j);
-        if (enemy.active && !enemy.phased &&
-            CheckCollisionCircleLine(
-                enemy.position, enemyKinds.at(static_cast<size_t>(enemy.kind)).radius, start, end))
+        auto& enemy = game.run.enemies.at(j);
+        if (!enemy.active || enemy.phased ||
+            !touchesAnyBlade(enemy.position, enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
         {
-            damageEnemy(game, j, dmg);
-            recordDamage(game, source, dmg);
-            hitAny = true;
+            enemy.orbitContact = false;
+            enemy.orbitDamageAccum = 0;
+            continue;
+        }
+
+        if (!enemy.orbitContact)
+        {
+            enemy.orbitContact = true;
+            const auto hit = static_cast<int32_t>(firstHit);
+            damageEnemy(game, j, hit);
+            recordDamage(game, DamageSource::Orbit, hit);
+        }
+        else
+        {
+            enemy.orbitDamageAccum += dps * deltaTime;
+            if (enemy.orbitDamageAccum >= 1.0F)
+            {
+                const auto tick = static_cast<int32_t>(enemy.orbitDamageAccum);
+                damageEnemy(game, j, tick);
+                recordDamage(game, DamageSource::Orbit, tick);
+                enemy.orbitDamageAccum -= static_cast<float>(tick);
+            }
         }
     }
 
     for (size_t j = 0; j < game.run.eliteHazards.size(); j++)
     {
-        const auto& hazard = game.run.eliteHazards.at(j);
-        if (hazard.active &&
-            CheckCollisionCircleLine(hazard.position, EliteHazardConstants::radius, start, end))
+        auto& hazard = game.run.eliteHazards.at(j);
+        if (!hazard.active || !touchesAnyBlade(hazard.position, EliteHazardConstants::radius))
         {
-            damageEliteHazard(game, j, dmg);
-            recordDamage(game, source, dmg);
-            hitAny = true;
+            hazard.orbitContact = false;
+            hazard.orbitDamageAccum = 0;
+            continue;
+        }
+
+        if (!hazard.orbitContact)
+        {
+            hazard.orbitContact = true;
+            const auto hit = static_cast<int32_t>(firstHit);
+            damageEliteHazard(game, j, hit);
+            recordDamage(game, DamageSource::Orbit, hit);
+        }
+        else
+        {
+            hazard.orbitDamageAccum += dps * deltaTime;
+            if (hazard.orbitDamageAccum >= 1.0F)
+            {
+                const auto tick = static_cast<int32_t>(hazard.orbitDamageAccum);
+                damageEliteHazard(game, j, tick);
+                recordDamage(game, DamageSource::Orbit, tick);
+                hazard.orbitDamageAccum -= static_cast<float>(tick);
+            }
+        }
+    }
+
+    for (auto& boss : game.run.bosses)
+    {
+        if (boss.health <= 0)
+        {
+            continue;
+        }
+        const Rectangle bossRect{.x = boss.position.x,
+                                 .y = boss.position.y,
+                                 .width = boss.size.x,
+                                 .height = boss.size.y};
+        const bool touching = std::ranges::any_of(
+            bladePositions, [&](const Vector2& bp)
+            { return CheckCollisionCircleRec(bp, orbitBladeHitRadius, bossRect); });
+
+        if (!touching)
+        {
+            boss.orbitContact = false;
+            boss.orbitDamageAccum = 0;
+            continue;
+        }
+
+        if (!boss.orbitContact)
+        {
+            boss.orbitContact = true;
+            const auto hit = static_cast<int32_t>(firstHit);
+            boss.health -= hit;
+            boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+            recordDamage(game, DamageSource::Orbit, hit);
+        }
+        else
+        {
+            boss.orbitDamageAccum += dps * deltaTime;
+            if (boss.orbitDamageAccum >= 1.0F)
+            {
+                const auto tick = static_cast<int32_t>(boss.orbitDamageAccum);
+                boss.health -= tick;
+                boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+                recordDamage(game, DamageSource::Orbit, tick);
+                boss.orbitDamageAccum -= static_cast<float>(tick);
+            }
+        }
+    }
+
+    for (auto& asteroid : game.run.asteroids)
+    {
+        if (asteroid.active && touchesAnyBlade(asteroid.position, asteroid.radius))
+        {
+            asteroid.active = false;
+            game.run.score += asteroidScore(asteroid.tier);
+            breakAsteroid(game.run.asteroids, asteroid);
+        }
+    }
+}
+
+void updateOrbitBladeLaunch(Game& game, float deltaTime)
+{
+    for (auto& w : game.run.weapons)
+    {
+        if (w.type != WeaponType::Orbit)
+        {
+            continue;
+        }
+
+        if (w.flashTimer > 0)
+        {
+            w.flashTimer -= deltaTime;
+        }
+
+        w.timer -= deltaTime;
+        if (w.timer > 0)
+        {
+            continue;
+        }
+        w.timer = orbitLaunchInterval * (1 - 0.1F * static_cast<float>(game.run.skillLevels.at(
+                                                        static_cast<size_t>(SkillType::Cooldown))));
+
+        const int32_t bladeCount = orbitBladeCount(w.level);
+        const int32_t shots = std::max(1, bladeCount / 2);
+        auto dmg = static_cast<int32_t>(static_cast<float>(weaponDamage(game, w.level)) * 0.7F);
+        if (w.evolved)
+        {
+            dmg = static_cast<int32_t>(static_cast<float>(dmg) * 1.5F);
+        }
+
+        const Vector2 dir = aimAtMouse(game);
+        constexpr float spreadDeg = 8.0F;
+
+        float ringRadius = orbitRadius(w.level);
+        if (w.evolved)
+        {
+            ringRadius *= 1.4F;
+        }
+
+        for (int32_t s = 0; s < shots; s++)
+        {
+            const float angleOffset =
+                (static_cast<float>(s) - static_cast<float>(shots - 1) / 2) * spreadDeg * DEG2RAD;
+            const float cosA = std::cos(angleOffset);
+            const float sinA = std::sin(angleOffset);
+            const Vector2 shotDir{.x = dir.x * cosA - dir.y * sinA,
+                                  .y = dir.x * sinA + dir.y * cosA};
+
+            // Launches from wherever that blade currently sits on the ring, not the ship's
+            // center, so it visually reads as one of the spinning blades being thrown.
+            const Vector2 bladePos =
+                orbitBladePosition(game, game.run.player.position, ringRadius, s, bladeCount);
+
+            game.run.orbitBladeProjectiles.push_back(
+                OrbitBladeProjectile{.position = bladePos,
+                                     .velocity = Vector2Scale(shotDir, orbitProjectileSpeed),
+                                     .radius = orbitProjectileRadius,
+                                     .damage = dmg,
+                                     .active = true});
+        }
+
+        // Reuses the flashTimer field (otherwise unused by Orbit) to drive the "new blade
+        // regrowing" visual in drawOrbitBlades.
+        w.flashTimer = orbitRegrowDuration;
+        playSFX(game, game.resources.sounds.homingLaunch);
+    }
+}
+
+// Shared by any piercing (no-deactivate-on-hit) travelling projectile: orbit blade shots and the
+// Ranger nerve ball behave identically (move, hit everything along the way, despawn out of range).
+// The world camera is always centered on the player and shows exactly screenWidth x screenHeight
+// world units (renderScale only changes pixel density, not field of view), so this is an exact
+// on-screen test, not an approximation.
+auto isOutsideCameraView(const Game& game, Vector2 pos, float margin) -> bool
+{
+    return std::abs(pos.x - game.run.player.position.x) >
+               static_cast<float>(game.resources.screenWidth) / 2 + margin ||
+           std::abs(pos.y - game.run.player.position.y) >
+               static_cast<float>(game.resources.screenHeight) / 2 + margin;
+}
+
+void updatePiercingProjectiles(Game& game, float deltaTime,
+                               std::vector<OrbitBladeProjectile>& projectiles, DamageSource source,
+                               bool despawnOnCameraExit)
+{
+    for (auto& proj : projectiles)
+    {
+        if (!proj.active)
+        {
+            continue;
+        }
+
+        proj.position =
+            Vector2Add(proj.position, Vector2Scale(proj.velocity, deltaTime * frameScale));
+
+        const bool offscreen =
+            despawnOnCameraExit
+                ? isOutsideCameraView(game, proj.position, cameraDespawnMargin)
+                : Vector2Distance(proj.position, game.run.player.position) > entityDespawnRadius;
+        if (offscreen)
+        {
+            proj.active = false;
+            continue;
+        }
+
+        for (size_t j = 0; j < game.run.enemies.size(); j++)
+        {
+            auto& enemy = game.run.enemies.at(j);
+            if (enemy.active && !enemy.phased &&
+                CheckCollisionCircles(proj.position, proj.radius, enemy.position,
+                                      enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
+            {
+                damageEnemy(game, j, proj.damage);
+                recordDamage(game, source, proj.damage);
+            }
+        }
+
+        for (size_t j = 0; j < game.run.eliteHazards.size(); j++)
+        {
+            auto& hazard = game.run.eliteHazards.at(j);
+            if (hazard.active && CheckCollisionCircles(proj.position, proj.radius, hazard.position,
+                                                       EliteHazardConstants::radius))
+            {
+                damageEliteHazard(game, j, proj.damage);
+                recordDamage(game, source, proj.damage);
+            }
+        }
+
+        for (auto& boss : game.run.bosses)
+        {
+            if (boss.health <= 0)
+            {
+                continue;
+            }
+            const Rectangle bossRect{.x = boss.position.x,
+                                     .y = boss.position.y,
+                                     .width = boss.size.x,
+                                     .height = boss.size.y};
+            if (CheckCollisionCircleRec(proj.position, proj.radius, bossRect))
+            {
+                boss.health -= proj.damage;
+                boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+                recordDamage(game, source, proj.damage);
+            }
+        }
+
+        for (auto& asteroid : game.run.asteroids)
+        {
+            if (asteroid.active && CheckCollisionCircles(proj.position, proj.radius,
+                                                         asteroid.position, asteroid.radius))
+            {
+                asteroid.active = false;
+                game.run.score += asteroidScore(asteroid.tier);
+                breakAsteroid(game.run.asteroids, asteroid);
+            }
+        }
+    }
+
+    std::erase_if(projectiles, [](const OrbitBladeProjectile& p) { return !p.active; });
+}
+
+void updateOrbitBladeProjectiles(Game& game, float deltaTime)
+{
+    updatePiercingProjectiles(game, deltaTime, game.run.orbitBladeProjectiles, DamageSource::Orbit,
+                              false);
+}
+
+void updateNerveBallProjectiles(Game& game, float deltaTime)
+{
+    updatePiercingProjectiles(game, deltaTime, game.run.nerveBallProjectiles, DamageSource::Nerve,
+                              true);
+}
+
+void updateNerveSpiralProjectiles(Game& game, float deltaTime)
+{
+    for (auto& spiral : game.run.nerveSpiralProjectiles)
+    {
+        if (!spiral.active)
+        {
+            continue;
+        }
+
+        spiral.age += deltaTime;
+        spiral.origin = Vector2Add(
+            spiral.origin, Vector2Scale(spiral.direction, spiral.speed * deltaTime * frameScale));
+        const Vector2& center = spiral.origin;
+
+        // life is just a generous safety-net cap; the real despawn condition is leaving the
+        // camera view, same as the nerve ball.
+        if (spiral.age >= spiral.life || isOutsideCameraView(game, center, cameraDespawnMargin))
+        {
+            spiral.active = false;
+            continue;
+        }
+
+        for (int32_t s = 0; s < spiral.bladeCount; s++)
+        {
+            const float angle = spiral.age * nerveSpiralSpinSpeed +
+                                static_cast<float>(s) * 2 * std::numbers::pi_v<float> /
+                                    static_cast<float>(spiral.bladeCount);
+            const Vector2 bladePos =
+                Vector2Add(center, Vector2{.x = std::cos(angle) * spiral.spinRadius,
+                                           .y = std::sin(angle) * spiral.spinRadius});
+
+            for (size_t j = 0; j < game.run.enemies.size(); j++)
+            {
+                auto& enemy = game.run.enemies.at(j);
+                if (enemy.active && !enemy.phased &&
+                    CheckCollisionCircles(bladePos, orbitBladeHitRadius, enemy.position,
+                                          enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
+                {
+                    damageEnemy(game, j, spiral.damagePerBlade);
+                    recordDamage(game, DamageSource::Nerve, spiral.damagePerBlade);
+                }
+            }
+
+            for (size_t j = 0; j < game.run.eliteHazards.size(); j++)
+            {
+                auto& hazard = game.run.eliteHazards.at(j);
+                if (hazard.active &&
+                    CheckCollisionCircles(bladePos, orbitBladeHitRadius, hazard.position,
+                                          EliteHazardConstants::radius))
+                {
+                    damageEliteHazard(game, j, spiral.damagePerBlade);
+                    recordDamage(game, DamageSource::Nerve, spiral.damagePerBlade);
+                }
+            }
+
+            for (auto& boss : game.run.bosses)
+            {
+                if (boss.health <= 0)
+                {
+                    continue;
+                }
+                const Rectangle bossRect{.x = boss.position.x,
+                                         .y = boss.position.y,
+                                         .width = boss.size.x,
+                                         .height = boss.size.y};
+                if (CheckCollisionCircleRec(bladePos, orbitBladeHitRadius, bossRect))
+                {
+                    boss.health -= spiral.damagePerBlade;
+                    boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+                    recordDamage(game, DamageSource::Nerve, spiral.damagePerBlade);
+                }
+            }
+
+            for (auto& asteroid : game.run.asteroids)
+            {
+                if (asteroid.active && CheckCollisionCircles(bladePos, orbitBladeHitRadius,
+                                                             asteroid.position, asteroid.radius))
+                {
+                    asteroid.active = false;
+                    game.run.score += asteroidScore(asteroid.tier);
+                    breakAsteroid(game.run.asteroids, asteroid);
+                }
+            }
+        }
+    }
+
+    std::erase_if(game.run.nerveSpiralProjectiles,
+                  [](const NerveSpiralProjectile& s) { return !s.active; });
+}
+
+void updateBeamContact(Game& game, float deltaTime)
+{
+    const auto it = std::ranges::find_if(game.run.weapons, [](const Weapon& w)
+                                         { return w.type == WeaponType::Beam; });
+
+    if (it == game.run.weapons.end())
+    {
+        for (auto& enemy : game.run.enemies)
+        {
+            enemy.beamContact = false;
+            enemy.beamDamageAccum = 0;
+        }
+        for (auto& hazard : game.run.eliteHazards)
+        {
+            hazard.beamContact = false;
+            hazard.beamDamageAccum = 0;
+        }
+        for (auto& boss : game.run.bosses)
+        {
+            boss.beamContact = false;
+            boss.beamDamageAccum = 0;
+        }
+        return;
+    }
+
+    const Weapon& w = *it;
+    const Vector2 dir = aimAtMouse(game);
+    const float length = beamLength(game, w.level, w.evolved);
+    auto firstHit = static_cast<float>(weaponDamage(game, w.level)) * beamDamageMult;
+    if (w.evolved)
+    {
+        firstHit *= 1.5F;
+    }
+    const float dps = firstHit * continuousDpsMultiplier;
+    const Vector2 start = game.run.player.position;
+    const Vector2 end = Vector2Add(start, Vector2Scale(dir, length));
+
+    for (size_t j = 0; j < game.run.enemies.size(); j++)
+    {
+        auto& enemy = game.run.enemies.at(j);
+        if (!enemy.active || enemy.phased ||
+            !CheckCollisionCircleLine(
+                enemy.position, enemyKinds.at(static_cast<size_t>(enemy.kind)).radius, start, end))
+        {
+            enemy.beamContact = false;
+            enemy.beamDamageAccum = 0;
+            continue;
+        }
+
+        if (!enemy.beamContact)
+        {
+            enemy.beamContact = true;
+            const auto hit = static_cast<int32_t>(firstHit);
+            damageEnemy(game, j, hit);
+            recordDamage(game, DamageSource::Beam, hit);
+        }
+        else
+        {
+            enemy.beamDamageAccum += dps * deltaTime;
+            if (enemy.beamDamageAccum >= 1.0F)
+            {
+                const auto tick = static_cast<int32_t>(enemy.beamDamageAccum);
+                damageEnemy(game, j, tick);
+                recordDamage(game, DamageSource::Beam, tick);
+                enemy.beamDamageAccum -= static_cast<float>(tick);
+            }
+        }
+    }
+
+    for (size_t j = 0; j < game.run.eliteHazards.size(); j++)
+    {
+        auto& hazard = game.run.eliteHazards.at(j);
+        if (!hazard.active ||
+            !CheckCollisionCircleLine(hazard.position, EliteHazardConstants::radius, start, end))
+        {
+            hazard.beamContact = false;
+            hazard.beamDamageAccum = 0;
+            continue;
+        }
+
+        if (!hazard.beamContact)
+        {
+            hazard.beamContact = true;
+            const auto hit = static_cast<int32_t>(firstHit);
+            damageEliteHazard(game, j, hit);
+            recordDamage(game, DamageSource::Beam, hit);
+        }
+        else
+        {
+            hazard.beamDamageAccum += dps * deltaTime;
+            if (hazard.beamDamageAccum >= 1.0F)
+            {
+                const auto tick = static_cast<int32_t>(hazard.beamDamageAccum);
+                damageEliteHazard(game, j, tick);
+                recordDamage(game, DamageSource::Beam, tick);
+                hazard.beamDamageAccum -= static_cast<float>(tick);
+            }
+        }
+    }
+
+    for (auto& boss : game.run.bosses)
+    {
+        if (boss.health <= 0)
+        {
+            continue;
+        }
+        const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
+                                 .y = boss.position.y + boss.size.y / 2};
+        if (!CheckCollisionCircleLine(bossCenter, boss.size.x / 2, start, end))
+        {
+            boss.beamContact = false;
+            boss.beamDamageAccum = 0;
+            continue;
+        }
+
+        if (!boss.beamContact)
+        {
+            boss.beamContact = true;
+            const auto hit = static_cast<int32_t>(firstHit);
+            boss.health -= hit;
+            boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+            recordDamage(game, DamageSource::Beam, hit);
+        }
+        else
+        {
+            boss.beamDamageAccum += dps * deltaTime;
+            if (boss.beamDamageAccum >= 1.0F)
+            {
+                const auto tick = static_cast<int32_t>(boss.beamDamageAccum);
+                boss.health -= tick;
+                boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+                recordDamage(game, DamageSource::Beam, tick);
+                boss.beamDamageAccum -= static_cast<float>(tick);
+            }
         }
     }
 
@@ -1790,31 +2370,22 @@ void beamPulse(Game& game, Vector2 dir, float length, int32_t dmg, DamageSource 
             asteroid.active = false;
             game.run.score += asteroidScore(asteroid.tier);
             breakAsteroid(game.run.asteroids, asteroid);
-            hitAny = true;
         }
-    }
-
-    if (hitAny)
-    {
-        playSFX(game, game.resources.sounds.explosion);
     }
 }
 
-void fireNerveBurst(Game& game)
+void nerveLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg, float extraRadius)
 {
-    const Vector2 dir = aimAtMouse(game);
-    const Vector2 start = game.run.player.position;
-    const Vector2 end = Vector2Add(start, Vector2Scale(dir, nerveBurstLength));
-
     for (size_t j = 0; j < game.run.enemies.size(); j++)
     {
         const auto& enemy = game.run.enemies.at(j);
         if (enemy.active && !enemy.phased &&
             CheckCollisionCircleLine(
-                enemy.position, enemyKinds.at(static_cast<size_t>(enemy.kind)).radius, start, end))
+                enemy.position, enemyKinds.at(static_cast<size_t>(enemy.kind)).radius + extraRadius,
+                start, end))
         {
-            damageEnemy(game, j, nerveBurstDamage);
-            recordDamage(game, DamageSource::Nerve, nerveBurstDamage);
+            damageEnemy(game, j, dmg);
+            recordDamage(game, DamageSource::Nerve, dmg);
         }
     }
 
@@ -1822,17 +2393,18 @@ void fireNerveBurst(Game& game)
     {
         const auto& hazard = game.run.eliteHazards.at(j);
         if (hazard.active &&
-            CheckCollisionCircleLine(hazard.position, EliteHazardConstants::radius, start, end))
+            CheckCollisionCircleLine(hazard.position, EliteHazardConstants::radius + extraRadius,
+                                     start, end))
         {
-            damageEliteHazard(game, j, nerveBurstDamage);
-            recordDamage(game, DamageSource::Nerve, nerveBurstDamage);
+            damageEliteHazard(game, j, dmg);
+            recordDamage(game, DamageSource::Nerve, dmg);
         }
     }
 
     for (auto& asteroid : game.run.asteroids)
     {
         if (asteroid.active &&
-            CheckCollisionCircleLine(asteroid.position, asteroid.radius, start, end))
+            CheckCollisionCircleLine(asteroid.position, asteroid.radius + extraRadius, start, end))
         {
             asteroid.active = false;
             game.run.score += asteroidScore(asteroid.tier);
@@ -1848,13 +2420,22 @@ void fireNerveBurst(Game& game)
         }
         const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
                                  .y = boss.position.y + boss.size.y / 2};
-        if (CheckCollisionCircleLine(bossCenter, boss.size.x / 2, start, end))
+        if (CheckCollisionCircleLine(bossCenter, boss.size.x / 2 + extraRadius, start, end))
         {
-            boss.health -= nerveBurstDamage;
+            boss.health -= dmg;
             boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
-            recordDamage(game, DamageSource::Nerve, nerveBurstDamage);
+            recordDamage(game, DamageSource::Nerve, dmg);
         }
     }
+}
+
+void fireNerveBeam(Game& game)
+{
+    const Vector2 dir = aimAtMouse(game);
+    const Vector2 start = game.run.player.position;
+    const Vector2 end = Vector2Add(start, Vector2Scale(dir, nerveBurstLength));
+
+    nerveLineHit(game, start, end, nerveBurstDamage);
 
     game.run.nerveBurstFlashTimer = 0.15F;
     game.run.nerveBurstFlashEnd = end;
@@ -1863,6 +2444,75 @@ void fireNerveBurst(Game& game)
     duckBGM(game);
     triggerShake(game, 10, 0.3F);
     triggerHitPause(game, 0.08F);
+}
+
+void fireNerveBladeTornado(Game& game)
+{
+    const Vector2 dir = aimAtMouse(game);
+
+    int32_t count = 4;
+    if (const auto it = std::ranges::find_if(game.run.weapons, [](const Weapon& w)
+                                             { return w.type == WeaponType::Orbit; });
+        it != game.run.weapons.end())
+    {
+        count = orbitBladeCount(it->level);
+    }
+
+    // Divided down further than a one-shot hit would need: this travels and hits repeatedly
+    // per frame of overlap as it spins through a target, not once.
+    const int32_t dmgPerBlade = std::max(1, nerveBurstDamage / (count * 3));
+
+    game.run.nerveSpiralProjectiles.push_back(
+        NerveSpiralProjectile{.origin = game.run.player.position,
+                              .direction = dir,
+                              .age = 0,
+                              .speed = 9.0F,
+                              .life = 8.0F,
+                              .spinRadius = 50.0F,
+                              .bladeCount = count,
+                              .damagePerBlade = dmgPerBlade,
+                              .active = true});
+
+    playSFX(game, game.resources.sounds.nerveRelease);
+    duckBGM(game);
+    triggerShake(game, 10, 0.3F);
+    triggerHitPause(game, 0.08F);
+}
+
+void fireNerveBall(Game& game)
+{
+    const Vector2 dir = aimAtMouse(game);
+    const int32_t dmg = std::max(1, nerveBurstDamage / 4);
+
+    game.run.nerveBallProjectiles.push_back(
+        OrbitBladeProjectile{.position = game.run.player.position,
+                             .velocity = Vector2Scale(dir, 8.0F),
+                             .radius = 55.0F,
+                             .damage = dmg,
+                             .active = true});
+
+    playSFX(game, game.resources.sounds.nerveRelease);
+    duckBGM(game);
+    triggerShake(game, 10, 0.3F);
+    triggerHitPause(game, 0.08F);
+}
+
+void fireNerveBurst(Game& game)
+{
+    switch (static_cast<ShipClass>(game.resources.settings.shipIndex))
+    {
+    case ShipClass::Bastion:
+        fireNerveBladeTornado(game);
+        break;
+    case ShipClass::Interceptor:
+        fireNerveBeam(game);
+        break;
+    case ShipClass::Ranger:
+    case ShipClass::Count:
+    default:
+        fireNerveBall(game);
+        break;
+    }
 }
 
 void updateWaveSpawner(Game& game, float deltaTime)

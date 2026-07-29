@@ -82,14 +82,25 @@ void updateSandboxInput(Game& game)
 
     if (IsKeyPressed(KEY_R))
     {
-        game.run.weapons = {Weapon{.type = WeaponType::Forward, .level = 1}};
+        const ShipDef& ship = currentShip(game);
+        game.run.weapons = {Weapon{.type = ship.defaultWeapon, .level = 1}};
         game.run.skillLevels.fill(0);
-        game.run.skillLevels.at(static_cast<size_t>(SkillType::ForwardShot)) = 1;
+        game.run.skillLevels.at(
+            static_cast<size_t>(weaponGrantSkill.at(static_cast<size_t>(ship.defaultWeapon)))) = 1;
     }
 
     if (IsKeyPressed(KEY_G))
     {
         game.sandboxDeathEnabled = !game.sandboxDeathEnabled;
+    }
+
+    if (IsKeyPressed(KEY_I))
+    {
+        const auto count = static_cast<int32_t>(ShipClass::Count);
+        const int32_t dir = IsKeyDown(KEY_LEFT_SHIFT) ? -1 : 1;
+        game.resources.settings.shipIndex =
+            (game.resources.settings.shipIndex + dir + count) % count;
+        resetRun(game);
     }
 
     if (IsKeyPressed(KEY_PERIOD))

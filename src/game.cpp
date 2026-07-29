@@ -238,6 +238,9 @@ void resetRun(Game& game)
     game.run.eliteHazardSpawnTimer = static_cast<float>(GetRandomValue(45, 90));
     game.run.pickups.clear();
     game.run.mines.clear();
+    game.run.orbitBladeProjectiles.clear();
+    game.run.nerveBallProjectiles.clear();
+    game.run.nerveSpiralProjectiles.clear();
     game.run.deathParticles.clear();
     game.run.weapons = {Weapon{.type = ship.defaultWeapon, .level = 1}};
     game.run.skillLevels.fill(0);

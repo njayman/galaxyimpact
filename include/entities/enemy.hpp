@@ -49,6 +49,10 @@ class Enemy
     bool isElite;
     bool hitByDash;
     float hitFlashTimer;
+    bool orbitContact;
+    float orbitDamageAccum;
+    bool beamContact;
+    float beamDamageAccum;
 };
 
 enum class EliteHazardRole : std::uint8_t
@@ -72,6 +76,10 @@ class EliteHazard
     int health;
     int maxHealth;
     bool active;
+    bool orbitContact;
+    float orbitDamageAccum;
+    bool beamContact;
+    float beamDamageAccum;
 };
 
 struct EnemyKind

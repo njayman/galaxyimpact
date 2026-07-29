@@ -33,7 +33,11 @@ auto isNerveChargeFeeding(const Game& game) -> bool;
 auto chargeRegenDuration(const Game& game) -> float;
 auto aimAtMouse(const Game& game) -> Vector2;
 auto orbitRadius(int32_t level) -> float;
+auto orbitBladeCount(int32_t level) -> int32_t;
+auto orbitBladePosition(const Game& game, Vector2 center, float radius, int32_t index,
+                        int32_t count) -> Vector2;
 auto shockwaveRadius(int32_t level, bool evolved) -> float;
+auto beamLength(const Game& game, int32_t level, bool evolved) -> float;
 auto waveEnemyScale(const Game& game) -> float;
 auto isFusedPassive(const Game& game, SkillType id) -> bool;
 auto hasWeapon(const Game& game, WeaponType kind) -> bool;

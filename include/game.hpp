@@ -74,6 +74,9 @@ struct GameplayState
     float eliteHazardSpawnTimer;
     std::vector<Pickup> pickups;
     std::vector<Mine> mines;
+    std::vector<OrbitBladeProjectile> orbitBladeProjectiles;
+    std::vector<OrbitBladeProjectile> nerveBallProjectiles;
+    std::vector<NerveSpiralProjectile> nerveSpiralProjectiles;
     std::vector<Weapon> weapons;
     std::array<int, static_cast<size_t>(SkillType::Count)> skillLevels;
     std::vector<LevelUpChoice> pendingChoices;

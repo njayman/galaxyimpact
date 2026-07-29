@@ -76,6 +76,10 @@ class Boss
     float strafePhase;
     float hitFlashTimer;
     BossShape shape;
+    bool orbitContact;
+    float orbitDamageAccum;
+    bool beamContact;
+    float beamDamageAccum;
 };
 
 struct BossType
