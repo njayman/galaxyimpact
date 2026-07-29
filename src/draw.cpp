@@ -1627,14 +1627,15 @@ auto drawGame(Game& game) -> void
     const auto worldSrc =
         Rectangle{.x = 0,
                   .y = 0,
-                  .width = static_cast<float>(game.resources.worldTarget.texture.width),
-                  .height = -static_cast<float>(game.resources.worldTarget.texture.height)};
+                  .width = static_cast<float>(game.resources.worldTarget.get().texture.width),
+                  .height = -static_cast<float>(game.resources.worldTarget.get().texture.height)};
     const auto worldDst =
         Rectangle{.x = 0,
                   .y = 0,
-                  .width = static_cast<float>(game.resources.worldTarget.texture.width),
-                  .height = static_cast<float>(game.resources.worldTarget.texture.height)};
-    DrawTexturePro(game.resources.worldTarget.texture, worldSrc, worldDst, Vector2{}, 0, WHITE);
+                  .width = static_cast<float>(game.resources.worldTarget.get().texture.width),
+                  .height = static_cast<float>(game.resources.worldTarget.get().texture.height)};
+    DrawTexturePro(game.resources.worldTarget.get().texture, worldSrc, worldDst, Vector2{}, 0,
+                   WHITE);
 
     EndTextureMode();
 
@@ -1654,10 +1655,11 @@ auto drawGame(Game& game) -> void
     const auto srcRec =
         Rectangle{.x = 0,
                   .y = 0,
-                  .width = static_cast<float>(game.resources.pixelTarget.texture.width),
-                  .height = -static_cast<float>(game.resources.pixelTarget.texture.height)};
+                  .width = static_cast<float>(game.resources.pixelTarget.get().texture.width),
+                  .height = -static_cast<float>(game.resources.pixelTarget.get().texture.height)};
     const Rectangle letterbox = letterBoxRect(game);
-    DrawTexturePro(game.resources.pixelTarget.texture, srcRec, letterbox, Vector2{}, 0, WHITE);
+    DrawTexturePro(game.resources.pixelTarget.get().texture, srcRec, letterbox, Vector2{}, 0,
+                   WHITE);
 
     const float uiScale = letterbox.width / static_cast<float>(game.resources.screenWidth);
     BeginMode2D(Camera2D{.offset = Vector2{.x = letterbox.x, .y = letterbox.y},

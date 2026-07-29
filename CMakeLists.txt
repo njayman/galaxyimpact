@@ -44,7 +44,25 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(raygui)
 
-file(GLOB_RECURSE GALAXYIMPACT_SOURCES CONFIGURE_DEPENDS src/*.cpp)
+set(GALAXYIMPACT_SOURCES
+    src/democonfig.cpp
+    src/draw.cpp
+    src/entities/boss.cpp
+    src/entities/enemy.cpp
+    src/entities/player.cpp
+    src/entities/space.cpp
+    src/game.cpp
+    src/guitheme.cpp
+    src/highscore.cpp
+    src/main.cpp
+    src/menu.cpp
+    src/platform.cpp
+    src/raygui_impl.cpp
+    src/sandbox.cpp
+    src/settings.cpp
+    src/sound.cpp
+    src/update.cpp
+)
 
 add_executable(GalaxyImpact ${GALAXYIMPACT_SOURCES})
 

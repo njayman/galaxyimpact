@@ -40,6 +40,19 @@ auto main(int argc, char* argv[]) -> int
 
     platformInitSaveData();
 
+#if defined(__EMSCRIPTEN__)
+    // IDBFS mounting/loading happens asynchronously; keep rendering frames (so the tab
+    // stays responsive and Asyncify keeps yielding to the browser) until it's ready,
+    // instead of blocking here before save data - and highscore loading in InitGame() -
+    // can safely happen.
+    while (!platformSaveDataReady() && !WindowShouldClose())
+    {
+        BeginDrawing();
+        ClearBackground(BLACK);
+        EndDrawing();
+    }
+#endif
+
     Game game = InitGame();
     syncScreenSize(game);
     setupGuiTheme(game);
@@ -90,8 +103,8 @@ auto main(int argc, char* argv[]) -> int
     UnloadSound(game.resources.sounds.nerveCharge);
     UnloadSound(game.resources.sounds.nerveRelease);
     UnloadSound(game.resources.sounds.nerveFizzle);
-    UnloadRenderTexture(game.resources.pixelTarget);
-    UnloadRenderTexture(game.resources.worldTarget);
+    game.resources.pixelTarget.reset();
+    game.resources.worldTarget.reset();
     UnloadFont(game.resources.font);
     CloseAudioDevice();
     CloseWindow();

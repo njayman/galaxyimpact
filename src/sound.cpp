@@ -6,8 +6,8 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <numbers>
+#include <random>
 #include <vector>
 
 namespace
@@ -25,6 +25,13 @@ auto secondsToSamples(float seconds) -> size_t
 }
 
 constexpr float toneCutoffDecays = 6.0F;
+
+auto noiseSample() -> float
+{
+    static std::mt19937 rng{std::random_device{}()};
+    static std::uniform_real_distribution<float> dist(-1.0F, 1.0F);
+    return dist(rng);
+}
 
 void addTone(std::vector<float>& buf, float startSeconds, float freq, float amp, float decaySeconds)
 {
@@ -86,8 +93,7 @@ void addNoise(std::vector<float>& buf, float startSeconds, float amp, float deca
             break;
         }
         const float env = std::exp(-elapsed / decaySeconds);
-        buf.at(i) += amp * env *
-                     (2.0F * static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX) - 1.0F);
+        buf.at(i) += amp * env * noiseSample();
     }
 }
 

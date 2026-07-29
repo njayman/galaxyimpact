@@ -7,6 +7,7 @@
 #include "entities/space.hpp"
 #include "highscore.hpp"
 #include "raylib.h"
+#include "rendertarget.hpp"
 #include "settings.hpp"
 #include "sound.hpp"
 #include <array>
@@ -48,8 +49,8 @@ struct GameResources
     int windowWidth{};
     int windowHeight{};
     float renderScale{1.0F};
-    RenderTexture2D worldTarget;
-    RenderTexture2D pixelTarget;
+    RenderTarget worldTarget;
+    RenderTarget pixelTarget;
     Font font;
     Sounds sounds;
     BgmLayers bgm;

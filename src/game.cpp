@@ -81,11 +81,11 @@ void createRenderTargets(Game& game)
         std::max(1, static_cast<int>(static_cast<float>(game.resources.screenHeight) *
                                      game.resources.renderScale));
 
-    game.resources.worldTarget = LoadRenderTexture(width, height);
-    SetTextureFilter(game.resources.worldTarget.texture, TEXTURE_FILTER_BILINEAR);
+    game.resources.worldTarget.load(width, height);
+    SetTextureFilter(game.resources.worldTarget.get().texture, TEXTURE_FILTER_BILINEAR);
 
-    game.resources.pixelTarget = LoadRenderTexture(width, height);
-    SetTextureFilter(game.resources.pixelTarget.texture, TEXTURE_FILTER_BILINEAR);
+    game.resources.pixelTarget.load(width, height);
+    SetTextureFilter(game.resources.pixelTarget.get().texture, TEXTURE_FILTER_BILINEAR);
 }
 
 }
@@ -191,8 +191,6 @@ void syncScreenSize(Game& game)
     if (const float newScale = computeRenderScale(game); newScale != game.resources.renderScale)
     {
         game.resources.renderScale = newScale;
-        UnloadRenderTexture(game.resources.worldTarget);
-        UnloadRenderTexture(game.resources.pixelTarget);
         createRenderTargets(game);
     }
 }

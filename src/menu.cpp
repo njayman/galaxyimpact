@@ -2,6 +2,8 @@
 
 #include "draw.hpp"
 #include <algorithm>
+#include <cfloat>
+#include <cmath>
 
 auto hudScale(const Game& game) -> float
 {
@@ -87,7 +89,8 @@ auto updateMenuSelectionWindow(Game& game, int32_t index, int32_t optionCount, i
     bool confirmed = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
 
     const Vector2 mouseDelta = GetMouseDelta();
-    const bool mouseMoved = mouseDelta.x != 0 || mouseDelta.y != 0;
+    const bool mouseMoved =
+        std::abs(mouseDelta.x) > FLT_EPSILON || std::abs(mouseDelta.y) > FLT_EPSILON;
     if (!keyboardMoved && mouseMoved)
     {
         if (const auto row = hoveredColumnRow(optionCount, width, height, gap, topY, game);

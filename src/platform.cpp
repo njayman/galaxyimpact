@@ -28,30 +28,20 @@ void platformInitSaveData()
             }
             _onIdbfsSynced();
         }););
-
-    while (idbfsSyncPending)
-    {
-        emscripten_sleep(10);
-    }
 }
+
+auto platformSaveDataReady() -> bool { return !idbfsSyncPending; }
 
 void platformSyncSaveData()
 {
-    idbfsSyncPending = true;
-
+    // Fire-and-forget: nothing needs to block on the write completing.
     EM_ASM(FS.syncfs(
         false, function(err) {
             if (err)
             {
                 console.error('Galaxy Impact: IDBFS save failed', err);
             }
-            _onIdbfsSynced();
         }););
-
-    while (idbfsSyncPending)
-    {
-        emscripten_sleep(10);
-    }
 }
 
 void platformExitToLanding() { EM_ASM(window.location.href = 'index.html';); }
@@ -95,6 +85,7 @@ auto getSaveDataDir() -> std::string
 }
 
 void platformInitSaveData() {}
+auto platformSaveDataReady() -> bool { return true; }
 void platformSyncSaveData() {}
 void platformExitToLanding() {}
 
