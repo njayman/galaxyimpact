@@ -2,6 +2,7 @@
 
 #include "entities/enemy.hpp"
 #include "entities/item.hpp"
+#include "entities/ship.hpp"
 #include "raylib.h"
 #include "raymath.h"
 #include "update.hpp"
@@ -75,7 +76,7 @@ void updateSandboxInput(Game& game)
     if (IsKeyPressed(KEY_H))
     {
         game.run.player.health = game.run.player.maxHealth;
-        game.run.player.shieldStacks = playerConstants::maxShieldStack;
+        game.run.player.shieldStacks = currentShip(game).maxShieldStacks;
         game.run.player.nerve = UpdateConstants::nerveMax;
     }
 

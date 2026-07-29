@@ -57,6 +57,7 @@ struct Settings
     bool soundOn{true};
     int32_t fpsIndex{};
     int32_t hudScaleIndex{defaultHudScaleIndex};
+    int32_t shipIndex{1};
 };
 
 auto loadSettings() -> Settings;

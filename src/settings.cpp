@@ -1,5 +1,6 @@
 #include "settings.hpp"
 
+#include "entities/ship.hpp"
 #include "game.hpp"
 #include "platform.hpp"
 #include <fstream>
@@ -31,7 +32,8 @@ auto loadSettings() -> Settings
                       .bgmOn = true,
                       .soundOn = true,
                       .fpsIndex = 0,
-                      .hudScaleIndex = defaultHudScaleIndex};
+                      .hudScaleIndex = defaultHudScaleIndex,
+                      .shipIndex = 1};
 
     std::ifstream file(settingsFilePath());
     if (!file)
@@ -75,6 +77,14 @@ auto loadSettings() -> Settings
         }
     }
 
+    if (int32_t shipIdx = 0; file >> shipIdx)
+    {
+        if (shipIdx >= 0 && static_cast<size_t>(shipIdx) < static_cast<size_t>(ShipClass::Count))
+        {
+            settings.shipIndex = shipIdx;
+        }
+    }
+
     return settings;
 }
 
@@ -88,7 +98,7 @@ void saveSettings(const Settings& settings)
 
     file << settings.resolutionIndex << ' ' << static_cast<int32_t>(settings.difficulty) << ' '
          << (settings.bgmOn ? 1 : 0) << ' ' << (settings.soundOn ? 1 : 0) << ' '
-         << settings.fpsIndex << ' ' << settings.hudScaleIndex;
+         << settings.fpsIndex << ' ' << settings.hudScaleIndex << ' ' << settings.shipIndex;
     file.close();
     platformSyncSaveData();
 }

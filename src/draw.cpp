@@ -4,6 +4,7 @@
 #include "entities/enemy.hpp"
 #include "entities/item.hpp"
 #include "entities/player.hpp"
+#include "entities/ship.hpp"
 #include "entities/space.hpp"
 #include "guitheme.hpp"
 #include "menu.hpp"
@@ -61,6 +62,7 @@ namespace
 {
 
 void drawTitle(const Game& game);
+void drawShipSelect(const Game& game);
 void drawGameOver(const Game& game);
 void drawOverlay(const Game& game);
 void drawSettings(const Game& game);
@@ -85,8 +87,8 @@ void drawChargeParticles(Vector2 center, float fraction, Color color, float maxR
 void drawComet(const BossProjectile& projectile);
 void drawHUD(const Game& game);
 void drawDownwardTriangleIcon(float cx, int32_t y, float size, Color fillColor, bool filled);
-void drawHealthPips(const Game& game, int32_t x, int32_t y);
-auto healthPipsWidth(const Game& game) -> int32_t;
+void drawHealthBar(const Game& game, int32_t x, int32_t y);
+auto healthBarWidthWithLabel() -> int32_t;
 void drawShieldStackPips(const Game& game, int32_t x, int32_t y);
 void drawNerveBar(const Game& game, int32_t x, int32_t y);
 auto drawDamageMeter(const Game& game, int32_t x, int32_t y) -> int32_t;
@@ -188,6 +190,34 @@ void drawTitle(const Game& game)
     drawHighScores(game,
                    game.resources.windowWidth / 2 - static_cast<int32_t>(80 * guiUiScale(game)),
                    static_cast<int32_t>(280 * guiUiScale(game)), game.resources.highScores);
+}
+
+void drawShipSelect(const Game& game)
+{
+    applyGuiScale(game);
+    windowText(game, "SELECT SHIP", game.resources.windowWidth / 2, 80, 40, Palette::Accent);
+
+    std::vector<std::string> names;
+    names.reserve(ships.size());
+    for (const auto& ship : ships)
+    {
+        names.emplace_back(ship.name);
+    }
+    drawMenu(game, "", names, MenuLayout::titleMenuY);
+
+    const ShipDef& highlighted = ships.at(static_cast<size_t>(game.menuIndex));
+    const int32_t descY =
+        MenuLayout::titleMenuY +
+        (MenuLayout::buttonHeight + MenuLayout::buttonGap) * static_cast<int32_t>(ships.size()) +
+        30;
+    windowText(game, std::string(highlighted.description).c_str(), game.resources.windowWidth / 2,
+               descY, 18, Palette::StructLight);
+
+    const std::string stats =
+        std::format("HP {:.0f}   Armor {:.0f}   Dmg x{:.1f}   Shields {}", highlighted.maxHealth,
+                    highlighted.armor, highlighted.damageMult, highlighted.maxShieldStacks);
+    windowText(game, stats.c_str(), game.resources.windowWidth / 2, descY + 30, 18,
+               Palette::StructMid);
 }
 
 void drawGameOver(const Game& game)
@@ -823,12 +853,65 @@ void drawShip(const Game& game)
                  Vector2Add(p, rotate(Vector2{.x = 0, .y = r * (1.0F + 0.3F * flicker)})),
                  flameRight, Fade(Palette::StructLight, 0.6F * flicker));
 
-    const Vector2 tip = Vector2Add(p, rotate(Vector2{.x = 0, .y = -r}));
-    const Vector2 left = Vector2Add(p, rotate(Vector2{.x = -r * 0.8F, .y = r}));
-    const Vector2 right = Vector2Add(p, rotate(Vector2{.x = r * 0.8F, .y = r}));
+    const auto shipClass = static_cast<ShipClass>(game.resources.settings.shipIndex);
 
-    DrawTriangle(tip, left, right, shipColor);
-    DrawTriangleLines(tip, left, right, Fade(Palette::StructDark, 0.6F));
+    switch (shipClass)
+    {
+    case ShipClass::Bastion:
+    {
+        DrawPoly(p, 6, r, angle * RAD2DEG, shipColor);
+        DrawPolyLines(p, 6, r, angle * RAD2DEG, Fade(Palette::StructDark, 0.6F));
+
+        const Vector2 wingLeftFront =
+            Vector2Add(p, rotate(Vector2{.x = -r * 0.5F, .y = -r * 0.3F}));
+        const Vector2 wingLeftTip = Vector2Add(p, rotate(Vector2{.x = -r * 1.3F, .y = r * 0.2F}));
+        const Vector2 wingLeftBack = Vector2Add(p, rotate(Vector2{.x = -r * 0.5F, .y = r * 0.9F}));
+        DrawTriangle(wingLeftFront, wingLeftTip, wingLeftBack, Fade(shipColor, 0.85F));
+
+        const Vector2 wingRightFront =
+            Vector2Add(p, rotate(Vector2{.x = r * 0.5F, .y = -r * 0.3F}));
+        const Vector2 wingRightTip = Vector2Add(p, rotate(Vector2{.x = r * 1.3F, .y = r * 0.2F}));
+        const Vector2 wingRightBack = Vector2Add(p, rotate(Vector2{.x = r * 0.5F, .y = r * 0.9F}));
+        DrawTriangle(wingRightTip, wingRightFront, wingRightBack, Fade(shipColor, 0.85F));
+        break;
+    }
+    case ShipClass::Interceptor:
+    {
+        const Vector2 dartTip = Vector2Add(p, rotate(Vector2{.x = 0, .y = -r * 1.3F}));
+        const Vector2 dartLeft = Vector2Add(p, rotate(Vector2{.x = -r * 0.45F, .y = r * 0.9F}));
+        const Vector2 dartRight = Vector2Add(p, rotate(Vector2{.x = r * 0.45F, .y = r * 0.9F}));
+        DrawTriangle(dartTip, dartLeft, dartRight, shipColor);
+        DrawTriangleLines(dartTip, dartLeft, dartRight, Fade(Palette::StructDark, 0.6F));
+
+        const Vector2 finLeftInner = Vector2Add(p, rotate(Vector2{.x = -r * 0.2F, .y = r * 0.5F}));
+        const Vector2 finLeftOuter = Vector2Add(p, rotate(Vector2{.x = -r * 1.1F, .y = r * 1.3F}));
+        DrawTriangle(dartLeft, finLeftInner, finLeftOuter, Fade(shipColor, 0.8F));
+
+        const Vector2 finRightInner = Vector2Add(p, rotate(Vector2{.x = r * 0.2F, .y = r * 0.5F}));
+        const Vector2 finRightOuter = Vector2Add(p, rotate(Vector2{.x = r * 1.1F, .y = r * 1.3F}));
+        DrawTriangle(finRightInner, dartRight, finRightOuter, Fade(shipColor, 0.8F));
+        break;
+    }
+    case ShipClass::Ranger:
+    case ShipClass::Count:
+    default:
+    {
+        const Vector2 tip = Vector2Add(p, rotate(Vector2{.x = 0, .y = -r}));
+        const Vector2 left = Vector2Add(p, rotate(Vector2{.x = -r * 0.8F, .y = r}));
+        const Vector2 right = Vector2Add(p, rotate(Vector2{.x = r * 0.8F, .y = r}));
+        DrawTriangle(tip, left, right, shipColor);
+        DrawTriangleLines(tip, left, right, Fade(Palette::StructDark, 0.6F));
+
+        const Vector2 plateTop = Vector2Add(p, rotate(Vector2{.x = 0, .y = -r * 0.5F}));
+        const Vector2 plateL = Vector2Add(p, rotate(Vector2{.x = -r * 0.35F, .y = r * 0.3F}));
+        const Vector2 plateB = Vector2Add(p, rotate(Vector2{.x = 0, .y = r * 0.7F}));
+        const Vector2 plateR = Vector2Add(p, rotate(Vector2{.x = r * 0.35F, .y = r * 0.3F}));
+        DrawTriangle(plateTop, plateL, plateB, Fade(Palette::StructLight, 0.5F));
+        DrawTriangle(plateTop, plateB, plateR, Fade(Palette::StructLight, 0.5F));
+        break;
+    }
+    }
+
     DrawCircleV(p, r * 0.3F, Palette::StructLight);
 
     if (game.run.player.nerveCharging)
@@ -1337,8 +1420,8 @@ void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius)
 
 void drawHUD(const Game& game)
 {
-    drawHealthPips(game, 10, 10);
-    drawShieldStackPips(game, 10 + healthPipsWidth(game) + 20, 10);
+    drawHealthBar(game, 10, 10);
+    drawShieldStackPips(game, 10 + healthBarWidthWithLabel() + 20, 10);
 
     const std::string statsText = std::format("Score: {}   Wave: {}   Lv: {}", game.run.score,
                                               game.run.waveNumber, game.run.level);
@@ -1397,44 +1480,31 @@ void drawDownwardTriangleIcon(float cx, int32_t y, float size, Color fillColor, 
     }
 }
 
-void drawHealthPips(const Game& game, int32_t x, int32_t y)
+constexpr int32_t healthBarWidth = 200;
+constexpr int32_t healthBarHeight = 14;
+
+void drawHealthBar(const Game& game, int32_t x, int32_t y)
 {
-    constexpr float size = 11;
-    constexpr float gap = 24;
+    const float frac = std::clamp(game.run.player.health / game.run.player.maxHealth, 0.0F, 1.0F);
 
-    for (int32_t i = 0; i < game.run.player.maxHealth; i++)
-    {
-        const float cx = static_cast<float>(x) + size + static_cast<float>(i) * gap;
+    DrawRectangle(x, y, healthBarWidth, healthBarHeight, Fade(Palette::StructMid, 0.5F));
+    DrawRectangle(x, y, static_cast<int32_t>(static_cast<float>(healthBarWidth) * frac),
+                  healthBarHeight, Palette::Accent);
+    DrawRectangleLines(x, y, healthBarWidth, healthBarHeight, Palette::StructDark);
 
-        if (i < game.run.player.health)
-        {
-            drawDownwardTriangleIcon(cx, y, size, Palette::Accent, true);
-        }
-        else if (i == game.run.player.health && game.run.player.halfLifeOrb)
-        {
-            drawDownwardTriangleIcon(cx, y, size, Fade(Palette::Accent, 0.45F), true);
-        }
-        else
-        {
-            drawDownwardTriangleIcon(cx, y, size, Color{}, false);
-        }
-    }
+    const std::string label =
+        std::format("{:.0f}/{:.0f}", game.run.player.health, game.run.player.maxHealth);
+    drawText(game, label.c_str(), x + healthBarWidth + 8, y - 3, 16, Palette::StructLight);
 }
 
-auto healthPipsWidth(const Game& game) -> int32_t
-{
-    constexpr float size = 11;
-    constexpr float gap = 24;
-    return static_cast<int32_t>(size + static_cast<float>(game.run.player.maxHealth - 1) * gap +
-                                size * 0.8F);
-}
+auto healthBarWidthWithLabel() -> int32_t { return healthBarWidth + 60; }
 
 void drawShieldStackPips(const Game& game, int32_t x, int32_t y)
 {
     constexpr float size = 11;
     constexpr float gap = 24;
 
-    for (int32_t i = 0; i < playerConstants::maxShieldStack; i++)
+    for (int32_t i = 0; i < currentShip(game).maxShieldStacks; i++)
     {
         const float cx = static_cast<float>(x) + size + static_cast<float>(i) * gap;
         const Color fillColor = Fade(Palette::Shield, 0.85F);
@@ -1592,6 +1662,7 @@ auto drawGame(Game& game) -> void
     switch (game.state)
     {
     case GameState::TITLE:
+    case GameState::SHIP_SELECT:
         beginPixelZoom(game);
         drawBackgroundStars(game, Vector2{});
         EndMode2D();
@@ -1681,6 +1752,7 @@ auto drawGame(Game& game) -> void
         }
         break;
     case GameState::TITLE:
+    case GameState::SHIP_SELECT:
     case GameState::GAME_OVER:
         break;
     }
@@ -1691,6 +1763,9 @@ auto drawGame(Game& game) -> void
     {
     case GameState::TITLE:
         drawTitle(game);
+        break;
+    case GameState::SHIP_SELECT:
+        drawShipSelect(game);
         break;
     case GameState::GAMEPLAY:
         break;

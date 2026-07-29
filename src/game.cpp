@@ -1,5 +1,6 @@
 #include "game.hpp"
 
+#include "entities/ship.hpp"
 #include "highscore.hpp"
 #include "palette.hpp"
 #include "platform.hpp"
@@ -197,12 +198,14 @@ void syncScreenSize(Game& game)
 
 void resetRun(Game& game)
 {
+    const ShipDef& ship = currentShip(game);
+
     game.run.player = Player{.position = Vector2{},
-                             .radius = 15,
-                             .color = Palette::Accent,
-                             .speed = 5,
-                             .health = 5,
-                             .maxHealth = 5,
+                             .radius = ship.radius,
+                             .color = ship.color,
+                             .speed = ship.speed,
+                             .health = ship.maxHealth,
+                             .maxHealth = ship.maxHealth,
                              .shieldActive = false,
                              .shieldTimer = 0,
                              .shieldCooldownTimer = 0,
@@ -216,7 +219,6 @@ void resetRun(Game& game)
                              .dashTimer = 0,
                              .dashVelocity = Vector2{},
                              .shieldStacks = 0,
-                             .halfLifeOrb = false,
                              .nerve = 0,
                              .nerveCharging = false,
                              .nerveChargeTimer = 0,
@@ -237,9 +239,10 @@ void resetRun(Game& game)
     game.run.pickups.clear();
     game.run.mines.clear();
     game.run.deathParticles.clear();
-    game.run.weapons = {Weapon{.type = WeaponType::Forward, .level = 1}};
+    game.run.weapons = {Weapon{.type = ship.defaultWeapon, .level = 1}};
     game.run.skillLevels.fill(0);
-    game.run.skillLevels.at(static_cast<size_t>(SkillType::ForwardShot)) = 1;
+    game.run.skillLevels.at(
+        static_cast<size_t>(weaponGrantSkill.at(static_cast<size_t>(ship.defaultWeapon)))) = 1;
     game.run.postCapDamageLevels = 0;
     game.run.damageMeter = DamageMeter{};
     game.run.damageMeterDisplay = DamageMeter{};

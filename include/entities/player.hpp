@@ -2,11 +2,6 @@
 
 #include "raylib.h"
 
-namespace playerConstants
-{
-constexpr int maxShieldStack = 3;
-}
-
 class Player
 {
   public:
@@ -14,8 +9,8 @@ class Player
     float radius;
     Color color;
     float speed;
-    int health;
-    int maxHealth;
+    float health;
+    float maxHealth;
     bool shieldActive;
     float shieldTimer;
     float shieldCooldownTimer;
@@ -29,7 +24,6 @@ class Player
     float dashTimer;
     Vector2 dashVelocity;
     int shieldStacks;
-    bool halfLifeOrb;
     float nerve;
     bool nerveCharging;
     float nerveChargeTimer;

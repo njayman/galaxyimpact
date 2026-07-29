@@ -3,6 +3,7 @@
 #include "democonfig.hpp"
 #include "draw.hpp"
 #include "entities/item.hpp"
+#include "entities/ship.hpp"
 #include "highscore.hpp"
 #include "menu.hpp"
 #include "palette.hpp"
@@ -21,6 +22,9 @@ constexpr float frameScale = UpdateConstants::frameScale;
 constexpr float projectileSpeed = 10;
 constexpr float projectileSize = 7;
 constexpr int32_t bossRamDamage = 50;
+// Large enough that armor reduction (damagePlayer) can never make an intended-lethal hit
+// survivable.
+constexpr int32_t instakillDamage = 999999;
 constexpr float blackHolePull = 2;
 constexpr float blackHoleSlow = 2.5F;
 constexpr float blackHoleAsteroidPull = 1.5F;
@@ -33,6 +37,7 @@ constexpr float pickupMagnetSpeed = 7;
 constexpr float dashSpeed = 22;
 constexpr float dashDuration = 0.18F;
 constexpr int32_t dashDamage = 15;
+constexpr float dashPushDistance = 60.0F;
 constexpr float dashKillChargeRefund = 0.6F;
 constexpr float shieldKillChargeRefund = 0.6F;
 constexpr float bossBodyLingerLimit = 1.0F;
@@ -146,6 +151,7 @@ void triggerShake(Game& game, float intensity, float duration);
 void triggerHitPause(Game& game, float duration);
 void duckBGM(Game& game);
 auto updateTitle(Game& game) -> bool;
+auto updateShipSelect(Game& game) -> bool;
 auto updatePaused(Game& game) -> bool;
 auto updateGameOver(Game& game) -> bool;
 auto updateLevelUp(Game& game) -> bool;
@@ -261,7 +267,8 @@ auto updateTitle(Game& game) -> bool
         switch (index)
         {
         case 0:
-            resetRun(game);
+            game.menuIndex = game.resources.settings.shipIndex;
+            game.state = GameState::SHIP_SELECT;
             break;
         case 1:
             game.settingsReturnState = GameState::TITLE;
@@ -273,6 +280,31 @@ auto updateTitle(Game& game) -> bool
         default:
             break;
         }
+    }
+
+    return false;
+}
+
+auto updateShipSelect(Game& game) -> bool
+{
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
+        game.menuIndex = 0;
+        game.state = GameState::TITLE;
+        return false;
+    }
+
+    const auto [index, confirmed] = updateMenuSelectionWindow(
+        game, game.menuIndex, static_cast<int32_t>(ShipClass::Count), MenuLayout::buttonWidth,
+        MenuLayout::buttonHeight, MenuLayout::buttonGap, MenuLayout::titleMenuY);
+    playMenuSounds(game, index, confirmed);
+    game.menuIndex = index;
+
+    if (confirmed)
+    {
+        game.resources.settings.shipIndex = index;
+        saveSettings(game.resources.settings);
+        resetRun(game);
     }
 
     return false;
@@ -376,7 +408,7 @@ auto updateLevelUp(Game& game) -> bool
         case ChoiceType::Shield:
             for (int32_t i = 0; i < choice.count; i++)
             {
-                if (game.run.player.shieldStacks < playerConstants::maxShieldStack)
+                if (game.run.player.shieldStacks < currentShip(game).maxShieldStacks)
                 {
                     game.run.player.shieldStacks++;
                 }
@@ -778,7 +810,8 @@ void damagePlayer(Game& game, int32_t amount)
         return;
     }
 
-    game.run.player.health -= amount;
+    const float reduced = std::max(1.0F, static_cast<float>(amount) - currentShip(game).armor);
+    game.run.player.health -= reduced;
     game.run.player.immunityTimer = 1.0F;
 
     if (game.run.player.health <= 0)
@@ -867,7 +900,7 @@ void updateGameplay(Game& game, float deltaTime)
         if (game.run.player.blackHoleCoreTimer >= 1.0F)
         {
             game.run.player.blackHoleCoreTimer = 0;
-            damagePlayer(game, game.run.player.health);
+            damagePlayer(game, instakillDamage);
         }
     }
     else
@@ -1150,17 +1183,32 @@ void updatePlayerMovement(Game& game, float deltaTime)
         if (game.run.player.dashing && !boss.hitByDash)
         {
             boss.hitByDash = true;
-            const int32_t ramDamage =
-                game.run.player.shieldActive ? bossRamDamage * 2 : bossRamDamage;
-            boss.health -= ramDamage;
-            boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+            const DashQuirk quirk = currentShip(game).dashQuirk;
+
+            if (quirk != DashQuirk::Push)
+            {
+                const float quirkMult = quirk == DashQuirk::Hybrid ? 0.5F : 1.0F;
+                const auto ramDamage = static_cast<int32_t>(
+                    static_cast<float>(game.run.player.shieldActive ? bossRamDamage * 2
+                                                                    : bossRamDamage) *
+                    quirkMult * currentShip(game).damageMult);
+                boss.health -= ramDamage;
+                boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+                if (game.run.player.shieldActive)
+                {
+                    game.run.player.chargeRegenTimer =
+                        std::max(0.0F, game.run.player.chargeRegenTimer - shieldKillChargeRefund);
+                }
+            }
+
+            if (quirk != DashQuirk::Damage)
+            {
+                const Vector2 pushDir = Vector2Normalize(game.run.player.dashVelocity);
+                boss.position = Vector2Add(boss.position, Vector2Scale(pushDir, dashPushDistance));
+            }
+
             triggerShake(game, 14, 0.4F);
             triggerHitPause(game, 0.12F);
-            if (game.run.player.shieldActive)
-            {
-                game.run.player.chargeRegenTimer =
-                    std::max(0.0F, game.run.player.chargeRegenTimer - shieldKillChargeRefund);
-            }
         }
     }
 
@@ -1170,7 +1218,7 @@ void updatePlayerMovement(Game& game, float deltaTime)
         if (game.run.player.bossBodyTimer >= bossBodyLingerLimit)
         {
             game.run.player.bossBodyTimer = 0;
-            damagePlayer(game, game.run.player.health);
+            damagePlayer(game, instakillDamage);
         }
     }
     else
@@ -1231,7 +1279,8 @@ void updateAbilityCharges(Game& game, float deltaTime)
 
             game.run.player.dashing = true;
             game.run.player.dashTimer = dashDuration;
-            game.run.player.dashVelocity = Vector2Scale(aimAtMouse(game), dashSpeed);
+            game.run.player.dashVelocity =
+                Vector2Scale(aimAtMouse(game), dashSpeed * currentShip(game).dashDistanceMult);
 
             for (auto& enemy : game.run.enemies)
             {
@@ -1366,6 +1415,7 @@ auto weaponDamage(const Game& game, int32_t level) -> int32_t
     dmg *= 1 + 0.15F * static_cast<float>(
                            game.run.skillLevels.at(static_cast<size_t>(SkillType::Damage)));
     dmg *= 1 + postCapDamageBonusPerLevel * static_cast<float>(game.run.postCapDamageLevels);
+    dmg *= currentShip(game).damageMult;
     return static_cast<int32_t>(dmg);
 }
 
@@ -2219,7 +2269,7 @@ void updatePickups(Game& game, float deltaTime)
                 collectLifeOrb(game);
                 break;
             case PickupType::Shield:
-                if (game.run.player.shieldStacks < playerConstants::maxShieldStack)
+                if (game.run.player.shieldStacks < currentShip(game).maxShieldStacks)
                 {
                     game.run.player.shieldStacks++;
                 }
@@ -2234,17 +2284,7 @@ void updatePickups(Game& game, float deltaTime)
 
 void collectLifeOrb(Game& game)
 {
-    if (!game.run.player.halfLifeOrb)
-    {
-        game.run.player.halfLifeOrb = true;
-        return;
-    }
-
-    game.run.player.halfLifeOrb = false;
-    if (game.run.player.health < game.run.player.maxHealth)
-    {
-        game.run.player.health++;
-    }
+    game.run.player.health = std::min(game.run.player.health + 0.5F, game.run.player.maxHealth);
 }
 
 void startLevelUp(Game& game)
@@ -2904,6 +2944,8 @@ void updateEnemies(Game& game, float deltaTime)
         if (collides && game.run.player.dashing && !enemy.hitByDash)
         {
             enemy.hitByDash = true;
+            const DashQuirk quirk = currentShip(game).dashQuirk;
+
             if (game.run.player.shieldActive)
             {
                 damageEnemy(game, i, 999);
@@ -2911,8 +2953,20 @@ void updateEnemies(Game& game, float deltaTime)
             }
             else
             {
-                damageEnemy(game, i, dashDamage);
-                recordDamage(game, DamageSource::Dash, dashDamage);
+                if (quirk != DashQuirk::Push)
+                {
+                    const auto dmg = static_cast<int32_t>(
+                        static_cast<float>(dashDamage) *
+                        (quirk == DashQuirk::Hybrid ? 0.5F : 1.0F) * currentShip(game).damageMult);
+                    damageEnemy(game, i, dmg);
+                    recordDamage(game, DamageSource::Dash, dmg);
+                }
+                if (quirk != DashQuirk::Damage)
+                {
+                    const Vector2 pushDir = Vector2Normalize(game.run.player.dashVelocity);
+                    enemy.position =
+                        Vector2Add(enemy.position, Vector2Scale(pushDir, dashPushDistance));
+                }
                 damagePlayer(game, enemyDamage(game, kind.contactDamage));
             }
 
@@ -3609,7 +3663,7 @@ void processBeamAttack(Game& game, Boss& boss, Vector2 beamStart, Vector2 beamEn
     if (boss.beamShieldLatched)
     {
         boss.beamShieldLatched = false;
-        damagePlayer(game, game.run.player.maxHealth);
+        damagePlayer(game, instakillDamage);
         return;
     }
 
@@ -3844,6 +3898,8 @@ auto UpdateGame(Game& game, float deltaTime) -> bool
     {
     case GameState::TITLE:
         return updateTitle(game);
+    case GameState::SHIP_SELECT:
+        return updateShipSelect(game);
     case GameState::GAMEPLAY:
         updateGameplay(game, deltaTime);
         break;

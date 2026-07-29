@@ -33,6 +33,7 @@ constexpr int defaultWindowHeight = 1080;
 enum class GameState : std::uint8_t
 {
     TITLE,
+    SHIP_SELECT,
     GAMEPLAY,
     PAUSED,
     GAME_OVER,
