@@ -30,7 +30,8 @@ auto loadSettings() -> Settings
                       .difficulty = Difficulty::Normal,
                       .bgmOn = true,
                       .soundOn = true,
-                      .fpsIndex = 0};
+                      .fpsIndex = 0,
+                      .hudScaleIndex = defaultHudScaleIndex};
 
     std::ifstream file(settingsFilePath());
     if (!file)
@@ -66,6 +67,14 @@ auto loadSettings() -> Settings
         }
     }
 
+    if (int32_t hudScaleIdx = 0; file >> hudScaleIdx)
+    {
+        if (hudScaleIdx >= 0 && static_cast<size_t>(hudScaleIdx) < hudScaleOptions.size())
+        {
+            settings.hudScaleIndex = hudScaleIdx;
+        }
+    }
+
     return settings;
 }
 
@@ -79,7 +88,7 @@ void saveSettings(const Settings& settings)
 
     file << settings.resolutionIndex << ' ' << static_cast<int32_t>(settings.difficulty) << ' '
          << (settings.bgmOn ? 1 : 0) << ' ' << (settings.soundOn ? 1 : 0) << ' '
-         << settings.fpsIndex;
+         << settings.fpsIndex << ' ' << settings.hudScaleIndex;
     file.close();
     platformSyncSaveData();
 }

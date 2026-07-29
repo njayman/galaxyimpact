@@ -17,7 +17,7 @@ void applyGuiScale(const Game& game)
 
 void setupGuiTheme(const Game& game)
 {
-    GuiSetFont(game.font);
+    GuiSetFont(game.resources.font);
 
     GuiSetStyle(DEFAULT, TEXT_SIZE, referenceTextSize);
     GuiSetStyle(DEFAULT, TEXT_SPACING, 1);

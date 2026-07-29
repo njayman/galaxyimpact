@@ -31,6 +31,9 @@ class Player
     int shieldStacks;
     bool halfLifeOrb;
     float nerve;
+    bool nerveCharging;
+    float nerveChargeTimer;
+    float nerveChargeFeedTimer;
 };
 
 class Bullet

@@ -19,28 +19,32 @@ auto main(int argc, char* argv[]) -> int
     constexpr int minWindowHeight = 240;
     constexpr int targetFPS = 60;
 
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT);
+#if defined(__EMSCRIPTEN__)
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT);
     InitWindow(GameConstants::defaultWindowWidth, GameConstants::defaultWindowHeight,
                "Galaxy Impact");
+#else
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT |
+                   FLAG_FULLSCREEN_MODE);
+    InitWindow(0, 0, "Galaxy Impact");
+#endif
     SetExitKey(KEY_NULL);
     SetWindowMinSize(minWindowWidth, minWindowHeight);
     SetTargetFPS(targetFPS);
 
     InitAudioDevice();
+    // Headroom margin: several BGM layers and SFX voices can play simultaneously and their
+    // linear samples just sum in raylib's mixer, so trim the master bus to keep worst-case
+    // overlap (rapid fire + explosion + boss music layers) from clipping.
+    SetMasterVolume(0.85F);
 
     platformInitSaveData();
 
     Game game = InitGame();
+    syncScreenSize(game);
     setupGuiTheme(game);
 
-    if (const auto& opt = resolutionOptions.at(static_cast<size_t>(game.settings.resolutionIndex));
-        opt.width != GameConstants::defaultWindowWidth ||
-        opt.height != GameConstants::defaultWindowHeight)
-    {
-        SetWindowSize(opt.width, opt.height);
-        syncScreenSize(game);
-    }
-    SetTargetFPS(fpsOptions.at(static_cast<size_t>(game.settings.fpsIndex)));
+    SetTargetFPS(fpsOptions.at(static_cast<size_t>(game.resources.settings.fpsIndex)));
     applyBGMState(game);
 
     if (sandbox)
@@ -51,6 +55,11 @@ auto main(int argc, char* argv[]) -> int
     bool shouldExit = false;
     while (!WindowShouldClose() && !shouldExit)
     {
+        if (IsWindowResized())
+        {
+            syncScreenSize(game);
+        }
+
         const float deltaTime = GetFrameTime();
 
         shouldExit = UpdateGame(game, deltaTime);
@@ -60,14 +69,30 @@ auto main(int argc, char* argv[]) -> int
 
     platformExitToLanding();
 
-    UnloadMusicStream(game.bgm.base);
-    UnloadMusicStream(game.bgm.intensity);
-    UnloadMusicStream(game.bgm.miniboss);
-    UnloadMusicStream(game.bgm.megaboss);
-    UnloadMusicStream(game.bgm.swarmBoss);
-    UnloadRenderTexture(game.pixelTarget);
-    UnloadRenderTexture(game.worldTarget);
-    UnloadFont(game.font);
+    UnloadMusicStream(game.resources.bgm.base);
+    UnloadMusicStream(game.resources.bgm.intensity);
+    UnloadMusicStream(game.resources.bgm.miniboss);
+    UnloadMusicStream(game.resources.bgm.megaboss);
+    UnloadMusicStream(game.resources.bgm.swarmBoss);
+    UnloadSound(game.resources.sounds.shoot);
+    UnloadSound(game.resources.sounds.hit);
+    UnloadSound(game.resources.sounds.explosion);
+    UnloadSound(game.resources.sounds.menuMove);
+    UnloadSound(game.resources.sounds.menuConfirm);
+    UnloadSound(game.resources.sounds.victory);
+    UnloadSound(game.resources.sounds.defeat);
+    UnloadSound(game.resources.sounds.critical);
+    UnloadSound(game.resources.sounds.bossWindUp);
+    UnloadSound(game.resources.sounds.beamFire);
+    UnloadSound(game.resources.sounds.homingLaunch);
+    UnloadSound(game.resources.sounds.spreadBurst);
+    UnloadSound(game.resources.sounds.slamBoom);
+    UnloadSound(game.resources.sounds.nerveCharge);
+    UnloadSound(game.resources.sounds.nerveRelease);
+    UnloadSound(game.resources.sounds.nerveFizzle);
+    UnloadRenderTexture(game.resources.pixelTarget);
+    UnloadRenderTexture(game.resources.worldTarget);
+    UnloadFont(game.resources.font);
     CloseAudioDevice();
     CloseWindow();
 

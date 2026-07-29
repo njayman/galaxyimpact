@@ -6,6 +6,7 @@
 #include "raymath.h"
 #include "sound.hpp"
 #include "update.hpp"
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <filesystem>
@@ -63,35 +64,61 @@ auto loadGameFont() -> Font
     return GetFontDefault();
 }
 
+auto computeRenderScale(const Game& game) -> float
+{
+    const float widthScale = static_cast<float>(game.resources.windowWidth) /
+                             static_cast<float>(game.resources.screenWidth);
+    const float heightScale = static_cast<float>(game.resources.windowHeight) /
+                              static_cast<float>(game.resources.screenHeight);
+    return std::min(widthScale, heightScale);
+}
+
+void createRenderTargets(Game& game)
+{
+    const auto width = std::max(1, static_cast<int>(static_cast<float>(game.resources.screenWidth) *
+                                                    game.resources.renderScale));
+    const auto height =
+        std::max(1, static_cast<int>(static_cast<float>(game.resources.screenHeight) *
+                                     game.resources.renderScale));
+
+    game.resources.worldTarget = LoadRenderTexture(width, height);
+    SetTextureFilter(game.resources.worldTarget.texture, TEXTURE_FILTER_BILINEAR);
+
+    game.resources.pixelTarget = LoadRenderTexture(width, height);
+    SetTextureFilter(game.resources.pixelTarget.texture, TEXTURE_FILTER_BILINEAR);
+}
+
 }
 
 auto InitGame() -> Game
 {
     Game game{};
 
-    game.screenWidth = GameConstants::defaultWindowWidth;
-    game.screenHeight = GameConstants::defaultWindowHeight;
-    game.windowWidth = GameConstants::defaultWindowWidth;
-    game.windowHeight = GameConstants::defaultWindowHeight;
+    game.resources.screenWidth = GameConstants::defaultWindowWidth;
+    game.resources.screenHeight = GameConstants::defaultWindowHeight;
+    game.resources.windowWidth = GameConstants::defaultWindowWidth;
+    game.resources.windowHeight = GameConstants::defaultWindowHeight;
     game.state = GameState::TITLE;
 
-    game.stars.resize(80);
-    for (auto& star : game.stars)
+    game.run.stars.resize(80);
+    for (auto& star : game.run.stars)
     {
-        star =
-            Star{.position = Vector2{.x = static_cast<float>(GetRandomValue(0, game.screenWidth)),
-                                     .y = static_cast<float>(GetRandomValue(0, game.screenHeight))},
-                 .radius = static_cast<float>(GetRandomValue(10, 20)) / 10.0F};
+        star = Star{
+            .position =
+                Vector2{.x = static_cast<float>(GetRandomValue(0, game.resources.screenWidth)),
+                        .y = static_cast<float>(GetRandomValue(0, game.resources.screenHeight))},
+            .radius = static_cast<float>(GetRandomValue(10, 20)) / 10.0F};
     }
 
     const std::array<Color, 3> bgColors{Fade(Palette::StructMid, 0.15F), Fade(Palette::Haze, 0.1F),
                                         Fade(Palette::AccentDim, 0.08F)};
-    game.bgParticles.resize(25);
-    for (auto& particle : game.bgParticles)
+    game.run.bgParticles.resize(25);
+    for (auto& particle : game.run.bgParticles)
     {
         particle = BgParticle{
-            .position = Vector2{.x = static_cast<float>(GetRandomValue(0, game.screenWidth)),
-                                .y = static_cast<float>(GetRandomValue(0, game.screenHeight))},
+            .position =
+                Vector2{.x = static_cast<float>(GetRandomValue(0, game.resources.screenWidth)),
+                        .y = static_cast<float>(GetRandomValue(0, game.resources.screenHeight))},
             .velocity = Vector2{.x = static_cast<float>(GetRandomValue(-4, 4)) / 10.0F,
                                 .y = static_cast<float>(GetRandomValue(-4, 4)) / 10.0F},
             .radius = static_cast<float>(GetRandomValue(15, 40)) / 10.0F,
@@ -99,44 +126,39 @@ auto InitGame() -> Game
                 static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(bgColors.size() - 1))))};
     }
 
-    game.borderStars.resize(400);
-    for (auto& star : game.borderStars)
+    game.run.borderStars.resize(400);
+    for (auto& star : game.run.borderStars)
     {
         star = Star{.position = Vector2{.x = static_cast<float>(GetRandomValue(0, 7680)),
                                         .y = static_cast<float>(GetRandomValue(0, 4320))},
                     .radius = static_cast<float>(GetRandomValue(10, 20)) / 10.0F};
     }
 
-    game.gasClouds = generateBoundaryClouds();
+    game.run.gasClouds = generateBoundaryClouds();
 
-    game.highScoreRepo = std::make_shared<highscore::FileRepository>(getSaveDataDir() +
-                                                                     GameConstants::highScoreFile);
-    game.highScores = game.highScoreRepo->load();
+    game.resources.highScoreRepo = std::make_shared<highscore::FileRepository>(
+        getSaveDataDir() + GameConstants::highScoreFile);
+    game.resources.highScores = game.resources.highScoreRepo->load();
 
-    game.sounds = LoadSounds();
-    game.font = loadGameFont();
+    game.resources.sounds = LoadSounds();
+    game.resources.font = loadGameFont();
 
-    game.settings = loadSettings();
+    game.resources.settings = loadSettings();
 
-    game.bgm = loadBGM();
-    PlayMusicStream(game.bgm.base);
-    PlayMusicStream(game.bgm.intensity);
-    PlayMusicStream(game.bgm.miniboss);
-    PlayMusicStream(game.bgm.megaboss);
-    PlayMusicStream(game.bgm.swarmBoss);
-    SetMusicVolume(game.bgm.base, SoundConstants::baseVolume);
-    SetMusicVolume(game.bgm.intensity, 0);
-    SetMusicVolume(game.bgm.miniboss, 0);
-    SetMusicVolume(game.bgm.megaboss, 0);
-    SetMusicVolume(game.bgm.swarmBoss, 0);
+    game.resources.bgm = loadBGM();
+    PlayMusicStream(game.resources.bgm.base);
+    PlayMusicStream(game.resources.bgm.intensity);
+    PlayMusicStream(game.resources.bgm.miniboss);
+    PlayMusicStream(game.resources.bgm.megaboss);
+    PlayMusicStream(game.resources.bgm.swarmBoss);
+    SetMusicVolume(game.resources.bgm.base, SoundConstants::baseVolume);
+    SetMusicVolume(game.resources.bgm.intensity, 0);
+    SetMusicVolume(game.resources.bgm.miniboss, 0);
+    SetMusicVolume(game.resources.bgm.megaboss, 0);
+    SetMusicVolume(game.resources.bgm.swarmBoss, 0);
 
-    game.worldTarget = LoadRenderTexture(game.screenWidth / GameConstants::pixelScale,
-                                         game.screenHeight / GameConstants::pixelScale);
-    SetTextureFilter(game.worldTarget.texture, TEXTURE_FILTER_POINT);
-
-    game.pixelTarget = LoadRenderTexture(game.screenWidth, game.screenHeight);
-
-    SetTextureFilter(game.pixelTarget.texture, TEXTURE_FILTER_POINT);
+    game.resources.renderScale = computeRenderScale(game);
+    createRenderTargets(game);
 
     resetRun(game);
     game.state = GameState::TITLE;
@@ -163,79 +185,92 @@ void toggleFullscreen(Game& game)
 
 void syncScreenSize(Game& game)
 {
-    game.windowWidth = GetScreenWidth();
-    game.windowHeight = GetScreenHeight();
+    game.resources.windowWidth = GetScreenWidth();
+    game.resources.windowHeight = GetScreenHeight();
+
+    if (const float newScale = computeRenderScale(game); newScale != game.resources.renderScale)
+    {
+        game.resources.renderScale = newScale;
+        UnloadRenderTexture(game.resources.worldTarget);
+        UnloadRenderTexture(game.resources.pixelTarget);
+        createRenderTargets(game);
+    }
 }
 
 void resetRun(Game& game)
 {
-    game.player = Player{.position = Vector2{},
-                         .radius = 15,
-                         .color = Palette::Accent,
-                         .speed = 5,
-                         .health = 5,
-                         .maxHealth = 5,
-                         .shieldActive = false,
-                         .shieldTimer = 0,
-                         .shieldCooldownTimer = 0,
-                         .immunityTimer = 0,
-                         .blackHoleCoreTimer = 0,
-                         .bossBodyTimer = 0,
-                         .slowTimer = 0,
-                         .charges = UpdateConstants::maxCharges,
-                         .chargeRegenTimer = 0,
-                         .dashing = false,
-                         .dashTimer = 0,
-                         .dashVelocity = Vector2{},
-                         .shieldStacks = 0,
-                         .halfLifeOrb = false,
-                         .nerve = 0};
+    game.run.player = Player{.position = Vector2{},
+                             .radius = 15,
+                             .color = Palette::Accent,
+                             .speed = 5,
+                             .health = 5,
+                             .maxHealth = 5,
+                             .shieldActive = false,
+                             .shieldTimer = 0,
+                             .shieldCooldownTimer = 0,
+                             .immunityTimer = 0,
+                             .blackHoleCoreTimer = 0,
+                             .bossBodyTimer = 0,
+                             .slowTimer = 0,
+                             .charges = UpdateConstants::maxCharges,
+                             .chargeRegenTimer = 0,
+                             .dashing = false,
+                             .dashTimer = 0,
+                             .dashVelocity = Vector2{},
+                             .shieldStacks = 0,
+                             .halfLifeOrb = false,
+                             .nerve = 0,
+                             .nerveCharging = false,
+                             .nerveChargeTimer = 0,
+                             .nerveChargeFeedTimer = 0};
 
-    game.bosses.clear();
+    game.run.bosses.clear();
 
-    game.bullets.clear();
-    game.asteroids.clear();
+    game.run.bullets.clear();
+    game.run.asteroids.clear();
 
-    game.asteroids.reserve(static_cast<size_t>(maxAsteroid));
-    game.bossProjectiles.clear();
-    game.enemies.clear();
+    game.run.asteroids.reserve(static_cast<size_t>(maxAsteroid));
+    game.run.bossProjectiles.clear();
+    game.run.enemies.clear();
 
-    game.enemies.reserve(static_cast<size_t>(UpdateConstants::maxEnemies));
-    game.eliteHazards.clear();
-    game.eliteHazardSpawnTimer = static_cast<float>(GetRandomValue(45, 90));
-    game.pickups.clear();
-    game.mines.clear();
-    game.deathParticles.clear();
-    game.weapons = {Weapon{.type = WeaponType::Forward, .level = 1}};
-    game.skillLevels.fill(0);
-    game.skillLevels.at(static_cast<size_t>(SkillType::ForwardShot)) = 1;
-    game.postCapDamageLevels = 0;
-    game.damageMeter = DamageMeter{};
-    game.damageMeterDisplay = DamageMeter{};
-    game.damageMeterHoldTimer = 0;
-    game.bossDeathShockwaves.clear();
+    game.run.enemies.reserve(static_cast<size_t>(UpdateConstants::maxEnemies));
+    game.run.eliteHazards.clear();
+    game.run.eliteHazardSpawnTimer = static_cast<float>(GetRandomValue(45, 90));
+    game.run.pickups.clear();
+    game.run.mines.clear();
+    game.run.deathParticles.clear();
+    game.run.weapons = {Weapon{.type = WeaponType::Forward, .level = 1}};
+    game.run.skillLevels.fill(0);
+    game.run.skillLevels.at(static_cast<size_t>(SkillType::ForwardShot)) = 1;
+    game.run.postCapDamageLevels = 0;
+    game.run.damageMeter = DamageMeter{};
+    game.run.damageMeterDisplay = DamageMeter{};
+    game.run.damageMeterHoldTimer = 0;
+    game.run.bossDeathShockwaves.clear();
 
-    game.blackhole = BlackHole{};
-    game.blackhole.timer = static_cast<float>(GetRandomValue(30, 60)) / 10.0F;
-    game.wormhole = Wormhole{};
-    game.wormhole.timer = static_cast<float>(GetRandomValue(400, 700)) / 10.0F;
-    game.asteroidSpawnTimer = 1.0F;
-    game.enemySpawnTimer = 1.0F;
-    game.spreadWindupShots = 0;
+    game.run.blackhole = BlackHole{};
+    game.run.blackhole.timer = static_cast<float>(GetRandomValue(30, 60)) / 10.0F;
+    game.run.wormhole = Wormhole{};
+    game.run.wormhole.timer = static_cast<float>(GetRandomValue(400, 700)) / 10.0F;
+    game.run.asteroidSpawnTimer = 1.0F;
+    game.run.enemySpawnTimer = 1.0F;
+    game.run.spreadWindupShots = 0;
 
-    game.xp = 0;
-    game.level = 1;
-    game.xpToNext = 100;
-    game.waveNumber = 1;
-    game.waveTimer = GameConstants::waveDuration;
-    game.bossSpawnCount = 0;
-    game.runTime = 0;
+    game.run.xp = 0;
+    game.run.level = 1;
+    game.run.xpToNext = 100;
+    game.run.waveNumber = 1;
+    game.run.waveTimer = GameConstants::waveDuration;
+    game.run.bossSpawnCount = 0;
+    game.run.runTime = 0;
 
-    game.shakeTimer = 0;
-    game.shakeDuration = 0;
-    game.shakeIntensity = 0;
-    game.hitPauseTimer = 0;
-    game.score = 0;
-    game.scoreRecorded = false;
+    game.run.shakeTimer = 0;
+    game.run.shakeDuration = 0;
+    game.run.shakeIntensity = 0;
+    game.run.hitPauseTimer = 0;
+    game.run.nerveBurstFlashTimer = 0;
+    game.run.nerveBurstFlashEnd = Vector2{};
+    game.run.score = 0;
+    game.run.scoreRecorded = false;
     game.state = GameState::GAMEPLAY;
 }

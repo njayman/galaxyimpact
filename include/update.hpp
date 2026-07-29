@@ -24,9 +24,12 @@ constexpr int maxEnemies = 200;
 constexpr float enemyChargeDashDuration = 0.4F;
 constexpr float enemyChargeDashSpeedMult = 6.0F;
 constexpr float frameScale = 60.0F;
+constexpr float hitFlashDuration = 0.12F;
+constexpr float nerveBurstWindup = 0.35F;
 }
 
 auto nerveFrac(const Game& game) -> float;
+auto isNerveChargeFeeding(const Game& game) -> bool;
 auto chargeRegenDuration(const Game& game) -> float;
 auto aimAtMouse(const Game& game) -> Vector2;
 auto orbitRadius(int32_t level) -> float;

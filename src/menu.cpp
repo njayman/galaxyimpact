@@ -3,11 +3,17 @@
 #include "draw.hpp"
 #include <algorithm>
 
+auto hudScale(const Game& game) -> float
+{
+    return hudScaleOptions.at(static_cast<size_t>(game.resources.settings.hudScaleIndex));
+}
+
 auto mouseUIPos(const Game& game) -> Vector2
 {
     const Vector2 mouse = GetMousePosition();
     const Rectangle rect = letterBoxRect(game);
-    const float scale = rect.width / static_cast<float>(game.screenWidth);
+    const float scale =
+        rect.width / static_cast<float>(game.resources.screenWidth) * hudScale(game);
     if (scale <= 0)
     {
         return mouse;
@@ -20,7 +26,8 @@ auto guiUiScale(const Game& game) -> float
     constexpr float referenceHeight = 1080.0F;
     constexpr float minScale = 0.6F;
     constexpr float maxScale = 2.2F;
-    return std::clamp(static_cast<float>(game.windowHeight) / referenceHeight, minScale, maxScale);
+    return std::clamp(static_cast<float>(game.resources.windowHeight) / referenceHeight, minScale,
+                      maxScale);
 }
 
 auto menuColumnRect(const Game& game, int32_t index, int32_t count, int32_t width, int32_t height,
@@ -33,7 +40,7 @@ auto menuColumnRect(const Game& game, int32_t index, int32_t count, int32_t widt
     const float scaledGap = static_cast<float>(gap) * scale;
     const float scaledTopY = static_cast<float>(topY) * scale;
 
-    return Rectangle{.x = static_cast<float>(game.windowWidth) / 2 - scaledWidth / 2,
+    return Rectangle{.x = static_cast<float>(game.resources.windowWidth) / 2 - scaledWidth / 2,
                      .y = scaledTopY + static_cast<float>(index) * (scaledHeight + scaledGap),
                      .width = scaledWidth,
                      .height = scaledHeight};

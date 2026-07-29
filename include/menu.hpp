@@ -9,6 +9,8 @@ auto mouseUIPos(const Game& game) -> Vector2;
 
 auto guiUiScale(const Game& game) -> float;
 
+auto hudScale(const Game& game) -> float;
+
 auto menuColumnRect(const Game& game, int32_t index, int32_t count, int32_t width, int32_t height,
                     int32_t gap, int32_t topY) -> Rectangle;
 

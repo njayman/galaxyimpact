@@ -31,7 +31,7 @@ void drawText(const Font& font, const char* text, int32_t x, int32_t y, int32_t 
 
 void drawText(const Game& game, const char* text, int32_t x, int32_t y, int32_t size, Color color)
 {
-    drawText(game.font, text, x, y, size, color);
+    drawText(game.resources.font, text, x, y, size, color);
 }
 
 auto measureText(const Font& font, const char* text, int32_t size) -> int32_t
@@ -41,22 +41,18 @@ auto measureText(const Font& font, const char* text, int32_t size) -> int32_t
 
 auto measureText(const Game& game, const char* text, int32_t size) -> int32_t
 {
-    return measureText(game.font, text, size);
+    return measureText(game.resources.font, text, size);
 }
 
 auto letterBoxRect(const Game& game) -> Rectangle
 {
-    auto scale = static_cast<float>(game.windowWidth) / static_cast<float>(game.screenWidth);
-    auto heightScale =
-        static_cast<float>(game.windowHeight) / static_cast<float>(game.screenHeight);
+    const float scale = game.resources.renderScale;
 
-    scale = std::min(scale, heightScale);
+    auto width = static_cast<float>(game.resources.screenWidth) * scale;
+    auto height = static_cast<float>(game.resources.screenHeight) * scale;
 
-    auto width = static_cast<float>(game.screenWidth) * scale;
-    auto height = static_cast<float>(game.screenHeight) * scale;
-
-    return Rectangle{.x = (static_cast<float>(game.windowWidth) - width) / 2,
-                     .y = (static_cast<float>(game.windowHeight) - height) / 2,
+    return Rectangle{.x = (static_cast<float>(game.resources.windowWidth) - width) / 2,
+                     .y = (static_cast<float>(game.resources.windowHeight) - height) / 2,
                      .width = width,
                      .height = height};
 }
@@ -99,30 +95,31 @@ void drawDebuffIndicator(const Game& game, int32_t x, int32_t y);
 void drawSandboxHUD(const Game& game);
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius);
 
-void beginPixelZoom()
+void beginPixelZoom(const Game& game)
 {
     BeginMode2D(Camera2D{.offset = Vector2{},
                          .target = Vector2{},
                          .rotation = 0,
-                         .zoom = 1.0F / static_cast<float>(GameConstants::pixelScale)});
+                         .zoom = game.resources.renderScale});
 }
 
 void beginWorldCamera(const Game& game)
 {
-    const float zoom = 1.0F / static_cast<float>(GameConstants::pixelScale);
-    const Vector2 center{.x = static_cast<float>(game.screenWidth) / 2,
-                         .y = static_cast<float>(game.screenHeight) / 2};
+    const float zoom = game.resources.renderScale;
+    const Vector2 center{.x = static_cast<float>(game.resources.screenWidth) / 2,
+                         .y = static_cast<float>(game.resources.screenHeight) / 2};
     Vector2 offset = Vector2Scale(center, zoom);
 
-    if (game.shakeTimer > 0 && game.shakeDuration > 0)
+    if (game.run.shakeTimer > 0 && game.run.shakeDuration > 0)
     {
-        const float amplitude = game.shakeIntensity * (game.shakeTimer / game.shakeDuration);
+        const float amplitude =
+            game.run.shakeIntensity * (game.run.shakeTimer / game.run.shakeDuration);
         offset.x += static_cast<float>(GetRandomValue(-100, 100)) / 100 * amplitude * zoom;
         offset.y += static_cast<float>(GetRandomValue(-100, 100)) / 100 * amplitude * zoom;
     }
 
-    BeginMode2D(
-        Camera2D{.offset = offset, .target = game.player.position, .rotation = 0, .zoom = zoom});
+    BeginMode2D(Camera2D{
+        .offset = offset, .target = game.run.player.position, .rotation = 0, .zoom = zoom});
 }
 
 auto tiledWorldPos(Vector2 relativeTo, Vector2 offset, float tileW, float tileH) -> Vector2
@@ -152,15 +149,15 @@ auto tiledWorldPos(Vector2 relativeTo, Vector2 offset, float tileW, float tileH)
 
 void drawBackgroundStars(const Game& game, Vector2 relativeTo)
 {
-    const auto tileW = static_cast<float>(game.screenWidth);
-    const auto tileH = static_cast<float>(game.screenHeight);
+    const auto tileW = static_cast<float>(game.resources.screenWidth);
+    const auto tileH = static_cast<float>(game.resources.screenHeight);
 
-    for (const auto& p : game.bgParticles)
+    for (const auto& p : game.run.bgParticles)
     {
         DrawCircleV(tiledWorldPos(relativeTo, p.position, tileW, tileH), p.radius, p.color);
     }
 
-    for (const auto& s : game.stars)
+    for (const auto& s : game.run.stars)
     {
         DrawCircleV(tiledWorldPos(relativeTo, s.position, tileW, tileH), s.radius, Palette::Haze);
     }
@@ -179,65 +176,74 @@ void windowText(const Font& font, const Game& game, const char* text, int32_t ce
 void windowText(const Game& game, const char* text, int32_t centerX, int32_t y, int32_t size,
                 Color color)
 {
-    windowText(game.font, game, text, centerX, y, size, color);
+    windowText(game.resources.font, game, text, centerX, y, size, color);
 }
 
 void drawTitle(const Game& game)
 {
     applyGuiScale(game);
-    windowText(game, "GALAXY IMPACT", game.windowWidth / 2, 80, 50, Palette::Accent);
+    windowText(game, "GALAXY IMPACT", game.resources.windowWidth / 2, 80, 50, Palette::Accent);
 
     drawMenu(game, "", {"Start", "Settings", "Exit"}, MenuLayout::titleMenuY);
-    drawHighScores(game, game.windowWidth / 2 - static_cast<int32_t>(80 * guiUiScale(game)),
-                   static_cast<int32_t>(280 * guiUiScale(game)), game.highScores);
+    drawHighScores(game,
+                   game.resources.windowWidth / 2 - static_cast<int32_t>(80 * guiUiScale(game)),
+                   static_cast<int32_t>(280 * guiUiScale(game)), game.resources.highScores);
 }
 
 void drawGameOver(const Game& game)
 {
     applyGuiScale(game);
-    windowText(game, "YOU WERE DEFEATED!", game.windowWidth / 2, 70, 40, Palette::Accent);
+    windowText(game, "YOU WERE DEFEATED!", game.resources.windowWidth / 2, 70, 40, Palette::Accent);
 
     const std::string statsText =
-        std::format("Score: {}   Level: {}   Wave: {}   Time: {:.0f}s", game.score, game.level,
-                    game.waveNumber, game.runTime);
-    windowText(game, statsText.c_str(), game.windowWidth / 2, 120, 20, Palette::StructLight);
+        std::format("Score: {}   Level: {}   Wave: {}   Time: {:.0f}s", game.run.score,
+                    game.run.level, game.run.waveNumber, game.run.runTime);
+    windowText(game, statsText.c_str(), game.resources.windowWidth / 2, 120, 20,
+               Palette::StructLight);
 
-    drawHighScores(game, game.windowWidth / 2 - static_cast<int32_t>(80 * guiUiScale(game)),
-                   static_cast<int32_t>(160 * guiUiScale(game)), game.highScores);
+    drawHighScores(game,
+                   game.resources.windowWidth / 2 - static_cast<int32_t>(80 * guiUiScale(game)),
+                   static_cast<int32_t>(160 * guiUiScale(game)), game.resources.highScores);
     drawMenu(game, "", {"New Game", "Exit"}, MenuLayout::gameOverMenuY);
 }
 
 void drawOverlay(const Game& game)
 {
-    DrawRectangle(0, 0, game.windowWidth, game.windowHeight, Fade(Palette::Void, 0.75F));
+    DrawRectangle(0, 0, game.resources.windowWidth, game.resources.windowHeight,
+                  Fade(Palette::Void, 0.75F));
 }
 
 void drawSettings(const Game& game)
 {
     applyGuiScale(game);
     const float scale = guiUiScale(game);
-    windowText(game, "SETTINGS", game.windowWidth / 2, 130, 34, Palette::Accent);
+    windowText(game, "SETTINGS", game.resources.windowWidth / 2, 130, 34, Palette::Accent);
 
-    const auto& res = resolutionOptions.at(static_cast<size_t>(game.settings.resolutionIndex));
+    const auto& res =
+        resolutionOptions.at(static_cast<size_t>(game.resources.settings.resolutionIndex));
     const std::string displayMode = IsWindowFullscreen() ? "Fullscreen" : "Windowed";
 
     const bool difficultyLocked = game.settingsReturnState == GameState::PAUSED;
     const std::string difficultyValue =
-        std::string(difficultyDefs.at(static_cast<size_t>(game.settings.difficulty)).name) +
+        std::string(
+            difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty)).name) +
         (difficultyLocked ? " (locked)" : "");
 
-    const std::array<std::string, 6> stepperLabels{"Resolution", "Difficulty", "",
-                                                   "",           "FPS Cap",    "Display Mode"};
-    const std::array<std::string, 6> stepperValues{
+    const std::array<std::string, 7> stepperLabels{"Resolution", "Difficulty",  "", "", "FPS Cap",
+                                                   "HUD Scale",  "Display Mode"};
+    const std::array<std::string, 7> stepperValues{
         std::format("{}x{}", res.width, res.height),
         difficultyValue,
         "",
         "",
-        std::format("{}", fpsOptions.at(static_cast<size_t>(game.settings.fpsIndex))),
+        std::format("{}", fpsOptions.at(static_cast<size_t>(game.resources.settings.fpsIndex))),
+        std::format("{:.0f}%",
+                    hudScaleOptions.at(static_cast<size_t>(game.resources.settings.hudScaleIndex)) *
+                        100),
         displayMode,
     };
 
-    constexpr int32_t rowCount = 7;
+    constexpr int32_t rowCount = 8;
     for (int32_t i = 0; i < rowCount; i++)
     {
         const Rectangle rect =
@@ -251,7 +257,8 @@ void drawSettings(const Game& game)
 
         if (i == 2 || i == 3)
         {
-            const bool on = i == 2 ? game.settings.bgmOn : game.settings.soundOn;
+            const bool on =
+                i == 2 ? game.resources.settings.bgmOn : game.resources.settings.soundOn;
             bool checked = on;
             const char* label = i == 2 ? "BGM" : "Sound";
             const Rectangle box{.x = rect.x,
@@ -277,8 +284,8 @@ void drawSettings(const Game& game)
 
     const int32_t hintY = MenuLayout::settingsMenuY +
                           (MenuLayout::settingsHeight + MenuLayout::settingsGap) * rowCount + 20;
-    windowText(game, "Up/Down: select   Left/Right: change   Enter: confirm", game.windowWidth / 2,
-               hintY, 16, Palette::StructMid);
+    windowText(game, "Up/Down: select   Left/Right: change   Enter: confirm",
+               game.resources.windowWidth / 2, hintY, 16, Palette::StructMid);
 }
 
 void drawSkillIcon(SkillType id, Vector2 c, float s, Color color)
@@ -397,7 +404,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
     };
     std::vector<Slot> slots;
 
-    for (const auto& w : game.weapons)
+    for (const auto& w : game.run.weapons)
     {
         const Color color = w.evolved ? Palette::Crit : Palette::Shield;
         slots.push_back(
@@ -407,7 +414,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
     for (size_t i = 0; i < static_cast<size_t>(SkillType::Count); i++)
     {
         const auto id = static_cast<SkillType>(i);
-        if (game.skillLevels.at(i) == 0 || isFusedPassive(game, id))
+        if (game.run.skillLevels.at(i) == 0 || isFusedPassive(game, id))
         {
             continue;
         }
@@ -448,7 +455,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
     if (hovered.has_value())
     {
         const auto& def = Skills.at(static_cast<size_t>(*hovered));
-        const int lvl = game.skillLevels.at(static_cast<size_t>(*hovered));
+        const int lvl = game.run.skillLevels.at(static_cast<size_t>(*hovered));
         const std::string name = std::format("{} (Lv {})", def.name, lvl);
         const std::string desc(def.description);
 
@@ -457,10 +464,12 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
         const int32_t boxWidth = std::max(measureText(game, name.c_str(), nameFontSize),
                                           measureText(game, desc.c_str(), descFontSize)) +
                                  16;
+        const auto scaledScreenWidth =
+            static_cast<int32_t>(static_cast<float>(game.resources.screenWidth) / hudScale(game));
         auto tipX = static_cast<int32_t>(hoveredBoxPos.x);
-        if (tipX + boxWidth > game.screenWidth)
+        if (tipX + boxWidth > scaledScreenWidth)
         {
-            tipX = game.screenWidth - boxWidth;
+            tipX = scaledScreenWidth - boxWidth;
         }
         const int32_t tipY =
             static_cast<int32_t>(hoveredBoxPos.y) + static_cast<int32_t>(boxSize) + 6;
@@ -476,10 +485,10 @@ void drawLevelUp(const Game& game)
 {
     applyGuiScale(game);
     const float scale = guiUiScale(game);
-    windowText(game, std::format("LEVEL {}", game.level).c_str(), game.windowWidth / 2, 100, 34,
-               Palette::Accent);
+    windowText(game, std::format("LEVEL {}", game.run.level).c_str(),
+               game.resources.windowWidth / 2, 100, 34, Palette::Accent);
 
-    const auto count = static_cast<int32_t>(game.pendingChoices.size());
+    const auto count = static_cast<int32_t>(game.run.pendingChoices.size());
     constexpr int32_t nameFontSize = 24;
     constexpr int32_t descFontSize = 15;
     constexpr int32_t iconOffsetX = 24;
@@ -487,7 +496,7 @@ void drawLevelUp(const Game& game)
 
     for (int32_t i = 0; i < count; i++)
     {
-        const auto& choice = game.pendingChoices.at(static_cast<size_t>(i));
+        const auto& choice = game.run.pendingChoices.at(static_cast<size_t>(i));
         const Rectangle rect =
             menuColumnRect(game, i, count, MenuLayout::levelUpWidth, MenuLayout::levelUpHeight,
                            MenuLayout::levelUpGap, MenuLayout::levelUpMenuY);
@@ -523,7 +532,7 @@ void drawLevelUp(const Game& game)
         default:
         {
             const auto& def = Skills.at(static_cast<size_t>(choice.skill));
-            const int lvl = game.skillLevels.at(static_cast<size_t>(choice.skill));
+            const int lvl = game.run.skillLevels.at(static_cast<size_t>(choice.skill));
             name = std::format("{} (Lv {})", def.name, lvl + 1);
             desc = def.description;
             if (const auto hint = evolutionHint(game, choice.skill); !hint.empty())
@@ -569,7 +578,8 @@ void drawMenu(const Game& game, const std::string& heading, const std::vector<st
     applyGuiScale(game);
     if (!heading.empty())
     {
-        windowText(game, heading.c_str(), game.windowWidth / 2, y - 50, 30, Palette::StructLight);
+        windowText(game, heading.c_str(), game.resources.windowWidth / 2, y - 50, 30,
+                   Palette::StructLight);
     }
 
     const auto count = static_cast<int32_t>(options.size());
@@ -606,34 +616,36 @@ void drawHighScores(const Game& game, int32_t x, int32_t y, const std::vector<in
 
 void drawGameplayWorld(const Game& game)
 {
-    drawBackgroundStars(game, game.player.position);
+    drawBackgroundStars(game, game.run.player.position);
 
-    for (const auto& c : game.gasClouds)
+    for (const auto& c : game.run.gasClouds)
     {
         DrawCircleV(c.position, c.radius, c.color);
     }
 
-    if (game.blackhole.active)
+    if (game.run.blackhole.active)
     {
-        DrawCircleV(game.blackhole.position, game.blackhole.radius, Palette::Void);
-        DrawCircleLines(static_cast<int32_t>(game.blackhole.position.x),
-                        static_cast<int32_t>(game.blackhole.position.y), game.blackhole.radius,
-                        Palette::StructMid);
-        DrawRing(game.blackhole.position, game.blackhole.radius + 6, game.blackhole.radius + 9,
-                 static_cast<float>(GetTime()) * 40, static_cast<float>(GetTime()) * 40 + 120, 16,
-                 Fade(Palette::StructMid, 0.6F));
-        DrawRing(game.blackhole.position, game.blackhole.radius + 14, game.blackhole.radius + 17,
-                 -static_cast<float>(GetTime()) * 30, -static_cast<float>(GetTime()) * 30 + 90, 16,
-                 Fade(Palette::Haze, 0.4F));
+        DrawCircleV(game.run.blackhole.position, game.run.blackhole.radius, Palette::Void);
+        DrawCircleLines(static_cast<int32_t>(game.run.blackhole.position.x),
+                        static_cast<int32_t>(game.run.blackhole.position.y),
+                        game.run.blackhole.radius, Palette::StructMid);
+        DrawRing(game.run.blackhole.position, game.run.blackhole.radius + 6,
+                 game.run.blackhole.radius + 9, static_cast<float>(GetTime()) * 40,
+                 static_cast<float>(GetTime()) * 40 + 120, 16, Fade(Palette::StructMid, 0.6F));
+        DrawRing(game.run.blackhole.position, game.run.blackhole.radius + 14,
+                 game.run.blackhole.radius + 17, -static_cast<float>(GetTime()) * 30,
+                 -static_cast<float>(GetTime()) * 30 + 90, 16, Fade(Palette::Haze, 0.4F));
     }
 
-    if (game.wormhole.active)
+    if (game.run.wormhole.active)
     {
-        drawWormholeMouth(game.wormhole.positionA, game.wormhole.facingA, game.wormhole.radius);
-        drawWormholeMouth(game.wormhole.positionB, game.wormhole.facingB, game.wormhole.radius);
+        drawWormholeMouth(game.run.wormhole.positionA, game.run.wormhole.facingA,
+                          game.run.wormhole.radius);
+        drawWormholeMouth(game.run.wormhole.positionB, game.run.wormhole.facingB,
+                          game.run.wormhole.radius);
     }
 
-    for (const auto& a : game.asteroids)
+    for (const auto& a : game.run.asteroids)
     {
         DrawCircleV(a.position, a.radius, Palette::StructMid);
         DrawCircleV(Vector2{.x = a.position.x - a.radius / 3, .y = a.position.y - a.radius / 4},
@@ -643,19 +655,19 @@ void drawGameplayWorld(const Game& game)
     }
 
     const bool warlordActive = std::any_of(
-        game.eliteHazards.begin(), game.eliteHazards.end(), [](const EliteHazard& hazard)
+        game.run.eliteHazards.begin(), game.run.eliteHazards.end(), [](const EliteHazard& hazard)
         { return hazard.active && hazard.role == EliteHazardRole::Warlord; });
-    for (const auto& e : game.enemies)
+    for (const auto& e : game.run.enemies)
     {
         drawEnemy(game, e, warlordActive);
     }
 
-    for (const auto& hazard : game.eliteHazards)
+    for (const auto& hazard : game.run.eliteHazards)
     {
         drawEliteHazard(hazard);
     }
 
-    for (const auto& p : game.pickups)
+    for (const auto& p : game.run.pickups)
     {
 
         const float alpha =
@@ -680,12 +692,12 @@ void drawGameplayWorld(const Game& game)
         }
     }
 
-    for (const auto& boss : game.bosses)
+    for (const auto& boss : game.run.bosses)
     {
         drawBoss(game, boss);
     }
 
-    for (const auto& m : game.mines)
+    for (const auto& m : game.run.mines)
     {
         if (!m.active)
         {
@@ -696,7 +708,7 @@ void drawGameplayWorld(const Game& game)
                         m.radius, Fade(Palette::Crit, 0.2F));
     }
 
-    for (const auto& wave : game.bossDeathShockwaves)
+    for (const auto& wave : game.run.bossDeathShockwaves)
     {
         const float progress =
             std::clamp(1 - wave.timer / UpdateConstants::bossDeathShockwaveDuration, 0.0F, 1.0F);
@@ -709,7 +721,7 @@ void drawGameplayWorld(const Game& game)
                         Fade(Palette::Accent, 0.4F * (1 - progress)));
     }
 
-    for (const auto& p : game.bossProjectiles)
+    for (const auto& p : game.run.bossProjectiles)
     {
         if (p.homing)
         {
@@ -721,41 +733,52 @@ void drawGameplayWorld(const Game& game)
         }
     }
 
-    if (game.player.blackHoleCoreTimer > 0)
+    if (game.run.player.blackHoleCoreTimer > 0)
     {
-        DrawCircleLines(static_cast<int32_t>(game.player.position.x),
-                        static_cast<int32_t>(game.player.position.y), game.player.radius + 6,
-                        Fade(Palette::Accent, game.player.blackHoleCoreTimer));
+        DrawCircleLines(static_cast<int32_t>(game.run.player.position.x),
+                        static_cast<int32_t>(game.run.player.position.y),
+                        game.run.player.radius + 6,
+                        Fade(Palette::Accent, game.run.player.blackHoleCoreTimer));
     }
 
     drawOrbitBlades(game);
 
-    const bool shipVisible = game.player.health > 0 && (game.player.immunityTimer <= 0 ||
-                                                        static_cast<int>(GetTime() * 10) % 2 == 0);
+    const bool shipVisible =
+        game.run.player.health > 0 &&
+        (game.run.player.immunityTimer <= 0 || static_cast<int>(GetTime() * 10) % 2 == 0);
     if (shipVisible)
     {
         drawShip(game);
     }
 
-    if (game.player.shieldActive)
+    if (game.run.nerveBurstFlashTimer > 0)
     {
-        const float shieldRadius = game.player.radius + 5;
-        DrawCircleV(game.player.position, shieldRadius, Fade(Palette::Shield, 0.5F));
-        DrawCircleLines(static_cast<int32_t>(game.player.position.x),
-                        static_cast<int32_t>(game.player.position.y), shieldRadius,
-                        Palette::Shield);
-    }
-    else if (game.player.shieldCooldownTimer > 0)
-    {
-        drawShieldIndicator(game.player);
+        const float flashFrac = game.run.nerveBurstFlashTimer / 0.15F;
+        DrawLineEx(game.run.player.position, game.run.nerveBurstFlashEnd, 10 * flashFrac,
+                   Fade(WHITE, flashFrac));
+        DrawLineEx(game.run.player.position, game.run.nerveBurstFlashEnd, 20 * flashFrac,
+                   Fade(Palette::Charge, flashFrac * 0.6F));
     }
 
-    for (const auto& b : game.bullets)
+    if (game.run.player.shieldActive)
+    {
+        const float shieldRadius = game.run.player.radius + 5;
+        DrawCircleV(game.run.player.position, shieldRadius, Fade(Palette::Shield, 0.5F));
+        DrawCircleLines(static_cast<int32_t>(game.run.player.position.x),
+                        static_cast<int32_t>(game.run.player.position.y), shieldRadius,
+                        Palette::Shield);
+    }
+    else if (game.run.player.shieldCooldownTimer > 0)
+    {
+        drawShieldIndicator(game.run.player);
+    }
+
+    for (const auto& b : game.run.bullets)
     {
         DrawCircleV(b.position, b.radius, b.color);
     }
 
-    for (const auto& p : game.deathParticles)
+    for (const auto& p : game.run.deathParticles)
     {
         DrawCircleV(p.position, p.radius, Fade(p.color, p.life / p.maxLife));
     }
@@ -763,8 +786,8 @@ void drawGameplayWorld(const Game& game)
 
 void drawShip(const Game& game)
 {
-    const Vector2 p = game.player.position;
-    const float r = game.player.radius;
+    const Vector2 p = game.run.player.position;
+    const float r = game.run.player.radius;
 
     const Vector2 dir = aimAtMouse(game);
     const float angle = std::atan2(dir.y, dir.x) + std::numbers::pi_v<float> / 2;
@@ -776,9 +799,9 @@ void drawShip(const Game& game)
         return Vector2{.x = v.x * cosA - v.y * sinA, .y = v.x * sinA + v.y * cosA};
     };
 
-    if (game.player.dashing)
+    if (game.run.player.dashing)
     {
-        const Vector2 dashDir = Vector2Normalize(game.player.dashVelocity);
+        const Vector2 dashDir = Vector2Normalize(game.run.player.dashVelocity);
         for (int i = 1; i <= 3; i++)
         {
             const Vector2 trailPos =
@@ -788,14 +811,86 @@ void drawShip(const Game& game)
         }
     }
 
-    const Color shipColor = game.player.dashing ? Palette::Crit : game.player.color;
+    const Color shipColor = game.run.player.dashing ? Palette::Crit : game.run.player.color;
+
+    const float flicker = 0.65F + 0.35F * std::sin(static_cast<float>(GetTime()) * 28.0F);
+    const Vector2 flameTip =
+        Vector2Add(p, rotate(Vector2{.x = 0, .y = r * (1.5F + 0.6F * flicker)}));
+    const Vector2 flameLeft = Vector2Add(p, rotate(Vector2{.x = -r * 0.35F, .y = r * 0.85F}));
+    const Vector2 flameRight = Vector2Add(p, rotate(Vector2{.x = r * 0.35F, .y = r * 0.85F}));
+    DrawTriangle(flameLeft, flameTip, flameRight, Fade(Palette::Charge, 0.75F * flicker));
+    DrawTriangle(flameLeft,
+                 Vector2Add(p, rotate(Vector2{.x = 0, .y = r * (1.0F + 0.3F * flicker)})),
+                 flameRight, Fade(Palette::StructLight, 0.6F * flicker));
 
     const Vector2 tip = Vector2Add(p, rotate(Vector2{.x = 0, .y = -r}));
     const Vector2 left = Vector2Add(p, rotate(Vector2{.x = -r * 0.8F, .y = r}));
     const Vector2 right = Vector2Add(p, rotate(Vector2{.x = r * 0.8F, .y = r}));
 
     DrawTriangle(tip, left, right, shipColor);
+    DrawTriangleLines(tip, left, right, Fade(Palette::StructDark, 0.6F));
     DrawCircleV(p, r * 0.3F, Palette::StructLight);
+
+    if (game.run.player.nerveCharging)
+    {
+        const float progress =
+            1.0F - game.run.player.nerveChargeTimer / UpdateConstants::nerveBurstWindup;
+        const float flare = 0.4F + 0.6F * progress;
+        DrawCircleLines(static_cast<int32_t>(p.x), static_cast<int32_t>(p.y),
+                        r * (1.2F + flare * 0.6F), Fade(Palette::Charge, flare));
+        DrawCircleV(p, r * 0.5F * flare, Fade(WHITE, flare));
+    }
+}
+
+void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float rotationDeg, Color color)
+{
+    switch (shape)
+    {
+    case EnemyShape::Circle:
+        DrawCircleV(center, radius, color);
+        break;
+    case EnemyShape::Triangle:
+        DrawPoly(center, 3, radius, rotationDeg - 90, color);
+        break;
+    case EnemyShape::Square:
+        DrawPoly(center, 4, radius, rotationDeg + 45, color);
+        break;
+    case EnemyShape::Diamond:
+        DrawPoly(center, 4, radius, rotationDeg, color);
+        break;
+    case EnemyShape::Pentagon:
+        DrawPoly(center, 5, radius, rotationDeg, color);
+        break;
+    case EnemyShape::Hexagon:
+        DrawPoly(center, 6, radius, rotationDeg, color);
+        break;
+    case EnemyShape::Octagon:
+        DrawPoly(center, 8, radius, rotationDeg, color);
+        break;
+    case EnemyShape::Ring:
+        DrawRing(center, radius * 0.5F, radius, 0, 360, 24, color);
+        DrawCircleV(center, radius * 0.25F, color);
+        break;
+    case EnemyShape::Star:
+    {
+        constexpr size_t points = 5;
+        const float rot = rotationDeg * DEG2RAD;
+        std::array<Vector2, points * 2> verts{};
+        for (size_t i = 0; i < points * 2; i++)
+        {
+            const float rad = (i % 2 == 0) ? radius : radius * 0.42F;
+            const float a = rot + static_cast<float>(i) * std::numbers::pi_v<float> /
+                                      static_cast<float>(points);
+            verts.at(static_cast<size_t>(i)) =
+                Vector2{.x = center.x + std::cos(a) * rad, .y = center.y + std::sin(a) * rad};
+        }
+        for (size_t i = 0; i < verts.size(); i++)
+        {
+            DrawTriangle(center, verts.at(i), verts.at((i + 1) % verts.size()), color);
+        }
+        break;
+    }
+    }
 }
 
 void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
@@ -805,6 +900,10 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     if (enemy.phased)
     {
         color = Fade(color, 0.35F);
+    }
+    if (enemy.hitFlashTimer > 0)
+    {
+        color = ColorLerp(color, WHITE, enemy.hitFlashTimer / UpdateConstants::hitFlashDuration);
     }
     if (enemy.isElite)
     {
@@ -832,17 +931,20 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     }
 
     if (kind.pattern == EnemyPattern::Turret &&
-        Vector2Distance(enemy.position, game.player.position) < 700.0F)
+        Vector2Distance(enemy.position, game.run.player.position) < 700.0F)
     {
         float blink = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 12.0F);
-        DrawLineEx(enemy.position, game.player.position, 2, Fade(Palette::Crit, blink * 0.5F));
+        DrawLineEx(enemy.position, game.run.player.position, 2, Fade(Palette::Crit, blink * 0.5F));
     }
 
-    DrawCircleV(enemy.position, kind.radius, color);
+    const float spin = std::fmod(static_cast<float>(GetTime()) * 20.0F +
+                                     (enemy.position.x + enemy.position.y) * 0.15F,
+                                 360.0F);
+    drawEnemyShape(kind.shape, enemy.position, kind.radius, spin, color);
 
     auto maxHealth = static_cast<int32_t>(
         static_cast<float>(kind.health) *
-        difficultyDefs.at(static_cast<size_t>(game.settings.difficulty)).enemyHealthMult *
+        difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty)).enemyHealthMult *
         waveEnemyScale(game));
     if (enemy.isElite)
     {
@@ -895,18 +997,68 @@ void drawEliteHazard(const EliteHazard& hazard)
                   static_cast<int32_t>(barWidth * healthFrac), 4, auraColor);
 }
 
+void drawBossHull(BossShape shape, Vector2 center, Vector2 size, Color color)
+{
+    const auto cx = static_cast<int32_t>(center.x);
+    const auto cy = static_cast<int32_t>(center.y);
+    const float spin = std::fmod(static_cast<float>(GetTime()) * 8.0F, 360.0F);
+
+    switch (shape)
+    {
+    case BossShape::Saucer:
+        DrawEllipse(cx, cy + static_cast<int32_t>(size.y / 4), size.x / 2, size.y / 4, color);
+        DrawCircle(cx, cy - static_cast<int32_t>(size.y / 8), size.x / 3.5F, Fade(color, 0.8F));
+        break;
+    case BossShape::SpikedRing:
+    {
+        DrawEllipse(cx, cy + static_cast<int32_t>(size.y / 4), size.x / 2, size.y / 4, color);
+        DrawCircle(cx, cy - static_cast<int32_t>(size.y / 8), size.x / 3.5F, Fade(color, 0.8F));
+        constexpr int spikeCount = 8;
+        for (int i = 0; i < spikeCount; i++)
+        {
+            const float a = (static_cast<float>(i) * 360.0F / spikeCount + spin) * DEG2RAD;
+            const Vector2 dir{.x = std::cos(a), .y = std::sin(a)};
+            const Vector2 perp{.x = -dir.y, .y = dir.x};
+            const Vector2 base = Vector2Add(center, Vector2Scale(dir, size.x * 0.46F));
+            const Vector2 tip = Vector2Add(center, Vector2Scale(dir, size.x * 0.64F));
+            const Vector2 sideA = Vector2Add(base, Vector2Scale(perp, size.x * 0.05F));
+            const Vector2 sideB = Vector2Subtract(base, Vector2Scale(perp, size.x * 0.05F));
+            DrawTriangle(sideA, tip, sideB, color);
+        }
+        break;
+    }
+    case BossShape::TwinDome:
+        DrawEllipse(cx, cy + static_cast<int32_t>(size.y / 4), size.x / 2, size.y / 4, color);
+        DrawCircle(cx - static_cast<int32_t>(size.x / 4), cy - static_cast<int32_t>(size.y / 10),
+                   size.x / 4.5F, Fade(color, 0.8F));
+        DrawCircle(cx + static_cast<int32_t>(size.x / 4), cy - static_cast<int32_t>(size.y / 10),
+                   size.x / 4.5F, Fade(color, 0.8F));
+        break;
+    case BossShape::Crystal:
+        DrawPoly(center, 6, size.x / 2, spin, color);
+        DrawPolyLines(center, 6, size.x / 2 * 1.18F, -spin * 0.6F, Fade(color, 0.5F));
+        DrawPoly(center, 6, size.x / 4, spin * 1.4F, Fade(Palette::StructLight, 0.6F));
+        break;
+    case BossShape::HexPlated:
+        DrawPoly(center, 6, size.x / 2, 0, color);
+        DrawPolyLines(center, 6, size.x / 2, 0, Fade(Palette::StructDark, 0.8F));
+        DrawPolyLines(center, 6, size.x / 2 * 0.65F, 0, Fade(Palette::StructDark, 0.6F));
+        break;
+    }
+}
+
 void drawBoss(const Game& game, const Boss& boss)
 {
     const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
                              .y = boss.position.y + boss.size.y / 2};
-    const Color ufoColor = boss.health <= 0 ? Palette::StructDark : boss.color;
+    Color ufoColor = boss.health <= 0 ? Palette::StructDark : boss.color;
+    if (boss.hitFlashTimer > 0)
+    {
+        ufoColor =
+            ColorLerp(ufoColor, WHITE, boss.hitFlashTimer / UpdateConstants::hitFlashDuration);
+    }
 
-    DrawEllipse(static_cast<int32_t>(bossCenter.x),
-                static_cast<int32_t>(bossCenter.y) + static_cast<int32_t>(boss.size.y / 4),
-                boss.size.x / 2, boss.size.y / 4, ufoColor);
-    DrawCircle(static_cast<int32_t>(bossCenter.x),
-               static_cast<int32_t>(bossCenter.y) - static_cast<int32_t>(boss.size.y / 8),
-               boss.size.x / 3.5F, Fade(ufoColor, 0.8F));
+    drawBossHull(boss.shape, bossCenter, boss.size, ufoColor);
 
     if (boss.state == BossState::WINDING_UP)
     {
@@ -917,12 +1069,12 @@ void drawBoss(const Game& game, const Boss& boss)
         if (boss.attack == BossAttack::Beam || boss.attack == BossAttack::WormholeBeam)
         {
             const float blink = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 10.0F);
-            const float markerRadius = game.player.radius + 10 + 4 * progress;
-            DrawCircleLines(static_cast<int32_t>(game.player.position.x),
-                            static_cast<int32_t>(game.player.position.y), markerRadius,
+            const float markerRadius = game.run.player.radius + 10 + 4 * progress;
+            DrawCircleLines(static_cast<int32_t>(game.run.player.position.x),
+                            static_cast<int32_t>(game.run.player.position.y), markerRadius,
                             Fade(Palette::Crit, blink));
-            DrawCircleLines(static_cast<int32_t>(game.player.position.x),
-                            static_cast<int32_t>(game.player.position.y), markerRadius * 0.7F,
+            DrawCircleLines(static_cast<int32_t>(game.run.player.position.x),
+                            static_cast<int32_t>(game.run.player.position.y), markerRadius * 0.7F,
                             Fade(Palette::Accent, blink * 0.7F));
         }
     }
@@ -951,7 +1103,7 @@ void drawBoss(const Game& game, const Boss& boss)
         const Vector2 beamEnd = Vector2Add(beamStart, Vector2Scale(direction, 2000));
 
         float beamLength = 2000;
-        for (const auto& a : game.asteroids)
+        for (const auto& a : game.run.asteroids)
         {
             if (CheckCollisionCircleLine(a.position, a.radius, beamStart, beamEnd))
             {
@@ -1011,7 +1163,7 @@ void drawBoss(const Game& game, const Boss& boss)
     if (boss.state == BossState::SHOOTING && boss.attack == BossAttack::GravityWell)
     {
         DrawCircleLinesV(bossCenter, 60, Fade(Palette::StructMid, 0.5F));
-        DrawLineEx(game.player.position, bossCenter, 2, Fade(Palette::StructLight, 0.4F));
+        DrawLineEx(game.run.player.position, bossCenter, 2, Fade(Palette::StructLight, 0.4F));
 
         for (int i = 0; i < 6; i++)
         {
@@ -1041,7 +1193,7 @@ void drawBoss(const Game& game, const Boss& boss)
 
 void drawOrbitBlades(const Game& game)
 {
-    for (const auto& w : game.weapons)
+    for (const auto& w : game.run.weapons)
     {
         const Color color = w.evolved ? Palette::Crit : Palette::Shield;
 
@@ -1062,8 +1214,8 @@ void drawOrbitBlades(const Game& game)
                                     static_cast<float>(s) * 2 * std::numbers::pi_v<float> /
                                         static_cast<float>(count);
                 const Vector2 pos =
-                    Vector2Add(game.player.position, Vector2{.x = std::cos(angle) * radius,
-                                                             .y = std::sin(angle) * radius});
+                    Vector2Add(game.run.player.position, Vector2{.x = std::cos(angle) * radius,
+                                                                 .y = std::sin(angle) * radius});
                 DrawCircleV(pos, 5, color);
             }
             break;
@@ -1076,12 +1228,12 @@ void drawOrbitBlades(const Game& game)
 
                 const float progress = 1 - w.flashTimer / UpdateConstants::shockFlashDuration;
                 const float pulseRadius = maxRadius * progress;
-                DrawCircleLines(static_cast<int32_t>(game.player.position.x),
-                                static_cast<int32_t>(game.player.position.y), pulseRadius,
+                DrawCircleLines(static_cast<int32_t>(game.run.player.position.x),
+                                static_cast<int32_t>(game.run.player.position.y), pulseRadius,
                                 Fade(color, 0.7F * (1 - progress)));
             }
-            DrawCircleLines(static_cast<int32_t>(game.player.position.x),
-                            static_cast<int32_t>(game.player.position.y), maxRadius,
+            DrawCircleLines(static_cast<int32_t>(game.run.player.position.x),
+                            static_cast<int32_t>(game.run.player.position.y), maxRadius,
                             Fade(color, 0.15F));
             break;
         }
@@ -1093,8 +1245,8 @@ void drawOrbitBlades(const Game& game)
                 length *= 1.3F;
             }
             const Vector2 dir = aimAtMouse(game);
-            const Vector2 end = Vector2Add(game.player.position, Vector2Scale(dir, length));
-            DrawLineEx(game.player.position, end, 2, Fade(color, 0.3F));
+            const Vector2 end = Vector2Add(game.run.player.position, Vector2Scale(dir, length));
+            DrawLineEx(game.run.player.position, end, 2, Fade(color, 0.3F));
             break;
         }
         default:
@@ -1188,12 +1340,12 @@ void drawHUD(const Game& game)
     drawHealthPips(game, 10, 10);
     drawShieldStackPips(game, 10 + healthPipsWidth(game) + 20, 10);
 
-    const std::string statsText =
-        std::format("Score: {}   Wave: {}   Lv: {}", game.score, game.waveNumber, game.level);
+    const std::string statsText = std::format("Score: {}   Wave: {}   Lv: {}", game.run.score,
+                                              game.run.waveNumber, game.run.level);
     drawText(game, statsText.c_str(), 10, 38, 20, Palette::StructLight);
 
     const float xpFrac =
-        std::min(static_cast<float>(game.xp) / static_cast<float>(game.xpToNext), 1.0F);
+        std::min(static_cast<float>(game.run.xp) / static_cast<float>(game.run.xpToNext), 1.0F);
     DrawRectangle(10, 64, 300, 10, Fade(Palette::StructMid, 0.5F));
     DrawRectangle(10, 64, static_cast<int32_t>(300 * xpFrac), 10, Palette::Charge);
     DrawRectangleLines(10, 64, 300, 10, Palette::StructDark);
@@ -1212,10 +1364,16 @@ void drawHUD(const Game& game)
     constexpr int32_t abilityBoxSize = 28;
     constexpr int32_t abilityGap = 34;
     const int32_t abilitySlotsWidth = (abilitySlotCount - 1) * abilityGap + abilityBoxSize;
-    drawAbilitySlots(game, game.screenWidth - abilitySlotsWidth - 10, 10);
+    const auto scaledScreenWidth =
+        static_cast<int32_t>(static_cast<float>(game.resources.screenWidth) / hudScale(game));
+    const auto scaledScreenHeight =
+        static_cast<int32_t>(static_cast<float>(game.resources.screenHeight) / hudScale(game));
+    drawAbilitySlots(game, scaledScreenWidth - abilitySlotsWidth - 10, 10);
 
-    drawText(game, "Move: WASD | Dash: L-Click | Shield: R-Click | Pause: Esc | F11: Fullscreen",
-             10, game.screenHeight - 28, 18, Palette::StructMid);
+    drawText(game,
+             "Move: WASD | Dash: L-Click | Shield: R-Click | Burst: Space | Pause: Esc | F11: "
+             "Fullscreen",
+             10, scaledScreenHeight - 28, 18, Palette::StructMid);
 
     if (game.sandbox)
     {
@@ -1244,15 +1402,15 @@ void drawHealthPips(const Game& game, int32_t x, int32_t y)
     constexpr float size = 11;
     constexpr float gap = 24;
 
-    for (int32_t i = 0; i < game.player.maxHealth; i++)
+    for (int32_t i = 0; i < game.run.player.maxHealth; i++)
     {
         const float cx = static_cast<float>(x) + size + static_cast<float>(i) * gap;
 
-        if (i < game.player.health)
+        if (i < game.run.player.health)
         {
             drawDownwardTriangleIcon(cx, y, size, Palette::Accent, true);
         }
-        else if (i == game.player.health && game.player.halfLifeOrb)
+        else if (i == game.run.player.health && game.run.player.halfLifeOrb)
         {
             drawDownwardTriangleIcon(cx, y, size, Fade(Palette::Accent, 0.45F), true);
         }
@@ -1267,7 +1425,7 @@ auto healthPipsWidth(const Game& game) -> int32_t
 {
     constexpr float size = 11;
     constexpr float gap = 24;
-    return static_cast<int32_t>(size + static_cast<float>(game.player.maxHealth - 1) * gap +
+    return static_cast<int32_t>(size + static_cast<float>(game.run.player.maxHealth - 1) * gap +
                                 size * 0.8F);
 }
 
@@ -1281,7 +1439,7 @@ void drawShieldStackPips(const Game& game, int32_t x, int32_t y)
         const float cx = static_cast<float>(x) + size + static_cast<float>(i) * gap;
         const Color fillColor = Fade(Palette::Shield, 0.85F);
 
-        drawDownwardTriangleIcon(cx, y, size, fillColor, i < game.player.shieldStacks);
+        drawDownwardTriangleIcon(cx, y, size, fillColor, i < game.run.player.shieldStacks);
     }
 }
 
@@ -1290,17 +1448,40 @@ void drawNerveBar(const Game& game, int32_t x, int32_t y)
     constexpr int32_t width = 120;
     constexpr int32_t height = 8;
     const float frac = nerveFrac(game);
+    const bool ready = frac >= 1.0F;
+    const float pulse = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 8.0F);
 
     DrawRectangle(x, y, width, height, Fade(Palette::StructMid, 0.5F));
     DrawRectangle(x, y, static_cast<int32_t>(static_cast<float>(width) * frac), height,
-                  ColorLerp(Palette::Charge, Palette::Crit, frac));
+                  ready ? ColorLerp(Palette::Charge, WHITE, pulse * 0.5F)
+                        : ColorLerp(Palette::Charge, Palette::Crit, frac));
     DrawRectangleLines(x, y, width, height, Palette::StructDark);
+
+    if (ready)
+    {
+        DrawRectangleLines(x - 2, y - 2, width + 4, height + 4, Fade(Palette::Charge, pulse));
+    }
+
     drawText(game, "Nerve", x + width + 8, y - 6, 16, Palette::StructMid);
+
+    if (game.run.player.nerveCharging)
+    {
+        const float chargeProgress =
+            1.0F - game.run.player.nerveChargeTimer / UpdateConstants::nerveBurstWindup;
+        DrawRectangle(x, y + height + 3,
+                      static_cast<int32_t>(static_cast<float>(width) * chargeProgress), 3,
+                      Palette::Crit);
+        drawText(game, "CHARGING...", x, y + height + 8, 14, Palette::Crit);
+    }
+    else if (ready)
+    {
+        drawText(game, "SPACE", x, y + height + 8, 14, Fade(Palette::Charge, 0.6F + 0.4F * pulse));
+    }
 }
 
 auto drawDamageMeter(const Game& game, int32_t x, int32_t y) -> int32_t
 {
-    const auto& meter = game.damageMeterDisplay;
+    const auto& meter = game.run.damageMeterDisplay;
     const std::string totalText = std::format("DMG: {}", meter.total);
     drawText(game, totalText.c_str(), x, y, 18,
              meter.total > 0 ? Palette::Crit : Palette::StructMid);
@@ -1331,7 +1512,7 @@ void drawChargePips(const Game& game, int32_t x, int32_t y)
         const Vector2 center{.x = static_cast<float>(x) + pipRadius + static_cast<float>(i) * gap,
                              .y = static_cast<float>(y) + pipRadius};
 
-        if (i < game.player.charges)
+        if (i < game.run.player.charges)
         {
             DrawCircleV(center, pipRadius, Palette::Shield);
             DrawCircleLines(static_cast<int32_t>(center.x), static_cast<int32_t>(center.y),
@@ -1341,15 +1522,21 @@ void drawChargePips(const Game& game, int32_t x, int32_t y)
 
         DrawCircleLines(static_cast<int32_t>(center.x), static_cast<int32_t>(center.y), pipRadius,
                         Fade(Palette::StructMid, 0.6F));
-        if (i == game.player.charges)
+        if (i == game.run.player.charges)
         {
             float progress = 1;
             if (const float d = chargeRegenDuration(game); d > 0)
             {
-                progress = 1 - game.player.chargeRegenTimer / d;
+                progress = 1 - game.run.player.chargeRegenTimer / d;
             }
-            DrawRing(center, pipRadius - 3, pipRadius, -90, -90 + 360 * progress, 16,
-                     Palette::Shield);
+            const Color ringColor = isNerveChargeFeeding(game) ? Palette::Charge : Palette::Shield;
+            DrawRing(center, pipRadius - 3, pipRadius, -90, -90 + 360 * progress, 16, ringColor);
+            if (isNerveChargeFeeding(game))
+            {
+                const float pulse = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 10.0F);
+                DrawCircleLines(static_cast<int32_t>(center.x), static_cast<int32_t>(center.y),
+                                pipRadius + 3, Fade(Palette::Charge, 0.5F * pulse));
+            }
         }
     }
 }
@@ -1357,7 +1544,7 @@ void drawChargePips(const Game& game, int32_t x, int32_t y)
 void drawDebuffIndicator(const Game& game, int32_t x, int32_t y)
 {
     const bool suppressed = std::any_of(
-        game.eliteHazards.begin(), game.eliteHazards.end(), [](const EliteHazard& hazard)
+        game.run.eliteHazards.begin(), game.run.eliteHazards.end(), [](const EliteHazard& hazard)
         { return hazard.active && hazard.role == EliteHazardRole::Suppressor; });
     if (!suppressed)
     {
@@ -1381,11 +1568,13 @@ void drawSandboxHUD(const Game& game)
         "K: clear board   L: level-up picker   H: full heal   R: reset abilities",
         std::format("G: death {}   , / . : cycle boss attack ({})   O: command nearest boss",
                     game.sandboxDeathEnabled ? "ON" : "OFF", attackName),
-        std::format("- / + : wave ({})", game.waveNumber),
+        std::format("- / + : wave ({})", game.run.waveNumber),
         "N: spawn black hole   M: spawn wormhole   U: spawn hazard (+Shift: debuff)",
     };
 
-    int32_t y = game.screenHeight - 180;
+    int32_t y =
+        static_cast<int32_t>(static_cast<float>(game.resources.screenHeight) / hudScale(game)) -
+        180;
     for (const auto& line : lines)
     {
         drawText(game, line.c_str(), 10, y, 18, Palette::Crit);
@@ -1397,13 +1586,13 @@ void drawSandboxHUD(const Game& game)
 
 auto drawGame(Game& game) -> void
 {
-    BeginTextureMode(game.worldTarget);
+    BeginTextureMode(game.resources.worldTarget);
     ClearBackground(Palette::Void);
 
     switch (game.state)
     {
     case GameState::TITLE:
-        beginPixelZoom();
+        beginPixelZoom(game);
         drawBackgroundStars(game, Vector2{});
         EndMode2D();
         break;
@@ -1423,7 +1612,7 @@ auto drawGame(Game& game) -> void
         }
         else
         {
-            beginPixelZoom();
+            beginPixelZoom(game);
             drawBackgroundStars(game, Vector2{});
         }
         EndMode2D();
@@ -1432,46 +1621,49 @@ auto drawGame(Game& game) -> void
 
     EndTextureMode();
 
-    BeginTextureMode(game.pixelTarget);
+    BeginTextureMode(game.resources.pixelTarget);
     ClearBackground(Palette::Void);
 
-    const auto worldSrc = Rectangle{.x = 0,
-                                    .y = 0,
-                                    .width = static_cast<float>(game.worldTarget.texture.width),
-                                    .height = -static_cast<float>(game.worldTarget.texture.height)};
-    const auto worldDst = Rectangle{.x = 0,
-                                    .y = 0,
-                                    .width = static_cast<float>(game.screenWidth),
-                                    .height = static_cast<float>(game.screenHeight)};
-    DrawTexturePro(game.worldTarget.texture, worldSrc, worldDst, Vector2{}, 0, WHITE);
+    const auto worldSrc =
+        Rectangle{.x = 0,
+                  .y = 0,
+                  .width = static_cast<float>(game.resources.worldTarget.texture.width),
+                  .height = -static_cast<float>(game.resources.worldTarget.texture.height)};
+    const auto worldDst =
+        Rectangle{.x = 0,
+                  .y = 0,
+                  .width = static_cast<float>(game.resources.worldTarget.texture.width),
+                  .height = static_cast<float>(game.resources.worldTarget.texture.height)};
+    DrawTexturePro(game.resources.worldTarget.texture, worldSrc, worldDst, Vector2{}, 0, WHITE);
 
     EndTextureMode();
 
     BeginDrawing();
     ClearBackground(Palette::Void);
 
-    for (size_t i = 0; i < game.borderStars.size(); ++i)
+    for (size_t i = 0; i < game.run.borderStars.size(); ++i)
     {
-        auto gameBorderStar = game.borderStars[i];
-        if (gameBorderStar.position.x <= static_cast<float>(game.windowWidth) &&
-            gameBorderStar.position.y <= static_cast<float>(game.windowHeight))
+        auto gameBorderStar = game.run.borderStars[i];
+        if (gameBorderStar.position.x <= static_cast<float>(game.resources.windowWidth) &&
+            gameBorderStar.position.y <= static_cast<float>(game.resources.windowHeight))
         {
             DrawCircleV(gameBorderStar.position, gameBorderStar.radius, Palette::Haze);
         }
     }
 
-    const auto srcRec = Rectangle{.x = 0,
-                                  .y = 0,
-                                  .width = static_cast<float>(game.pixelTarget.texture.width),
-                                  .height = -static_cast<float>(game.pixelTarget.texture.height)};
+    const auto srcRec =
+        Rectangle{.x = 0,
+                  .y = 0,
+                  .width = static_cast<float>(game.resources.pixelTarget.texture.width),
+                  .height = -static_cast<float>(game.resources.pixelTarget.texture.height)};
     const Rectangle letterbox = letterBoxRect(game);
-    DrawTexturePro(game.pixelTarget.texture, srcRec, letterbox, Vector2{}, 0, WHITE);
+    DrawTexturePro(game.resources.pixelTarget.texture, srcRec, letterbox, Vector2{}, 0, WHITE);
 
-    const float uiScale = letterbox.width / static_cast<float>(game.screenWidth);
+    const float uiScale = letterbox.width / static_cast<float>(game.resources.screenWidth);
     BeginMode2D(Camera2D{.offset = Vector2{.x = letterbox.x, .y = letterbox.y},
                          .target = Vector2{},
                          .rotation = 0,
-                         .zoom = uiScale});
+                         .zoom = uiScale * hudScale(game)});
 
     switch (game.state)
     {

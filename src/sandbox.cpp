@@ -12,7 +12,7 @@ void enterSandbox(Game& game)
     resetRun(game);
     game.sandbox = true;
     game.state = GameState::GAMEPLAY;
-    game.blackhole.active = false;
+    game.run.blackhole.active = false;
     game.sandboxDeathEnabled = false;
     game.sandboxBossAttackIndex = 0;
 }
@@ -33,8 +33,9 @@ void updateSandboxInput(Game& game)
     {
         const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
         const auto dist = static_cast<float>(GetRandomValue(200, 320));
-        const Vector2 pos = Vector2Add(game.player.position, Vector2{.x = std::cos(angle) * dist,
-                                                                     .y = std::sin(angle) * dist});
+        const Vector2 pos =
+            Vector2Add(game.run.player.position,
+                       Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
         spawnEnemyAt(game, game.sandboxKindIndex, pos);
     }
 
@@ -57,13 +58,13 @@ void updateSandboxInput(Game& game)
 
     if (IsKeyPressed(KEY_K))
     {
-        game.enemies.clear();
-        game.eliteHazards.clear();
-        game.asteroids.clear();
-        game.bossProjectiles.clear();
-        game.mines.clear();
-        game.bosses.clear();
-        game.bossDeathShockwaves.clear();
+        game.run.enemies.clear();
+        game.run.eliteHazards.clear();
+        game.run.asteroids.clear();
+        game.run.bossProjectiles.clear();
+        game.run.mines.clear();
+        game.run.bosses.clear();
+        game.run.bossDeathShockwaves.clear();
     }
 
     if (IsKeyPressed(KEY_L))
@@ -73,16 +74,16 @@ void updateSandboxInput(Game& game)
 
     if (IsKeyPressed(KEY_H))
     {
-        game.player.health = game.player.maxHealth;
-        game.player.shieldStacks = playerConstants::maxShieldStack;
-        game.player.nerve = UpdateConstants::nerveMax;
+        game.run.player.health = game.run.player.maxHealth;
+        game.run.player.shieldStacks = playerConstants::maxShieldStack;
+        game.run.player.nerve = UpdateConstants::nerveMax;
     }
 
     if (IsKeyPressed(KEY_R))
     {
-        game.weapons = {Weapon{.type = WeaponType::Forward, .level = 1}};
-        game.skillLevels.fill(0);
-        game.skillLevels.at(static_cast<size_t>(SkillType::ForwardShot)) = 1;
+        game.run.weapons = {Weapon{.type = WeaponType::Forward, .level = 1}};
+        game.run.skillLevels.fill(0);
+        game.run.skillLevels.at(static_cast<size_t>(SkillType::ForwardShot)) = 1;
     }
 
     if (IsKeyPressed(KEY_G))
@@ -102,11 +103,11 @@ void updateSandboxInput(Game& game)
 
     if (IsKeyPressed(KEY_EQUAL))
     {
-        game.waveNumber++;
+        game.run.waveNumber++;
     }
-    if (IsKeyPressed(KEY_MINUS) && game.waveNumber > 1)
+    if (IsKeyPressed(KEY_MINUS) && game.run.waveNumber > 1)
     {
-        game.waveNumber--;
+        game.run.waveNumber--;
     }
 
     if (IsKeyPressed(KEY_N))
@@ -125,13 +126,13 @@ void updateSandboxInput(Game& game)
                                                          : EliteHazardRole::Warlord);
     }
 
-    if (IsKeyPressed(KEY_O) && !game.bosses.empty())
+    if (IsKeyPressed(KEY_O) && !game.run.bosses.empty())
     {
-        Boss* nearest = &game.bosses.front();
-        float bestDist = Vector2Distance(game.player.position, nearest->position);
-        for (auto& boss : game.bosses)
+        Boss* nearest = &game.run.bosses.front();
+        float bestDist = Vector2Distance(game.run.player.position, nearest->position);
+        for (auto& boss : game.run.bosses)
         {
-            const float dist = Vector2Distance(game.player.position, boss.position);
+            const float dist = Vector2Distance(game.run.player.position, boss.position);
             if (dist < bestDist)
             {
                 bestDist = dist;

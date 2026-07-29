@@ -143,12 +143,13 @@ enum class DamageSource : std::uint8_t
     Beam,
     Shock,
     Dash,
+    Nerve,
 
     Count
 };
 
 constexpr std::array<std::string_view, static_cast<size_t>(DamageSource::Count)> damageSourceNames{
-    "Forward", "Orbit", "Homing", "Mine", "Beam", "Shock", "Dash"};
+    "Forward", "Orbit", "Homing", "Mine", "Beam", "Shock", "Dash", "Nerve"};
 
 struct DamageMeter
 {

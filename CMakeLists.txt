@@ -16,6 +16,17 @@ if (EMSCRIPTEN)
 endif()
 
 include(FetchContent)
+
+# raylib defaults its bundled GLFW to X11-only on Linux. Force Wayland support
+# on too, so the game runs as a native Wayland client (correct output
+# resolution, fullscreen, and mouse coordinates) under Wayland compositors
+# (sway, etc.) instead of falling back to a resolution-constrained XWayland
+# surface.
+if (UNIX AND NOT APPLE)
+    set(GLFW_BUILD_WAYLAND ON CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_X11 ON CACHE BOOL "" FORCE)
+endif()
+
 FetchContent_Declare(
     raylib
     GIT_REPOSITORY https://github.com/raysan5/raylib.git

@@ -36,7 +36,6 @@ constexpr int32_t dashDamage = 15;
 constexpr float dashKillChargeRefund = 0.6F;
 constexpr float shieldKillChargeRefund = 0.6F;
 constexpr float bossBodyLingerLimit = 1.0F;
-constexpr float emergencyActionNerveThreshold = 0.7F;
 constexpr float damageMeterHoldDuration = 1.5F;
 
 constexpr float chargeTelegraphDuration = 0.5F;
@@ -50,21 +49,25 @@ constexpr float asteroidDespawnRadius = 900;
 constexpr float turretFireRange = 700;
 auto crossfireProjectileDamage(const Game& game) -> int32_t
 {
-    return game.settings.difficulty == Difficulty::Hard ? 5 : 3;
+    return game.resources.settings.difficulty == Difficulty::Hard ? 5 : 3;
 }
 constexpr int32_t shieldDropChance = 15;
 constexpr int32_t lifeOrbDropChance = 40;
-constexpr int32_t settingsRowCount = 7;
+constexpr int32_t settingsRowCount = 8;
 constexpr float nerveKillGain = 6;
-constexpr float nerveDecayPerSec = 4;
-constexpr float nerveDamageBonusMax = 0.5F;
-constexpr float nerveSpeedBonusMax = 0.2F;
+constexpr float chargeFeedDelay = 0.6F;
+constexpr float chargeFeedDrainRate = 12.0F;
+constexpr float chargeFeedRegenMult = 3.0F;
+constexpr float nerveBurstLength = 900.0F;
+constexpr int32_t nerveBurstDamage = 260;
 constexpr float postCapDamageBonusPerLevel = 0.05F;
 constexpr float mineLifetime = 5.0F;
 constexpr float mineHomeSpeed = 3.5F;
 constexpr float mineSeekRadius = 320;
 constexpr float bossEngageDistance = 380;
 constexpr float bossKillCalmDuration = 6.0F;
+constexpr float bgmDuckDuration = 0.35F;
+constexpr float bgmDuckStrength = 0.5F;
 
 constexpr int miniBossWaveInterval = 5;
 constexpr int megaBossWaveInterval = 10;
@@ -141,6 +144,7 @@ struct WaveHitResult
 
 void triggerShake(Game& game, float intensity, float duration);
 void triggerHitPause(Game& game, float duration);
+void duckBGM(Game& game);
 auto updateTitle(Game& game) -> bool;
 auto updatePaused(Game& game) -> bool;
 auto updateGameOver(Game& game) -> bool;
@@ -150,9 +154,12 @@ void playSFX(Game& game, Sound sound);
 auto updateSettings(Game& game) -> bool;
 void cycleResolution(Game& game, int32_t dir);
 void cycleFPS(Game& game, int32_t dir);
+void cycleHudScale(Game& game, int32_t dir);
 void cycleDifficulty(Game& game, int32_t dir);
 void gainNerve(Game& game);
 void updateNerve(Game& game, float deltaTime);
+void updateNerveBurstInput(Game& game);
+void fireNerveBurst(Game& game);
 void damagePlayer(Game& game, int32_t amount);
 void spawnDeathExplosion(Game& game);
 void updateDeathParticles(Game& game, float deltaTime);
@@ -220,24 +227,26 @@ void updateBgmLayers(Game& game, float deltaTime);
 
 void triggerShake(Game& game, float intensity, float duration)
 {
-    if (intensity > game.shakeIntensity)
+    if (intensity > game.run.shakeIntensity)
     {
-        game.shakeIntensity = intensity;
+        game.run.shakeIntensity = intensity;
     }
-    if (duration > game.shakeTimer)
+    if (duration > game.run.shakeTimer)
     {
-        game.shakeTimer = duration;
-        game.shakeDuration = duration;
+        game.run.shakeTimer = duration;
+        game.run.shakeDuration = duration;
     }
 }
 
 void triggerHitPause(Game& game, float duration)
 {
-    if (duration > game.hitPauseTimer)
+    if (duration > game.run.hitPauseTimer)
     {
-        game.hitPauseTimer = duration;
+        game.run.hitPauseTimer = duration;
     }
 }
+
+void duckBGM(Game& game) { game.resources.bgm.duckTimer = bgmDuckDuration; }
 
 auto updateTitle(Game& game) -> bool
 {
@@ -311,10 +320,11 @@ auto updatePaused(Game& game) -> bool
 auto updateGameOver(Game& game) -> bool
 {
 
-    if (!game.scoreRecorded && !game.sandbox)
+    if (!game.run.scoreRecorded && !game.sandbox)
     {
-        game.highScores = highscore::record(*game.highScoreRepo, game.highScores, game.score);
-        game.scoreRecorded = true;
+        game.resources.highScores = highscore::record(*game.resources.highScoreRepo,
+                                                      game.resources.highScores, game.run.score);
+        game.run.scoreRecorded = true;
     }
 
     const auto [index, confirmed] = updateMenuSelectionWindow(
@@ -343,7 +353,7 @@ auto updateGameOver(Game& game) -> bool
 auto updateLevelUp(Game& game) -> bool
 {
     const auto [index, confirmed] = updateMenuSelectionWindow(
-        game, game.menuIndex, static_cast<int32_t>(game.pendingChoices.size()),
+        game, game.menuIndex, static_cast<int32_t>(game.run.pendingChoices.size()),
         MenuLayout::levelUpWidth, MenuLayout::levelUpHeight, MenuLayout::levelUpGap,
         MenuLayout::levelUpMenuY);
     playMenuSounds(game, index, confirmed);
@@ -351,7 +361,7 @@ auto updateLevelUp(Game& game) -> bool
 
     if (confirmed)
     {
-        const auto& choice = game.pendingChoices.at(static_cast<size_t>(index));
+        const auto& choice = game.run.pendingChoices.at(static_cast<size_t>(index));
         switch (choice.type)
         {
         case ChoiceType::Evolve:
@@ -366,9 +376,9 @@ auto updateLevelUp(Game& game) -> bool
         case ChoiceType::Shield:
             for (int32_t i = 0; i < choice.count; i++)
             {
-                if (game.player.shieldStacks < playerConstants::maxShieldStack)
+                if (game.run.player.shieldStacks < playerConstants::maxShieldStack)
                 {
-                    game.player.shieldStacks++;
+                    game.run.player.shieldStacks++;
                 }
             }
             break;
@@ -387,17 +397,17 @@ void playMenuSounds(Game& game, int32_t newIndex, bool confirmed)
 {
     if (confirmed)
     {
-        playSFX(game, game.sounds.menuConfirm);
+        playSFX(game, game.resources.sounds.menuConfirm);
     }
     else if (newIndex != game.menuIndex)
     {
-        playSFX(game, game.sounds.menuMove);
+        playSFX(game, game.resources.sounds.menuMove);
     }
 }
 
 void playSFX(Game& game, Sound sound)
 {
-    if (game.settings.soundOn)
+    if (game.resources.settings.soundOn)
     {
         PlaySound(sound);
     }
@@ -453,7 +463,7 @@ auto updateSettings(Game& game) -> bool
 
     if (left || right || confirm)
     {
-        playSFX(game, game.sounds.menuMove);
+        playSFX(game, game.resources.sounds.menuMove);
     }
 
     switch (game.menuIndex)
@@ -485,14 +495,14 @@ auto updateSettings(Game& game) -> bool
     case 2:
         if (left || right || confirm)
         {
-            game.settings.bgmOn = !game.settings.bgmOn;
+            game.resources.settings.bgmOn = !game.resources.settings.bgmOn;
             applyBGMState(game);
         }
         break;
     case 3:
         if (left || right || confirm)
         {
-            game.settings.soundOn = !game.settings.soundOn;
+            game.resources.settings.soundOn = !game.resources.settings.soundOn;
         }
         break;
     case 4:
@@ -506,12 +516,22 @@ auto updateSettings(Game& game) -> bool
         }
         break;
     case 5:
+        if (left)
+        {
+            cycleHudScale(game, -1);
+        }
+        if (right || confirm)
+        {
+            cycleHudScale(game, 1);
+        }
+        break;
+    case 6:
         if (left || right || confirm)
         {
             toggleFullscreen(game);
         }
         break;
-    case 6:
+    case 7:
         if (confirm)
         {
             game.state = game.settingsReturnState;
@@ -522,9 +542,9 @@ auto updateSettings(Game& game) -> bool
         break;
     }
 
-    if ((left || right || confirm) && game.menuIndex <= 4)
+    if ((left || right || confirm) && game.menuIndex <= 5)
     {
-        saveSettings(game.settings);
+        saveSettings(game.resources.settings);
     }
 
     return false;
@@ -533,8 +553,10 @@ auto updateSettings(Game& game) -> bool
 void cycleResolution(Game& game, int32_t dir)
 {
     const auto n = static_cast<int32_t>(resolutionOptions.size());
-    game.settings.resolutionIndex = (game.settings.resolutionIndex + dir + n) % n;
-    const auto& opt = resolutionOptions.at(static_cast<size_t>(game.settings.resolutionIndex));
+    game.resources.settings.resolutionIndex =
+        (game.resources.settings.resolutionIndex + dir + n) % n;
+    const auto& opt =
+        resolutionOptions.at(static_cast<size_t>(game.resources.settings.resolutionIndex));
     SetWindowSize(opt.width, opt.height);
     syncScreenSize(game);
 }
@@ -542,34 +564,40 @@ void cycleResolution(Game& game, int32_t dir)
 void cycleFPS(Game& game, int32_t dir)
 {
     const auto n = static_cast<int32_t>(fpsOptions.size());
-    game.settings.fpsIndex = (game.settings.fpsIndex + dir + n) % n;
-    SetTargetFPS(fpsOptions.at(static_cast<size_t>(game.settings.fpsIndex)));
+    game.resources.settings.fpsIndex = (game.resources.settings.fpsIndex + dir + n) % n;
+    SetTargetFPS(fpsOptions.at(static_cast<size_t>(game.resources.settings.fpsIndex)));
+}
+
+void cycleHudScale(Game& game, int32_t dir)
+{
+    const auto n = static_cast<int32_t>(hudScaleOptions.size());
+    game.resources.settings.hudScaleIndex = (game.resources.settings.hudScaleIndex + dir + n) % n;
 }
 
 void cycleDifficulty(Game& game, int32_t dir)
 {
     const auto n = static_cast<int32_t>(Difficulty::Count);
-    game.settings.difficulty =
-        static_cast<Difficulty>((static_cast<int32_t>(game.settings.difficulty) + dir + n) % n);
+    game.resources.settings.difficulty = static_cast<Difficulty>(
+        (static_cast<int32_t>(game.resources.settings.difficulty) + dir + n) % n);
 }
 
 void applyBGMState(Game& game)
 {
-    if (game.settings.bgmOn)
+    if (game.resources.settings.bgmOn)
     {
-        ResumeMusicStream(game.bgm.base);
-        ResumeMusicStream(game.bgm.intensity);
-        ResumeMusicStream(game.bgm.miniboss);
-        ResumeMusicStream(game.bgm.megaboss);
-        ResumeMusicStream(game.bgm.swarmBoss);
+        ResumeMusicStream(game.resources.bgm.base);
+        ResumeMusicStream(game.resources.bgm.intensity);
+        ResumeMusicStream(game.resources.bgm.miniboss);
+        ResumeMusicStream(game.resources.bgm.megaboss);
+        ResumeMusicStream(game.resources.bgm.swarmBoss);
     }
     else
     {
-        PauseMusicStream(game.bgm.base);
-        PauseMusicStream(game.bgm.intensity);
-        PauseMusicStream(game.bgm.miniboss);
-        PauseMusicStream(game.bgm.megaboss);
-        PauseMusicStream(game.bgm.swarmBoss);
+        PauseMusicStream(game.resources.bgm.base);
+        PauseMusicStream(game.resources.bgm.intensity);
+        PauseMusicStream(game.resources.bgm.miniboss);
+        PauseMusicStream(game.resources.bgm.megaboss);
+        PauseMusicStream(game.resources.bgm.swarmBoss);
     }
 }
 
@@ -582,19 +610,20 @@ void updateBgmLayers(Game& game, float deltaTime)
 
     constexpr float intensityFloor = 0.3F;
 
-    float intensityTarget = std::clamp(
-        static_cast<float>(game.enemies.size()) / intensityEnemyThreshold, intensityFloor, 1.0F);
+    float intensityTarget =
+        std::clamp(static_cast<float>(game.run.enemies.size()) / intensityEnemyThreshold,
+                   intensityFloor, 1.0F);
 
-    if (game.bgm.calmTimer > 0)
+    if (game.resources.bgm.calmTimer > 0)
     {
         if (intensityTarget >= swarmOverrideThreshold)
         {
-            game.bgm.calmTimer = 0;
+            game.resources.bgm.calmTimer = 0;
         }
         else
         {
             intensityTarget = std::min(intensityTarget, calmCeiling);
-            game.bgm.calmTimer -= deltaTime;
+            game.resources.bgm.calmTimer -= deltaTime;
         }
     }
 
@@ -605,7 +634,7 @@ void updateBgmLayers(Game& game, float deltaTime)
     bool minibossActive = false;
     bool megabossActive = false;
     bool swarmBossActive = false;
-    for (const auto& boss : game.bosses)
+    for (const auto& boss : game.run.bosses)
     {
         if (boss.isSwarm)
         {
@@ -626,42 +655,103 @@ void updateBgmLayers(Game& game, float deltaTime)
         (minibossActive && !swarmBossActive && !megabossActive) ? minibossFullVolume : 0.0F;
 
     const float rate = 1 - std::exp(-volumeSmoothing * deltaTime);
-    game.bgm.intensityVolume += (intensityTarget - game.bgm.intensityVolume) * rate;
-    game.bgm.minibossVolume += (minibossTarget - game.bgm.minibossVolume) * rate;
-    game.bgm.megabossVolume += (megabossTarget - game.bgm.megabossVolume) * rate;
-    game.bgm.swarmBossVolume += (swarmBossTarget - game.bgm.swarmBossVolume) * rate;
+    game.resources.bgm.intensityVolume +=
+        (intensityTarget - game.resources.bgm.intensityVolume) * rate;
+    game.resources.bgm.minibossVolume +=
+        (minibossTarget - game.resources.bgm.minibossVolume) * rate;
+    game.resources.bgm.megabossVolume +=
+        (megabossTarget - game.resources.bgm.megabossVolume) * rate;
+    game.resources.bgm.swarmBossVolume +=
+        (swarmBossTarget - game.resources.bgm.swarmBossVolume) * rate;
 
-    SetMusicVolume(game.bgm.intensity, game.bgm.intensityVolume);
-    SetMusicVolume(game.bgm.miniboss, game.bgm.minibossVolume);
-    SetMusicVolume(game.bgm.megaboss, game.bgm.megabossVolume);
-    SetMusicVolume(game.bgm.swarmBoss, game.bgm.swarmBossVolume);
+    float duckFactor = 1.0F;
+    if (game.resources.bgm.duckTimer > 0)
+    {
+        game.resources.bgm.duckTimer -= deltaTime;
+        const float t = std::clamp(game.resources.bgm.duckTimer / bgmDuckDuration, 0.0F, 1.0F);
+        duckFactor = 1.0F - bgmDuckStrength * t;
+    }
+
+    SetMusicVolume(game.resources.bgm.base, SoundConstants::baseVolume * duckFactor);
+    SetMusicVolume(game.resources.bgm.intensity, game.resources.bgm.intensityVolume * duckFactor);
+    SetMusicVolume(game.resources.bgm.miniboss, game.resources.bgm.minibossVolume * duckFactor);
+    SetMusicVolume(game.resources.bgm.megaboss, game.resources.bgm.megabossVolume * duckFactor);
+    SetMusicVolume(game.resources.bgm.swarmBoss, game.resources.bgm.swarmBossVolume * duckFactor);
 }
 
-auto nerveFrac(const Game& game) -> float { return game.player.nerve / UpdateConstants::nerveMax; }
+auto nerveFrac(const Game& game) -> float
+{
+    return game.run.player.nerve / UpdateConstants::nerveMax;
+}
 
 void gainNerve(Game& game)
 {
-    game.player.nerve += nerveKillGain;
-    if (game.player.nerve > UpdateConstants::nerveMax)
+    game.run.player.nerve += nerveKillGain;
+    if (game.run.player.nerve > UpdateConstants::nerveMax)
     {
-        game.player.nerve = UpdateConstants::nerveMax;
+        game.run.player.nerve = UpdateConstants::nerveMax;
     }
+}
 
-    if (game.player.charges < UpdateConstants::maxCharges)
-    {
-        game.player.chargeRegenTimer -= 0.4F;
-    }
+auto isNerveChargeFeeding(const Game& game) -> bool
+{
+    return game.run.player.charges < UpdateConstants::maxCharges && game.run.player.nerve > 0 &&
+           game.run.player.nerveChargeFeedTimer >= chargeFeedDelay;
 }
 
 void updateNerve(Game& game, float deltaTime)
 {
-    if (game.player.nerve > 0)
+    auto& player = game.run.player;
+
+    if (game.run.nerveBurstFlashTimer > 0)
     {
-        game.player.nerve -= nerveDecayPerSec * deltaTime;
-        if (game.player.nerve < 0)
+        game.run.nerveBurstFlashTimer -= deltaTime;
+    }
+
+    if (player.charges >= UpdateConstants::maxCharges)
+    {
+        player.nerveChargeFeedTimer = 0;
+    }
+    else
+    {
+        player.nerveChargeFeedTimer += deltaTime;
+        if (isNerveChargeFeeding(game))
         {
-            game.player.nerve = 0;
+            const float drain = std::min(player.nerve, chargeFeedDrainRate * deltaTime);
+            player.nerve -= drain;
+            player.chargeRegenTimer -= deltaTime * (chargeFeedRegenMult - 1.0F);
         }
+    }
+
+    if (!player.nerveCharging)
+    {
+        return;
+    }
+
+    if (!IsKeyDown(KEY_SPACE))
+    {
+        player.nerveCharging = false;
+        return;
+    }
+
+    player.nerveChargeTimer -= deltaTime;
+    if (player.nerveChargeTimer <= 0)
+    {
+        player.nerveCharging = false;
+        player.nerve = 0;
+        fireNerveBurst(game);
+    }
+}
+
+void updateNerveBurstInput(Game& game)
+{
+    auto& player = game.run.player;
+    if (!player.nerveCharging && IsKeyPressed(KEY_SPACE) &&
+        player.nerve >= UpdateConstants::nerveMax)
+    {
+        player.nerveCharging = true;
+        player.nerveChargeTimer = UpdateConstants::nerveBurstWindup;
+        playSFX(game, game.resources.sounds.nerveCharge);
     }
 }
 
@@ -672,32 +762,37 @@ void damagePlayer(Game& game, int32_t amount)
         return;
     }
 
-    game.player.nerve = 0;
-
-    if (game.player.shieldStacks > 0)
+    if (game.run.player.nerveCharging)
     {
-        game.player.shieldStacks--;
-        game.player.immunityTimer = 1.0F;
-        playSFX(game, game.sounds.hit);
+        game.run.player.nerveCharging = false;
+        game.run.player.nerve = 0;
+        playSFX(game, game.resources.sounds.nerveFizzle);
+    }
+
+    if (game.run.player.shieldStacks > 0)
+    {
+        game.run.player.shieldStacks--;
+        game.run.player.immunityTimer = 1.0F;
+        playSFX(game, game.resources.sounds.hit);
         triggerShake(game, 3, 0.15F);
         return;
     }
 
-    game.player.health -= amount;
-    game.player.immunityTimer = 1.0F;
+    game.run.player.health -= amount;
+    game.run.player.immunityTimer = 1.0F;
 
-    if (game.player.health <= 0)
+    if (game.run.player.health <= 0)
     {
         game.state = GameState::GAME_OVER;
         game.menuIndex = 0;
-        playSFX(game, game.sounds.defeat);
+        playSFX(game, game.resources.sounds.defeat);
         triggerShake(game, 12, 0.5F);
         triggerHitPause(game, 0.15F);
         spawnDeathExplosion(game);
     }
     else
     {
-        playSFX(game, game.sounds.hit);
+        playSFX(game, game.resources.sounds.hit);
         triggerShake(game, 4, 0.2F);
     }
 }
@@ -713,8 +808,8 @@ void spawnDeathExplosion(Game& game)
         const Vector2 velocity{.x = std::cos(angle) * speed, .y = std::sin(angle) * speed};
         const float life = static_cast<float>(GetRandomValue(60, 100)) / 100.0F;
 
-        game.deathParticles.push_back(
-            Particle{.position = game.player.position,
+        game.run.deathParticles.push_back(
+            Particle{.position = game.run.player.position,
                      .velocity = velocity,
                      .radius = static_cast<float>(GetRandomValue(2, 5)),
                      .life = life,
@@ -726,19 +821,19 @@ void spawnDeathExplosion(Game& game)
 
 void updateDeathParticles(Game& game, float deltaTime)
 {
-    for (auto& p : game.deathParticles)
+    for (auto& p : game.run.deathParticles)
     {
         p.position = Vector2Add(p.position, p.velocity);
         p.life -= deltaTime;
     }
 
-    std::erase_if(game.deathParticles, [](const Particle& p) { return p.life <= 0; });
+    std::erase_if(game.run.deathParticles, [](const Particle& p) { return p.life <= 0; });
 }
 
 void updateGameplay(Game& game, float deltaTime)
 {
 
-    game.damageMeter = DamageMeter{};
+    game.run.damageMeter = DamageMeter{};
 
     if (IsKeyPressed(KEY_ESCAPE))
     {
@@ -747,7 +842,7 @@ void updateGameplay(Game& game, float deltaTime)
         return;
     }
 
-    game.runTime += deltaTime;
+    game.run.runTime += deltaTime;
 
     if (game.sandbox)
     {
@@ -764,22 +859,23 @@ void updateGameplay(Game& game, float deltaTime)
     updateWormhole(game, deltaTime);
     updateEliteHazards(game, deltaTime);
 
-    if (game.player.health > 0 && game.blackhole.active &&
-        Vector2Distance(game.player.position, game.blackhole.position) <= game.blackhole.radius)
+    if (game.run.player.health > 0 && game.run.blackhole.active &&
+        Vector2Distance(game.run.player.position, game.run.blackhole.position) <=
+            game.run.blackhole.radius)
     {
-        game.player.blackHoleCoreTimer += deltaTime;
-        if (game.player.blackHoleCoreTimer >= 1.0F)
+        game.run.player.blackHoleCoreTimer += deltaTime;
+        if (game.run.player.blackHoleCoreTimer >= 1.0F)
         {
-            game.player.blackHoleCoreTimer = 0;
-            damagePlayer(game, game.player.health);
+            game.run.player.blackHoleCoreTimer = 0;
+            damagePlayer(game, game.run.player.health);
         }
     }
     else
     {
-        game.player.blackHoleCoreTimer = 0;
+        game.run.player.blackHoleCoreTimer = 0;
     }
 
-    for (auto& boss : game.bosses)
+    for (auto& boss : game.run.bosses)
     {
         const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
                                  .y = boss.position.y + boss.size.y / 2};
@@ -797,7 +893,7 @@ void updateGameplay(Game& game, float deltaTime)
     filterDeadEntities(game);
 
     bool anyBossKilledThisFrame = false;
-    for (auto& boss : game.bosses)
+    for (auto& boss : game.run.bosses)
     {
         if (boss.health > 0)
         {
@@ -809,25 +905,25 @@ void updateGameplay(Game& game, float deltaTime)
 
         boss.health = 0;
         boss.color = Palette::StructDark;
-        game.score += 1000;
+        game.run.score += 1000;
         anyBossKilledThisFrame = true;
 
-        game.xp += static_cast<int>(static_cast<float>(game.xpToNext) *
-                                    (boss.isMega ? megaBossXpMult : miniBossXpMult));
+        game.run.xp += static_cast<int>(static_cast<float>(game.run.xpToNext) *
+                                        (boss.isMega ? megaBossXpMult : miniBossXpMult));
         if (boss.isSwarm)
         {
             spawnPickup(game, bossCenter, 0, PickupType::Shield);
             spawnPickup(game, bossCenter, 0, PickupType::LifeOrb);
         }
 
-        game.bossDeathShockwaves.push_back(
+        game.run.bossDeathShockwaves.push_back(
             BossDeathShockwave{.timer = UpdateConstants::bossDeathShockwaveDuration,
                                .position = bossCenter,
                                .hit = false});
 
-        if (game.player.health > 0)
+        if (game.run.player.health > 0)
         {
-            playSFX(game, game.sounds.victory);
+            playSFX(game, game.resources.sounds.victory);
             triggerShake(game, 14, 0.6F);
             triggerHitPause(game, 0.2F);
             gainNerve(game);
@@ -835,28 +931,28 @@ void updateGameplay(Game& game, float deltaTime)
     }
     if (anyBossKilledThisFrame)
     {
-        game.bgm.calmTimer = bossKillCalmDuration;
+        game.resources.bgm.calmTimer = bossKillCalmDuration;
     }
-    std::erase_if(game.bosses, [](const Boss& boss) { return boss.health <= 0; });
+    std::erase_if(game.run.bosses, [](const Boss& boss) { return boss.health <= 0; });
 
     updateBossDeathShockwave(game, deltaTime);
 
-    if (game.xp >= game.xpToNext)
+    if (game.run.xp >= game.run.xpToNext)
     {
         startLevelUp(game);
     }
 
-    if (game.damageMeter.total > 0)
+    if (game.run.damageMeter.total > 0)
     {
-        game.damageMeterDisplay = game.damageMeter;
-        game.damageMeterHoldTimer = damageMeterHoldDuration;
+        game.run.damageMeterDisplay = game.run.damageMeter;
+        game.run.damageMeterHoldTimer = damageMeterHoldDuration;
     }
-    else if (game.damageMeterHoldTimer > 0)
+    else if (game.run.damageMeterHoldTimer > 0)
     {
-        game.damageMeterHoldTimer -= deltaTime;
-        if (game.damageMeterHoldTimer <= 0)
+        game.run.damageMeterHoldTimer -= deltaTime;
+        if (game.run.damageMeterHoldTimer <= 0)
         {
-            game.damageMeterDisplay = DamageMeter{};
+            game.run.damageMeterDisplay = DamageMeter{};
         }
     }
 }
@@ -864,20 +960,21 @@ void updateGameplay(Game& game, float deltaTime)
 auto resolveExpandingWaveHit(Game& game, Vector2 from, float radius,
                              bool allowDash) -> WaveHitResult
 {
-    const float distToPlayer = Vector2Distance(from, game.player.position);
-    const bool inDanger = distToPlayer <= bossConstants::maxSlamRadius + game.player.radius;
-    const bool dashProtected = allowDash && game.player.dashing;
+    const float distToPlayer = Vector2Distance(from, game.run.player.position);
+    const bool inDanger = distToPlayer <= bossConstants::maxSlamRadius + game.run.player.radius;
+    const bool dashProtected = allowDash && game.run.player.dashing;
 
-    if (inDanger && (game.player.shieldActive || dashProtected || game.player.shieldStacks > 0))
+    if (inDanger &&
+        (game.run.player.shieldActive || dashProtected || game.run.player.shieldStacks > 0))
     {
-        if (!game.player.shieldActive && !dashProtected && game.player.shieldStacks > 0)
+        if (!game.run.player.shieldActive && !dashProtected && game.run.player.shieldStacks > 0)
         {
-            game.player.shieldStacks--;
+            game.run.player.shieldStacks--;
         }
         return WaveHitResult{.resolved = true, .hit = false};
     }
 
-    if (distToPlayer <= radius + game.player.radius)
+    if (distToPlayer <= radius + game.run.player.radius)
     {
         return WaveHitResult{.resolved = true, .hit = true};
     }
@@ -887,7 +984,7 @@ auto resolveExpandingWaveHit(Game& game, Vector2 from, float radius,
 
 void updateBossDeathShockwave(Game& game, float deltaTime)
 {
-    for (auto& wave : game.bossDeathShockwaves)
+    for (auto& wave : game.run.bossDeathShockwaves)
     {
         wave.timer -= deltaTime;
 
@@ -895,16 +992,16 @@ void updateBossDeathShockwave(Game& game, float deltaTime)
             std::clamp(1 - wave.timer / UpdateConstants::bossDeathShockwaveDuration, 0.0F, 1.0F);
         const float radius = bossConstants::maxSlamRadius * progress;
 
-        for (size_t i = 0; i < game.enemies.size(); i++)
+        for (size_t i = 0; i < game.run.enemies.size(); i++)
         {
-            if (game.enemies.at(i).active &&
-                Vector2Distance(wave.position, game.enemies.at(i).position) <= radius)
+            if (game.run.enemies.at(i).active &&
+                Vector2Distance(wave.position, game.run.enemies.at(i).position) <= radius)
             {
                 killEnemyForBossAttack(game, i, true);
             }
         }
 
-        for (auto& asteroid : game.asteroids)
+        for (auto& asteroid : game.run.asteroids)
         {
             if (asteroid.active && Vector2Distance(wave.position, asteroid.position) <= radius)
             {
@@ -915,7 +1012,7 @@ void updateBossDeathShockwave(Game& game, float deltaTime)
         const float prevProgress = std::clamp(
             1 - (wave.timer + deltaTime) / UpdateConstants::bossDeathShockwaveDuration, 0.0F, 1.0F);
         const float prevRadius = bossConstants::maxSlamRadius * prevProgress;
-        for (auto& other : game.bosses)
+        for (auto& other : game.run.bosses)
         {
             const Vector2 otherCenter{.x = other.position.x + other.size.x / 2,
                                       .y = other.position.y + other.size.y / 2};
@@ -940,39 +1037,41 @@ void updateBossDeathShockwave(Game& game, float deltaTime)
         }
     }
 
-    std::erase_if(game.bossDeathShockwaves,
+    std::erase_if(game.run.bossDeathShockwaves,
                   [](const BossDeathShockwave& wave) { return wave.timer <= 0; });
 }
 
 void updatePlayerMovement(Game& game, float deltaTime)
 {
     const bool inBlackHole =
-        game.blackhole.active && Vector2Distance(game.player.position, game.blackhole.position) <=
-                                     game.blackhole.influenceRadius;
+        game.run.blackhole.active &&
+        Vector2Distance(game.run.player.position, game.run.blackhole.position) <=
+            game.run.blackhole.influenceRadius;
 
-    if (game.player.slowTimer > 0)
+    if (game.run.player.slowTimer > 0)
     {
-        game.player.slowTimer -= deltaTime;
+        game.run.player.slowTimer -= deltaTime;
     }
 
-    if (game.player.dashing)
+    if (game.run.player.dashing)
     {
-        game.player.dashTimer -= deltaTime;
-        if (game.player.dashTimer <= 0)
+        game.run.player.dashTimer -= deltaTime;
+        if (game.run.player.dashTimer <= 0)
         {
-            game.player.dashing = false;
+            game.run.player.dashing = false;
         }
-        game.player.position = Vector2Add(
-            game.player.position, Vector2Scale(game.player.dashVelocity, deltaTime * frameScale));
+        game.run.player.position =
+            Vector2Add(game.run.player.position,
+                       Vector2Scale(game.run.player.dashVelocity, deltaTime * frameScale));
     }
     else
     {
-        float effectiveSpeed = game.player.speed * (1 + nerveSpeedBonusMax * nerveFrac(game));
+        float effectiveSpeed = game.run.player.speed;
         if (inBlackHole)
         {
             effectiveSpeed -= blackHoleSlow;
         }
-        if (game.player.slowTimer > 0)
+        if (game.run.player.slowTimer > 0)
         {
             effectiveSpeed *= 0.5F;
         }
@@ -1000,103 +1099,106 @@ void updatePlayerMovement(Game& game, float deltaTime)
             moveDelta.y += effectiveSpeed;
         }
 
-        game.player.position =
-            Vector2Add(game.player.position, Vector2Scale(moveDelta, deltaTime * frameScale));
+        game.run.player.position =
+            Vector2Add(game.run.player.position, Vector2Scale(moveDelta, deltaTime * frameScale));
     }
 
     if (inBlackHole)
     {
-        const Vector2 toHole = Vector2Subtract(game.blackhole.position, game.player.position);
+        const Vector2 toHole =
+            Vector2Subtract(game.run.blackhole.position, game.run.player.position);
         if (Vector2Length(toHole) > 0)
         {
             const Vector2 pull = Vector2Scale(Vector2Normalize(toHole), blackHolePull);
-            game.player.position =
-                Vector2Add(game.player.position, Vector2Scale(pull, deltaTime * frameScale));
+            game.run.player.position =
+                Vector2Add(game.run.player.position, Vector2Scale(pull, deltaTime * frameScale));
         }
     }
 
-    if (game.player.dashing)
+    if (game.run.player.dashing)
     {
-        applyWormholeTransit(game, game.player.position, game.player.dashVelocity,
-                             game.player.radius);
+        applyWormholeTransit(game, game.run.player.position, game.run.player.dashVelocity,
+                             game.run.player.radius);
     }
     else
     {
         Vector2 noVelocity{};
-        applyWormholeTransit(game, game.player.position, noVelocity, game.player.radius);
+        applyWormholeTransit(game, game.run.player.position, noVelocity, game.run.player.radius);
     }
 
-    if (const float dist = Vector2Length(game.player.position); dist > GameConstants::arenaHalf)
+    if (const float dist = Vector2Length(game.run.player.position); dist > GameConstants::arenaHalf)
     {
-        game.player.position =
-            Vector2Scale(Vector2Normalize(game.player.position), GameConstants::arenaHalf);
+        game.run.player.position =
+            Vector2Scale(Vector2Normalize(game.run.player.position), GameConstants::arenaHalf);
     }
 
     bool touchingAnyBoss = false;
-    for (auto& boss : game.bosses)
+    for (auto& boss : game.run.bosses)
     {
         const Rectangle bossRect{.x = boss.position.x,
                                  .y = boss.position.y,
                                  .width = boss.size.x,
                                  .height = boss.size.y};
         if (boss.health <= 0 ||
-            !CheckCollisionCircleRec(game.player.position, game.player.radius, bossRect))
+            !CheckCollisionCircleRec(game.run.player.position, game.run.player.radius, bossRect))
         {
             continue;
         }
 
         touchingAnyBoss = true;
 
-        if (game.player.dashing && !boss.hitByDash)
+        if (game.run.player.dashing && !boss.hitByDash)
         {
             boss.hitByDash = true;
-            const int32_t ramDamage = game.player.shieldActive ? bossRamDamage * 2 : bossRamDamage;
+            const int32_t ramDamage =
+                game.run.player.shieldActive ? bossRamDamage * 2 : bossRamDamage;
             boss.health -= ramDamage;
+            boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
             triggerShake(game, 14, 0.4F);
             triggerHitPause(game, 0.12F);
-            if (game.player.shieldActive)
+            if (game.run.player.shieldActive)
             {
-                game.player.chargeRegenTimer =
-                    std::max(0.0F, game.player.chargeRegenTimer - shieldKillChargeRefund);
+                game.run.player.chargeRegenTimer =
+                    std::max(0.0F, game.run.player.chargeRegenTimer - shieldKillChargeRefund);
             }
         }
     }
 
-    if (touchingAnyBoss && !game.player.dashing)
+    if (touchingAnyBoss && !game.run.player.dashing)
     {
-        game.player.bossBodyTimer += deltaTime;
-        if (game.player.bossBodyTimer >= bossBodyLingerLimit)
+        game.run.player.bossBodyTimer += deltaTime;
+        if (game.run.player.bossBodyTimer >= bossBodyLingerLimit)
         {
-            game.player.bossBodyTimer = 0;
-            damagePlayer(game, game.player.health);
+            game.run.player.bossBodyTimer = 0;
+            damagePlayer(game, game.run.player.health);
         }
     }
     else
     {
-        game.player.bossBodyTimer = 0;
+        game.run.player.bossBodyTimer = 0;
     }
 
-    if (game.player.immunityTimer > 0)
+    if (game.run.player.immunityTimer > 0)
     {
-        game.player.immunityTimer -= deltaTime;
+        game.run.player.immunityTimer -= deltaTime;
     }
 }
 
 void updateShieldAndBarrier(Game& game, float deltaTime)
 {
-    if (game.player.shieldCooldownTimer > 0)
+    if (game.run.player.shieldCooldownTimer > 0)
     {
-        game.player.shieldCooldownTimer -= deltaTime;
+        game.run.player.shieldCooldownTimer -= deltaTime;
     }
 
-    if (game.player.shieldActive)
+    if (game.run.player.shieldActive)
     {
-        game.player.shieldTimer -= deltaTime;
+        game.run.player.shieldTimer -= deltaTime;
 
-        if (game.player.shieldTimer <= 0)
+        if (game.run.player.shieldTimer <= 0)
         {
-            game.player.shieldActive = false;
-            game.player.shieldCooldownTimer = UpdateConstants::shieldCooldownDuration;
+            game.run.player.shieldActive = false;
+            game.run.player.shieldCooldownTimer = UpdateConstants::shieldCooldownDuration;
         }
     }
 }
@@ -1105,88 +1207,65 @@ auto chargeRegenDuration(const Game& game) -> float
 {
     const float duration =
         UpdateConstants::chargeRegenTime -
-        static_cast<float>(game.skillLevels.at(static_cast<size_t>(SkillType::Barrier))) * 0.3F;
+        static_cast<float>(game.run.skillLevels.at(static_cast<size_t>(SkillType::Barrier))) * 0.3F;
     return duration < 1 ? 1 : duration;
 }
 
 void updateAbilityCharges(Game& game, float deltaTime)
 {
-    if (game.player.charges < UpdateConstants::maxCharges)
+    if (game.run.player.charges < UpdateConstants::maxCharges)
     {
-        game.player.chargeRegenTimer -= deltaTime;
-        if (game.player.chargeRegenTimer <= 0)
+        game.run.player.chargeRegenTimer -= deltaTime;
+        if (game.run.player.chargeRegenTimer <= 0)
         {
-            game.player.charges++;
-            game.player.chargeRegenTimer = chargeRegenDuration(game);
+            game.run.player.charges++;
+            game.run.player.chargeRegenTimer = chargeRegenDuration(game);
         }
     }
 
-    const int32_t chargesAtFrameStart = game.player.charges;
-
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !game.player.dashing)
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !game.run.player.dashing)
     {
-        const bool hasCharge = game.player.charges > 0;
-        const bool emergency =
-            chargesAtFrameStart == 0 &&
-            game.player.nerve >= UpdateConstants::nerveMax * emergencyActionNerveThreshold;
-        if (hasCharge || emergency)
+        if (game.run.player.charges > 0)
         {
+            game.run.player.charges--;
 
-            if (hasCharge)
-            {
-                game.player.charges--;
-            }
-            else
-            {
-                game.player.nerve = 0;
-            }
+            game.run.player.dashing = true;
+            game.run.player.dashTimer = dashDuration;
+            game.run.player.dashVelocity = Vector2Scale(aimAtMouse(game), dashSpeed);
 
-            game.player.dashing = true;
-            game.player.dashTimer = dashDuration;
-            game.player.dashVelocity = Vector2Scale(aimAtMouse(game), dashSpeed);
-
-            for (auto& enemy : game.enemies)
+            for (auto& enemy : game.run.enemies)
             {
                 enemy.hitByDash = false;
             }
-            for (auto& boss : game.bosses)
+            for (auto& boss : game.run.bosses)
             {
                 boss.hitByDash = false;
             }
         }
     }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && !game.player.shieldActive)
+    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && !game.run.player.shieldActive)
     {
-        const bool hasCharge = game.player.charges > 0;
-        const bool emergency =
-            chargesAtFrameStart == 0 &&
-            game.player.nerve >= UpdateConstants::nerveMax * emergencyActionNerveThreshold;
-        if (hasCharge || emergency)
+        if (game.run.player.charges > 0)
         {
-            if (hasCharge)
-            {
-                game.player.charges--;
-            }
-            else
-            {
-                game.player.nerve = 0;
-            }
+            game.run.player.charges--;
 
-            game.player.shieldActive = true;
-            game.player.shieldTimer =
-                shieldBaseDuration +
-                static_cast<float>(game.skillLevels.at(static_cast<size_t>(SkillType::Barrier))) *
-                    0.4F;
+            game.run.player.shieldActive = true;
+            game.run.player.shieldTimer =
+                shieldBaseDuration + static_cast<float>(game.run.skillLevels.at(
+                                         static_cast<size_t>(SkillType::Barrier))) *
+                                         0.4F;
         }
     }
+
+    updateNerveBurstInput(game);
 }
 
 auto aimAtMouse(const Game& game) -> Vector2
 {
     const Vector2 mouse = GetMousePosition();
-    const Vector2 center{.x = static_cast<float>(game.windowWidth) / 2,
-                         .y = static_cast<float>(game.windowHeight) / 2};
+    const Rectangle box = letterBoxRect(game);
+    const Vector2 center{.x = box.x + box.width / 2, .y = box.y + box.height / 2};
     const Vector2 dir = Vector2Subtract(mouse, center);
     if (Vector2Length(dir) == 0)
     {
@@ -1201,7 +1280,7 @@ auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>
     Vector2 target{};
     bool found = false;
 
-    for (const auto& enemy : game.enemies)
+    for (const auto& enemy : game.run.enemies)
     {
         if (!enemy.active)
         {
@@ -1216,7 +1295,7 @@ auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>
         }
     }
 
-    for (const auto& hazard : game.eliteHazards)
+    for (const auto& hazard : game.run.eliteHazards)
     {
         if (!hazard.active)
         {
@@ -1259,13 +1338,13 @@ auto weaponCooldown(const Game& game, WeaponType kind, int32_t level, bool evolv
         base = 0.12F;
     }
     base *= 1 - 0.1F * static_cast<float>(
-                           game.skillLevels.at(static_cast<size_t>(SkillType::Cooldown)));
+                           game.run.skillLevels.at(static_cast<size_t>(SkillType::Cooldown)));
     if (evolved)
     {
         base *= 0.8F;
     }
 
-    for (const auto& hazard : game.eliteHazards)
+    for (const auto& hazard : game.run.eliteHazards)
     {
         if (hazard.active && hazard.role == EliteHazardRole::Suppressor)
         {
@@ -1284,10 +1363,9 @@ auto weaponCooldown(const Game& game, WeaponType kind, int32_t level, bool evolv
 auto weaponDamage(const Game& game, int32_t level) -> int32_t
 {
     auto dmg = static_cast<float>(baseBulletDamage + level * 2);
-    dmg *=
-        1 + 0.15F * static_cast<float>(game.skillLevels.at(static_cast<size_t>(SkillType::Damage)));
-    dmg *= 1 + nerveDamageBonusMax * nerveFrac(game);
-    dmg *= 1 + postCapDamageBonusPerLevel * static_cast<float>(game.postCapDamageLevels);
+    dmg *= 1 + 0.15F * static_cast<float>(
+                           game.run.skillLevels.at(static_cast<size_t>(SkillType::Damage)));
+    dmg *= 1 + postCapDamageBonusPerLevel * static_cast<float>(game.run.postCapDamageLevels);
     return static_cast<int32_t>(dmg);
 }
 
@@ -1323,16 +1401,17 @@ void spawnMines(Game& game, const Weapon& weapon)
     {
         const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
         const auto dist = static_cast<float>(GetRandomValue(20, 50));
-        const Vector2 pos = Vector2Add(game.player.position, Vector2{.x = std::cos(angle) * dist,
-                                                                     .y = std::sin(angle) * dist});
+        const Vector2 pos =
+            Vector2Add(game.run.player.position,
+                       Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
 
-        game.mines.push_back(Mine{.position = pos,
-                                  .velocity = Vector2{},
-                                  .fuse = mineLifetime,
-                                  .radius = radius,
-                                  .damage = dmg,
-                                  .active = true,
-                                  .evolved = weapon.evolved});
+        game.run.mines.push_back(Mine{.position = pos,
+                                      .velocity = Vector2{},
+                                      .fuse = mineLifetime,
+                                      .radius = radius,
+                                      .damage = dmg,
+                                      .active = true,
+                                      .evolved = weapon.evolved});
     }
 }
 
@@ -1352,7 +1431,7 @@ auto nearestAsteroidWithin(const Game& game, Vector2 from, float maxDist) -> std
     Vector2 target{};
     bool found = false;
 
-    for (const auto& asteroid : game.asteroids)
+    for (const auto& asteroid : game.run.asteroids)
     {
         if (!asteroid.active)
         {
@@ -1376,7 +1455,7 @@ auto nearestAsteroidWithin(const Game& game, Vector2 from, float maxDist) -> std
 
 void updateMines(Game& game, float deltaTime)
 {
-    for (auto& mine : game.mines)
+    for (auto& mine : game.run.mines)
     {
         if (!mine.active)
         {
@@ -1435,7 +1514,7 @@ void updateMines(Game& game, float deltaTime)
 
 void updateWeapons(Game& game, float deltaTime)
 {
-    for (auto& w : game.weapons)
+    for (auto& w : game.run.weapons)
     {
         if (w.flashTimer > 0)
         {
@@ -1475,14 +1554,15 @@ void updateWeapons(Game& game, float deltaTime)
                 const float sinA = std::sin(angleOffset);
                 const Vector2 rotated{.x = dir.x * cosA - dir.y * sinA,
                                       .y = dir.x * sinA + dir.y * cosA};
-                game.bullets.push_back(Bullet{.position = game.player.position,
-                                              .velocity = Vector2Scale(rotated, projectileSpeed),
-                                              .radius = projectileSize,
-                                              .color = color,
-                                              .active = true,
-                                              .damage = dmg});
+                game.run.bullets.push_back(
+                    Bullet{.position = game.run.player.position,
+                           .velocity = Vector2Scale(rotated, projectileSpeed),
+                           .radius = projectileSize,
+                           .color = color,
+                           .active = true,
+                           .damage = dmg});
             }
-            playSFX(game, game.sounds.shoot);
+            playSFX(game, game.resources.sounds.shoot);
             break;
         }
         case WeaponType::Homing:
@@ -1496,13 +1576,13 @@ void updateWeapons(Game& game, float deltaTime)
             bool fired = false;
             for (int m = 0; m < missiles; m++)
             {
-                if (const auto target = nearestEnemy(game, game.player.position);
+                if (const auto target = nearestEnemy(game, game.run.player.position);
                     target.has_value())
                 {
                     const Vector2 dir =
-                        Vector2Normalize(Vector2Subtract(*target, game.player.position));
-                    game.bossProjectiles.push_back(
-                        BossProjectile{.position = game.player.position,
+                        Vector2Normalize(Vector2Subtract(*target, game.run.player.position));
+                    game.run.bossProjectiles.push_back(
+                        BossProjectile{.position = game.run.player.position,
                                        .velocity = Vector2Scale(dir, homingProjSpeed * 1.5F),
                                        .radius = 6,
                                        .homing = true,
@@ -1514,7 +1594,7 @@ void updateWeapons(Game& game, float deltaTime)
             }
             if (fired)
             {
-                playSFX(game, game.sounds.homingLaunch);
+                playSFX(game, game.resources.sounds.homingLaunch);
             }
             break;
         }
@@ -1527,7 +1607,7 @@ void updateWeapons(Game& game, float deltaTime)
                 radius *= 1.4F;
                 dmg = static_cast<int32_t>(static_cast<float>(dmg) * 1.5F);
             }
-            aoePulse(game, game.player.position, radius, dmg, DamageSource::Orbit);
+            aoePulse(game, game.run.player.position, radius, dmg, DamageSource::Orbit);
             break;
         }
         case WeaponType::Shock:
@@ -1537,12 +1617,12 @@ void updateWeapons(Game& game, float deltaTime)
             if (w.evolved)
             {
                 dmg = static_cast<int32_t>(static_cast<float>(dmg) * 1.5F);
-                if (game.player.health < game.player.maxHealth)
+                if (game.run.player.health < game.run.player.maxHealth)
                 {
-                    game.player.health++;
+                    game.run.player.health++;
                 }
             }
-            aoePulse(game, game.player.position, radius, dmg, DamageSource::Shock);
+            aoePulse(game, game.run.player.position, radius, dmg, DamageSource::Shock);
             w.flashTimer = UpdateConstants::shockFlashDuration;
             break;
         }
@@ -1570,17 +1650,17 @@ void updateWeapons(Game& game, float deltaTime)
 
 void recordDamage(Game& game, DamageSource source, int32_t amount)
 {
-    game.damageMeter.bySource.at(static_cast<size_t>(source)) += amount;
-    game.damageMeter.total += amount;
+    game.run.damageMeter.bySource.at(static_cast<size_t>(source)) += amount;
+    game.run.damageMeter.total += amount;
 }
 
 void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSource source)
 {
     bool hitAny = false;
 
-    for (size_t j = 0; j < game.enemies.size(); j++)
+    for (size_t j = 0; j < game.run.enemies.size(); j++)
     {
-        const auto& enemy = game.enemies.at(j);
+        const auto& enemy = game.run.enemies.at(j);
         if (enemy.active && !enemy.phased &&
             Vector2Distance(center, enemy.position) <=
                 radius + enemyKinds.at(static_cast<size_t>(enemy.kind)).radius)
@@ -1591,9 +1671,9 @@ void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSourc
         }
     }
 
-    for (size_t j = 0; j < game.eliteHazards.size(); j++)
+    for (size_t j = 0; j < game.run.eliteHazards.size(); j++)
     {
-        const auto& hazard = game.eliteHazards.at(j);
+        const auto& hazard = game.run.eliteHazards.at(j);
         if (hazard.active &&
             Vector2Distance(center, hazard.position) <= radius + EliteHazardConstants::radius)
         {
@@ -1603,33 +1683,33 @@ void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSourc
         }
     }
 
-    for (auto& asteroid : game.asteroids)
+    for (auto& asteroid : game.run.asteroids)
     {
         if (asteroid.active &&
             Vector2Distance(center, asteroid.position) <= radius + asteroid.radius)
         {
             asteroid.active = false;
-            game.score += asteroidScore(asteroid.tier);
-            breakAsteroid(game.asteroids, asteroid);
+            game.run.score += asteroidScore(asteroid.tier);
+            breakAsteroid(game.run.asteroids, asteroid);
             hitAny = true;
         }
     }
 
     if (hitAny)
     {
-        playSFX(game, game.sounds.explosion);
+        playSFX(game, game.resources.sounds.explosion);
     }
 }
 
 void beamPulse(Game& game, Vector2 dir, float length, int32_t dmg, DamageSource source)
 {
-    const Vector2 start = game.player.position;
+    const Vector2 start = game.run.player.position;
     const Vector2 end = Vector2Add(start, Vector2Scale(dir, length));
     bool hitAny = false;
 
-    for (size_t j = 0; j < game.enemies.size(); j++)
+    for (size_t j = 0; j < game.run.enemies.size(); j++)
     {
-        const auto& enemy = game.enemies.at(j);
+        const auto& enemy = game.run.enemies.at(j);
         if (enemy.active && !enemy.phased &&
             CheckCollisionCircleLine(
                 enemy.position, enemyKinds.at(static_cast<size_t>(enemy.kind)).radius, start, end))
@@ -1640,9 +1720,9 @@ void beamPulse(Game& game, Vector2 dir, float length, int32_t dmg, DamageSource 
         }
     }
 
-    for (size_t j = 0; j < game.eliteHazards.size(); j++)
+    for (size_t j = 0; j < game.run.eliteHazards.size(); j++)
     {
-        const auto& hazard = game.eliteHazards.at(j);
+        const auto& hazard = game.run.eliteHazards.at(j);
         if (hazard.active &&
             CheckCollisionCircleLine(hazard.position, EliteHazardConstants::radius, start, end))
         {
@@ -1652,22 +1732,87 @@ void beamPulse(Game& game, Vector2 dir, float length, int32_t dmg, DamageSource 
         }
     }
 
-    for (auto& asteroid : game.asteroids)
+    for (auto& asteroid : game.run.asteroids)
     {
         if (asteroid.active &&
             CheckCollisionCircleLine(asteroid.position, asteroid.radius, start, end))
         {
             asteroid.active = false;
-            game.score += asteroidScore(asteroid.tier);
-            breakAsteroid(game.asteroids, asteroid);
+            game.run.score += asteroidScore(asteroid.tier);
+            breakAsteroid(game.run.asteroids, asteroid);
             hitAny = true;
         }
     }
 
     if (hitAny)
     {
-        playSFX(game, game.sounds.explosion);
+        playSFX(game, game.resources.sounds.explosion);
     }
+}
+
+void fireNerveBurst(Game& game)
+{
+    const Vector2 dir = aimAtMouse(game);
+    const Vector2 start = game.run.player.position;
+    const Vector2 end = Vector2Add(start, Vector2Scale(dir, nerveBurstLength));
+
+    for (size_t j = 0; j < game.run.enemies.size(); j++)
+    {
+        const auto& enemy = game.run.enemies.at(j);
+        if (enemy.active && !enemy.phased &&
+            CheckCollisionCircleLine(
+                enemy.position, enemyKinds.at(static_cast<size_t>(enemy.kind)).radius, start, end))
+        {
+            damageEnemy(game, j, nerveBurstDamage);
+            recordDamage(game, DamageSource::Nerve, nerveBurstDamage);
+        }
+    }
+
+    for (size_t j = 0; j < game.run.eliteHazards.size(); j++)
+    {
+        const auto& hazard = game.run.eliteHazards.at(j);
+        if (hazard.active &&
+            CheckCollisionCircleLine(hazard.position, EliteHazardConstants::radius, start, end))
+        {
+            damageEliteHazard(game, j, nerveBurstDamage);
+            recordDamage(game, DamageSource::Nerve, nerveBurstDamage);
+        }
+    }
+
+    for (auto& asteroid : game.run.asteroids)
+    {
+        if (asteroid.active &&
+            CheckCollisionCircleLine(asteroid.position, asteroid.radius, start, end))
+        {
+            asteroid.active = false;
+            game.run.score += asteroidScore(asteroid.tier);
+            breakAsteroid(game.run.asteroids, asteroid);
+        }
+    }
+
+    for (auto& boss : game.run.bosses)
+    {
+        if (boss.health <= 0)
+        {
+            continue;
+        }
+        const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
+                                 .y = boss.position.y + boss.size.y / 2};
+        if (CheckCollisionCircleLine(bossCenter, boss.size.x / 2, start, end))
+        {
+            boss.health -= nerveBurstDamage;
+            boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+            recordDamage(game, DamageSource::Nerve, nerveBurstDamage);
+        }
+    }
+
+    game.run.nerveBurstFlashTimer = 0.15F;
+    game.run.nerveBurstFlashEnd = end;
+
+    playSFX(game, game.resources.sounds.nerveRelease);
+    duckBGM(game);
+    triggerShake(game, 10, 0.3F);
+    triggerHitPause(game, 0.08F);
 }
 
 void updateWaveSpawner(Game& game, float deltaTime)
@@ -1677,29 +1822,32 @@ void updateWaveSpawner(Game& game, float deltaTime)
         return;
     }
 
-    game.waveTimer -= deltaTime;
-    if (game.waveTimer <= 0)
+    if (game.run.bosses.empty())
     {
-        game.waveNumber++;
-        game.waveTimer = GameConstants::waveDuration;
+        game.run.waveTimer -= deltaTime;
+        if (game.run.waveTimer <= 0)
+        {
+            game.run.waveNumber++;
+            game.run.waveTimer = GameConstants::waveDuration;
 
-        if (game.waveNumber % megaBossWaveInterval == 0)
-        {
-            spawnBossWave(game, megaBossHealthMult, megaBossSizeMult, true);
-        }
-        else if (game.waveNumber % miniBossWaveInterval == 0)
-        {
-            spawnBossWave(game, miniBossHealthMult, miniBossSizeMult, false);
+            if (game.run.waveNumber % megaBossWaveInterval == 0)
+            {
+                spawnBossWave(game, megaBossHealthMult, megaBossSizeMult, true);
+            }
+            else if (game.run.waveNumber % miniBossWaveInterval == 0)
+            {
+                spawnBossWave(game, miniBossHealthMult, miniBossSizeMult, false);
+            }
         }
     }
 
-    game.enemySpawnTimer -= deltaTime;
-    if (game.enemySpawnTimer <= 0 &&
-        static_cast<int>(game.enemies.size()) < UpdateConstants::maxEnemies)
+    game.run.enemySpawnTimer -= deltaTime;
+    if (game.run.enemySpawnTimer <= 0 &&
+        static_cast<int>(game.run.enemies.size()) < UpdateConstants::maxEnemies)
     {
 
-        const int cycleIndex = (game.waveNumber - 1) / spawnRateCycleLength;
-        const int cyclePosition = (game.waveNumber - 1) % spawnRateCycleLength + 1;
+        const int cycleIndex = (game.run.waveNumber - 1) / spawnRateCycleLength;
+        const int cyclePosition = (game.run.waveNumber - 1) % spawnRateCycleLength + 1;
 
         const float baseInterval = std::max(
             1.2F - static_cast<float>(cycleIndex) * spawnRateCycleStep, spawnIntervalFloor);
@@ -1707,13 +1855,13 @@ void updateWaveSpawner(Game& game, float deltaTime)
             cyclePosition <= spawnRateCycleLength / 2 ? 1.0F : spawnRateSecondHalfMultiplier;
         const float interval = std::max(baseInterval * phaseMultiplier, spawnIntervalFloor);
 
-        game.enemySpawnTimer =
-            interval *
-            difficultyDefs.at(static_cast<size_t>(game.settings.difficulty)).spawnRateMult;
+        game.run.enemySpawnTimer =
+            interval * difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty))
+                           .spawnRateMult;
 
-        const int spawnCount = 1 + game.waveNumber / 4;
-        for (int i = 0;
-             i < spawnCount && static_cast<int>(game.enemies.size()) < UpdateConstants::maxEnemies;
+        const int spawnCount = 1 + game.run.waveNumber / 4;
+        for (int i = 0; i < spawnCount &&
+                        static_cast<int>(game.run.enemies.size()) < UpdateConstants::maxEnemies;
              i++)
         {
             spawnEnemy(game);
@@ -1721,13 +1869,13 @@ void updateWaveSpawner(Game& game, float deltaTime)
     }
 
     const bool asteroidsUnlocked =
-        game.settings.difficulty != Difficulty::Easy || game.waveNumber >= 10;
+        game.resources.settings.difficulty != Difficulty::Easy || game.run.waveNumber >= 10;
 
-    game.asteroidSpawnTimer -= deltaTime;
-    if (asteroidsUnlocked && game.asteroidSpawnTimer <= 0 &&
-        static_cast<int>(game.asteroids.size()) < asteroidCap(game))
+    game.run.asteroidSpawnTimer -= deltaTime;
+    if (asteroidsUnlocked && game.run.asteroidSpawnTimer <= 0 &&
+        static_cast<int>(game.run.asteroids.size()) < asteroidCap(game))
     {
-        game.asteroidSpawnTimer =
+        game.run.asteroidSpawnTimer =
             static_cast<float>(GetRandomValue(8, 16)) / 10.0F * asteroidIntervalMultiplier(game);
 
         AsteroidTier tier = AsteroidTier::Large;
@@ -1737,30 +1885,31 @@ void updateWaveSpawner(Game& game, float deltaTime)
         }
 
         const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-        const Vector2 spawnPos = Vector2Add(
-            game.player.position, Vector2{.x = std::cos(angle) * 500, .y = std::sin(angle) * 500});
+        const Vector2 spawnPos =
+            Vector2Add(game.run.player.position,
+                       Vector2{.x = std::cos(angle) * 500, .y = std::sin(angle) * 500});
         const Vector2 aimPoint = Vector2Add(
-            game.player.position, Vector2{.x = static_cast<float>(GetRandomValue(-180, 180)),
-                                          .y = static_cast<float>(GetRandomValue(-180, 180))});
+            game.run.player.position, Vector2{.x = static_cast<float>(GetRandomValue(-180, 180)),
+                                              .y = static_cast<float>(GetRandomValue(-180, 180))});
         const Vector2 direction = Vector2Normalize(Vector2Subtract(aimPoint, spawnPos));
         const float speed = static_cast<float>(GetRandomValue(25, 45)) / 10.0F;
 
-        game.asteroids.push_back(Asteroid{.position = spawnPos,
-                                          .velocity = Vector2Scale(direction, speed),
-                                          .radius = asteroidRadius(tier),
-                                          .tier = tier,
-                                          .active = true});
+        game.run.asteroids.push_back(Asteroid{.position = spawnPos,
+                                              .velocity = Vector2Scale(direction, speed),
+                                              .radius = asteroidRadius(tier),
+                                              .tier = tier,
+                                              .active = true});
     }
 }
 
 auto asteroidIntervalMultiplier(const Game& game) -> float
 {
-    return game.settings.difficulty == Difficulty::Hard ? 1.0F : 1.6F;
+    return game.resources.settings.difficulty == Difficulty::Hard ? 1.0F : 1.6F;
 }
 
 auto asteroidCap(const Game& game) -> int
 {
-    switch (game.settings.difficulty)
+    switch (game.resources.settings.difficulty)
     {
     case Difficulty::Hard:
         return maxAsteroid;
@@ -1773,7 +1922,7 @@ auto asteroidCap(const Game& game) -> int
 
 auto eliteHazardCap(const Game& game) -> int
 {
-    switch (game.settings.difficulty)
+    switch (game.resources.settings.difficulty)
     {
     case Difficulty::Easy:
         return 1;
@@ -1786,14 +1935,14 @@ auto eliteHazardCap(const Game& game) -> int
 
 auto waveEnemyScale(const Game& game) -> float
 {
-    return 1 + static_cast<float>(game.waveNumber - 1) * UpdateConstants::waveEnemyScalePerWave;
+    return 1 + static_cast<float>(game.run.waveNumber - 1) * UpdateConstants::waveEnemyScalePerWave;
 }
 
 auto enemyDamage(const Game& game, int32_t base) -> int32_t
 {
     return static_cast<int32_t>(
         static_cast<float>(base) *
-        difficultyDefs.at(static_cast<size_t>(game.settings.difficulty)).enemyDamageMult *
+        difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty)).enemyDamageMult *
         waveEnemyScale(game));
 }
 
@@ -1803,7 +1952,7 @@ void spawnEnemy(Game& game)
     eligible.reserve(enemyKinds.size());
     for (size_t i = 0; i < enemyKinds.size(); i++)
     {
-        if (enemyKinds.at(i).minWave <= game.waveNumber)
+        if (enemyKinds.at(i).minWave <= game.run.waveNumber)
         {
             eligible.push_back(static_cast<int>(i));
         }
@@ -1822,13 +1971,13 @@ auto spawnRingPosition(const Game& game) -> Vector2
 {
     const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
     const auto dist = static_cast<float>(GetRandomValue(420, 520));
-    return Vector2Add(game.player.position,
+    return Vector2Add(game.run.player.position,
                       Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
 }
 
 void spawnEnemyAt(Game& game, int kindIndex, Vector2 pos)
 {
-    if (static_cast<int>(game.enemies.size()) >= UpdateConstants::maxEnemies)
+    if (static_cast<int>(game.run.enemies.size()) >= UpdateConstants::maxEnemies)
     {
         return;
     }
@@ -1838,26 +1987,27 @@ void spawnEnemyAt(Game& game, int kindIndex, Vector2 pos)
 
     auto health = static_cast<int32_t>(
         static_cast<float>(kind.health) *
-        difficultyDefs.at(static_cast<size_t>(game.settings.difficulty)).enemyHealthMult *
+        difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty)).enemyHealthMult *
         waveEnemyScale(game));
     if (elite)
     {
         health *= 2;
     }
 
-    game.enemies.push_back(Enemy{.kind = kindIndex,
-                                 .position = pos,
-                                 .velocity = Vector2{},
-                                 .health = health,
-                                 .active = true,
-                                 .stateTimer = kind.fireInterval + kind.spawnInterval + 1,
-                                 .charging = false,
-                                 .telegraphing = false,
-                                 .phased = false,
-                                 .orbitAngle = 0,
-                                 .orbitDist = 200,
-                                 .isElite = elite,
-                                 .hitByDash = false});
+    game.run.enemies.push_back(Enemy{.kind = kindIndex,
+                                     .position = pos,
+                                     .velocity = Vector2{},
+                                     .health = health,
+                                     .active = true,
+                                     .stateTimer = kind.fireInterval + kind.spawnInterval + 1,
+                                     .charging = false,
+                                     .telegraphing = false,
+                                     .phased = false,
+                                     .orbitAngle = 0,
+                                     .orbitDist = 200,
+                                     .isElite = elite,
+                                     .hitByDash = false,
+                                     .hitFlashTimer = 0});
 }
 
 auto bossMoveCountForDifficulty(Difficulty difficulty) -> int
@@ -1897,12 +2047,13 @@ auto sampleBossMoveset(int count) -> std::vector<BossAttack>
 
 void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega, bool isSwarm)
 {
-    const int32_t tier = game.waveNumber / megaBossWaveInterval;
+    const int32_t tier = game.run.waveNumber / megaBossWaveInterval;
 
     const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
     const auto dist = static_cast<float>(GetRandomValue(1200, 1500));
-    const Vector2 spawnPos = Vector2Add(
-        game.player.position, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+    const Vector2 spawnPos =
+        Vector2Add(game.run.player.position,
+                   Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
 
     auto typeIndex =
         static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(bossTypes.size()) - 1));
@@ -1915,46 +2066,50 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
 
     const auto health = static_cast<int32_t>(
         static_cast<float>(500 + tier * 250) * healthMult * type.healthMult *
-        difficultyDefs.at(static_cast<size_t>(game.settings.difficulty)).enemyHealthMult);
+        difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty)).enemyHealthMult);
     const float size = 100.0F * sizeMult * type.sizeMult;
 
-    auto moveset = sampleBossMoveset(bossMoveCountForDifficulty(game.settings.difficulty));
+    auto moveset =
+        sampleBossMoveset(bossMoveCountForDifficulty(game.resources.settings.difficulty));
     const BossAttack firstAttack = moveset.front();
 
-    game.bosses.push_back(Boss{.position = spawnPos,
-                               .size = Vector2{.x = size, .y = size},
-                               .color = type.color,
-                               .baseColor = type.color,
-                               .health = health,
-                               .maxHealth = health,
-                               .state = BossState::IDLE,
-                               .attack = firstAttack,
-                               .moveset = std::move(moveset),
-                               .attackTimer = static_cast<float>(GetRandomValue(15, 35)) / 10.0F,
-                               .stateTimer = 0,
-                               .targetPosition = Vector2{},
-                               .beamRotation = 0,
-                               .slamHit = false,
-                               .beamShieldLatched = false,
-                               .wormholeBeamOrigin = Vector2{},
-                               .chargeVelocity = Vector2{},
-                               .barrageTimer = 0,
-                               .hitByDash = false,
-                               .isMega = isMega,
-                               .isSwarm = isSwarm,
-                               .strafePhase = static_cast<float>(GetRandomValue(0, 628)) / 100.0F});
+    game.run.bosses.push_back(
+        Boss{.position = spawnPos,
+             .size = Vector2{.x = size, .y = size},
+             .color = type.color,
+             .baseColor = type.color,
+             .health = health,
+             .maxHealth = health,
+             .state = BossState::IDLE,
+             .attack = firstAttack,
+             .moveset = std::move(moveset),
+             .attackTimer = static_cast<float>(GetRandomValue(15, 35)) / 10.0F,
+             .stateTimer = 0,
+             .targetPosition = Vector2{},
+             .beamRotation = 0,
+             .slamHit = false,
+             .beamShieldLatched = false,
+             .wormholeBeamOrigin = Vector2{},
+             .chargeVelocity = Vector2{},
+             .barrageTimer = 0,
+             .hitByDash = false,
+             .isMega = isMega,
+             .isSwarm = isSwarm,
+             .strafePhase = static_cast<float>(GetRandomValue(0, 628)) / 100.0F,
+             .hitFlashTimer = 0,
+             .shape = type.shape});
 }
 
 void spawnBossWave(Game& game, float healthMult, float sizeMult, bool isMega)
 {
-    game.bossSpawnCount++;
-    const bool isSwarm = game.bossSpawnCount % bossSwarmInterval == 0;
+    game.run.bossSpawnCount++;
+    const bool isSwarm = game.run.bossSpawnCount % bossSwarmInterval == 0;
     const int count = isSwarm ? 3 : 1;
     for (int i = 0; i < count; i++)
     {
         spawnBossInstance(game, healthMult, sizeMult, isMega, isSwarm);
     }
-    playSFX(game, game.sounds.bossWindUp);
+    playSFX(game, game.resources.sounds.bossWindUp);
 }
 
 void spawnBoss(Game& game) { spawnBossWave(game, megaBossHealthMult, megaBossSizeMult, true); }
@@ -1967,19 +2122,24 @@ void spawnSwarmBoss(Game& game)
     {
         spawnBossInstance(game, megaBossHealthMult, megaBossSizeMult, true, true);
     }
-    playSFX(game, game.sounds.bossWindUp);
+    playSFX(game, game.resources.sounds.bossWindUp);
 }
 
 void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 {
+    if (boss.hitFlashTimer > 0)
+    {
+        boss.hitFlashTimer -= deltaTime;
+    }
+
     if (boss.state == BossState::SHOOTING &&
         (boss.attack == BossAttack::ChargeDash || boss.attack == BossAttack::Slam ||
-         boss.attack == BossAttack::WormholeBeam))
+         boss.attack == BossAttack::WormholeBeam || boss.attack == BossAttack::Beam))
     {
         return;
     }
 
-    const Vector2 toPlayer = Vector2Subtract(game.player.position, bossCenter);
+    const Vector2 toPlayer = Vector2Subtract(game.run.player.position, bossCenter);
     const float dist = Vector2Length(toPlayer);
     if (dist <= 1.0F)
     {
@@ -2001,7 +2161,7 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
     Vector2 move = Vector2Add(Vector2Scale(dirToPlayer, radialAmount), Vector2Scale(perp, strafe));
     if (Vector2Length(move) > 0)
     {
-        const float chaseSpeed = (game.player.speed * 1.15F + 1) * speedMult;
+        const float chaseSpeed = (game.run.player.speed * 1.15F + 1) * speedMult;
         move = Vector2Scale(Vector2Normalize(move), chaseSpeed);
         boss.position = Vector2Add(boss.position, Vector2Scale(move, deltaTime * frameScale));
     }
@@ -2009,12 +2169,12 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
 
 void updatePickups(Game& game, float deltaTime)
 {
-    const float magnetRadius =
-        70 +
-        70 * static_cast<float>(game.skillLevels.at(static_cast<size_t>(SkillType::PickupRadius))) *
-            0.2F;
+    const float magnetRadius = 70 + 70 *
+                                        static_cast<float>(game.run.skillLevels.at(
+                                            static_cast<size_t>(SkillType::PickupRadius))) *
+                                        0.2F;
 
-    for (auto& pickup : game.pickups)
+    for (auto& pickup : game.run.pickups)
     {
         if (!pickup.active)
         {
@@ -2028,14 +2188,15 @@ void updatePickups(Game& game, float deltaTime)
             continue;
         }
 
-        if (game.blackhole.active &&
-            Vector2Distance(pickup.position, game.blackhole.position) <= game.blackhole.radius)
+        if (game.run.blackhole.active &&
+            Vector2Distance(pickup.position, game.run.blackhole.position) <=
+                game.run.blackhole.radius)
         {
             pickup.active = false;
             continue;
         }
 
-        const Vector2 toPlayer = Vector2Subtract(game.player.position, pickup.position);
+        const Vector2 toPlayer = Vector2Subtract(game.run.player.position, pickup.position);
         const float dist = Vector2Length(toPlayer);
 
         if (dist <= magnetRadius && dist > 0)
@@ -2045,24 +2206,24 @@ void updatePickups(Game& game, float deltaTime)
                 Vector2Add(pickup.position, Vector2Scale(pull, deltaTime * frameScale));
         }
 
-        if (dist <= game.player.radius + 6)
+        if (dist <= game.run.player.radius + 6)
         {
             pickup.active = false;
 
             switch (pickup.type)
             {
             case PickupType::XP:
-                game.xp += pickup.value;
+                game.run.xp += pickup.value;
                 break;
             case PickupType::LifeOrb:
                 collectLifeOrb(game);
                 break;
             case PickupType::Shield:
-                if (game.player.shieldStacks < playerConstants::maxShieldStack)
+                if (game.run.player.shieldStacks < playerConstants::maxShieldStack)
                 {
-                    game.player.shieldStacks++;
+                    game.run.player.shieldStacks++;
                 }
-                playSFX(game, game.sounds.menuConfirm);
+                playSFX(game, game.resources.sounds.menuConfirm);
                 break;
             default:
                 break;
@@ -2073,35 +2234,35 @@ void updatePickups(Game& game, float deltaTime)
 
 void collectLifeOrb(Game& game)
 {
-    if (!game.player.halfLifeOrb)
+    if (!game.run.player.halfLifeOrb)
     {
-        game.player.halfLifeOrb = true;
+        game.run.player.halfLifeOrb = true;
         return;
     }
 
-    game.player.halfLifeOrb = false;
-    if (game.player.health < game.player.maxHealth)
+    game.run.player.halfLifeOrb = false;
+    if (game.run.player.health < game.run.player.maxHealth)
     {
-        game.player.health++;
+        game.run.player.health++;
     }
 }
 
 void startLevelUp(Game& game)
 {
-    game.xp -= game.xpToNext;
-    game.level++;
-    game.xpToNext = 100 + (game.level - 1) * 60;
+    game.run.xp -= game.run.xpToNext;
+    game.run.level++;
+    game.run.xpToNext = 100 + (game.run.level - 1) * 60;
 
-    game.pendingChoices = rollLevelUpChoices(game);
+    game.run.pendingChoices = rollLevelUpChoices(game);
     game.menuIndex = 0;
     game.state = GameState::LEVEL_UP;
-    playSFX(game, game.sounds.menuConfirm);
+    playSFX(game, game.resources.sounds.menuConfirm);
 }
 
 auto isFusedPassive(const Game& game, SkillType id) -> bool
 {
     return std::ranges::any_of(
-        game.weapons, [&](const Weapon& w)
+        game.run.weapons, [&](const Weapon& w)
         { return w.evolved && skillLinkedPassive.at(static_cast<size_t>(w.type)) == id; });
 }
 
@@ -2111,7 +2272,7 @@ auto equippedSlotCount(const Game& game) -> int
     for (size_t i = 0; i < static_cast<size_t>(SkillType::Count); i++)
     {
         const auto id = static_cast<SkillType>(i);
-        if (game.skillLevels.at(i) > 0 && !isFusedPassive(game, id))
+        if (game.run.skillLevels.at(i) > 0 && !isFusedPassive(game, id))
         {
             count++;
         }
@@ -2121,7 +2282,8 @@ auto equippedSlotCount(const Game& game) -> int
 
 auto hasWeapon(const Game& game, WeaponType kind) -> bool
 {
-    return std::ranges::any_of(game.weapons, [kind](const Weapon& w) { return w.type == kind; });
+    return std::ranges::any_of(game.run.weapons,
+                               [kind](const Weapon& w) { return w.type == kind; });
 }
 
 auto sampleDistinct(std::vector<SkillType> ids, int count) -> std::vector<SkillType>
@@ -2160,12 +2322,12 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
     for (size_t i = 0; i < static_cast<size_t>(SkillType::Count); i++)
     {
         const auto id = static_cast<SkillType>(i);
-        if (isFusedPassive(game, id) || game.skillLevels.at(i) >= Skills.at(i).maxLevel ||
+        if (isFusedPassive(game, id) || game.run.skillLevels.at(i) >= Skills.at(i).maxLevel ||
             !demoSkillAllowed(id))
         {
             continue;
         }
-        if (game.skillLevels.at(i) > 0 || !slotsFull)
+        if (game.run.skillLevels.at(i) > 0 || !slotsFull)
         {
             eligible.push_back(id);
         }
@@ -2176,7 +2338,7 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
     {
         choices = rollRewardChoices();
 
-        game.postCapDamageLevels++;
+        game.run.postCapDamageLevels++;
     }
     else
     {
@@ -2193,8 +2355,8 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
         const auto grantSkill = weaponGrantSkill.at(i);
         const auto passive = skillLinkedPassive.at(i);
         if (hasWeapon(game, kind) && !weaponEvolved(game, kind) &&
-            game.skillLevels.at(static_cast<size_t>(grantSkill)) >= 3 &&
-            game.skillLevels.at(static_cast<size_t>(passive)) >= 3)
+            game.run.skillLevels.at(static_cast<size_t>(grantSkill)) >= 3 &&
+            game.run.skillLevels.at(static_cast<size_t>(passive)) >= 3)
         {
             evolvable.push_back(kind);
         }
@@ -2232,7 +2394,7 @@ auto rollRewardChoices() -> std::vector<LevelUpChoice>
 
 auto weaponEvolved(const Game& game, WeaponType kind) -> bool
 {
-    for (const auto& w : game.weapons)
+    for (const auto& w : game.run.weapons)
     {
         if (w.type == kind)
         {
@@ -2244,7 +2406,7 @@ auto weaponEvolved(const Game& game, WeaponType kind) -> bool
 
 void applySkill(Game& game, SkillType id)
 {
-    game.skillLevels.at(static_cast<size_t>(id))++;
+    game.run.skillLevels.at(static_cast<size_t>(id))++;
 
     if (const auto kind = weaponForGrantSkill(id); kind.has_value())
     {
@@ -2255,11 +2417,11 @@ void applySkill(Game& game, SkillType id)
     switch (id)
     {
     case SkillType::MoveSpeed:
-        game.player.speed *= 1.1F;
+        game.run.player.speed *= 1.1F;
         break;
     case SkillType::MaxHp:
-        game.player.maxHealth++;
-        game.player.health = game.player.maxHealth;
+        game.run.player.maxHealth++;
+        game.run.player.health = game.run.player.maxHealth;
         break;
     default:
 
@@ -2281,7 +2443,7 @@ auto weaponForGrantSkill(SkillType id) -> std::optional<WeaponType>
 
 void grantOrLevelWeapon(Game& game, WeaponType kind)
 {
-    for (auto& w : game.weapons)
+    for (auto& w : game.run.weapons)
     {
         if (w.type == kind)
         {
@@ -2289,18 +2451,18 @@ void grantOrLevelWeapon(Game& game, WeaponType kind)
             return;
         }
     }
-    game.weapons.push_back(Weapon{.type = kind, .level = 1});
+    game.run.weapons.push_back(Weapon{.type = kind, .level = 1});
 }
 
 void applyEvolution(Game& game, WeaponType kind)
 {
-    for (auto& w : game.weapons)
+    for (auto& w : game.run.weapons)
     {
         if (w.type == kind)
         {
             w.evolved = true;
             triggerShake(game, 10, 0.3F);
-            playSFX(game, game.sounds.critical);
+            playSFX(game, game.resources.sounds.critical);
             return;
         }
     }
@@ -2308,7 +2470,7 @@ void applyEvolution(Game& game, WeaponType kind)
 
 void updateBullets(Game& game, float deltaTime)
 {
-    for (auto& bullet : game.bullets)
+    for (auto& bullet : game.run.bullets)
     {
         if (!bullet.active)
         {
@@ -2319,7 +2481,7 @@ void updateBullets(Game& game, float deltaTime)
             Vector2Add(bullet.position, Vector2Scale(bullet.velocity, deltaTime * frameScale));
         applyWormholeTransit(game, bullet.position, bullet.velocity, bullet.radius);
 
-        for (auto& boss : game.bosses)
+        for (auto& boss : game.run.bosses)
         {
             const Rectangle bossRect{.x = boss.position.x,
                                      .y = boss.position.y,
@@ -2330,11 +2492,12 @@ void updateBullets(Game& game, float deltaTime)
             {
                 bullet.active = false;
                 boss.health -= bullet.damage;
+                boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
                 recordDamage(game, DamageSource::Forward, bullet.damage);
             }
         }
 
-        for (auto& asteroid : game.asteroids)
+        for (auto& asteroid : game.run.asteroids)
         {
             if (bullet.active && asteroid.active &&
                 CheckCollisionCircles(bullet.position, bullet.radius, asteroid.position,
@@ -2342,15 +2505,15 @@ void updateBullets(Game& game, float deltaTime)
             {
                 bullet.active = false;
                 asteroid.active = false;
-                game.score += asteroidScore(asteroid.tier);
-                breakAsteroid(game.asteroids, asteroid);
-                playSFX(game, game.sounds.explosion);
+                game.run.score += asteroidScore(asteroid.tier);
+                breakAsteroid(game.run.asteroids, asteroid);
+                playSFX(game, game.resources.sounds.explosion);
             }
         }
 
-        for (size_t j = 0; j < game.eliteHazards.size(); j++)
+        for (size_t j = 0; j < game.run.eliteHazards.size(); j++)
         {
-            auto& hazard = game.eliteHazards.at(j);
+            auto& hazard = game.run.eliteHazards.at(j);
             if (bullet.active && hazard.active &&
                 CheckCollisionCircles(bullet.position, bullet.radius, hazard.position,
                                       EliteHazardConstants::radius))
@@ -2361,9 +2524,9 @@ void updateBullets(Game& game, float deltaTime)
             }
         }
 
-        for (size_t j = 0; j < game.enemies.size(); j++)
+        for (size_t j = 0; j < game.run.enemies.size(); j++)
         {
-            auto& enemy = game.enemies.at(j);
+            auto& enemy = game.run.enemies.at(j);
             if (!bullet.active || !enemy.active || enemy.phased)
             {
                 continue;
@@ -2377,7 +2540,7 @@ void updateBullets(Game& game, float deltaTime)
             }
         }
 
-        for (auto& projectile : game.bossProjectiles)
+        for (auto& projectile : game.run.bossProjectiles)
         {
             if (bullet.active && projectile.active && !projectile.fromPlayer &&
                 CheckCollisionCircles(bullet.position, bullet.radius, projectile.position,
@@ -2388,12 +2551,12 @@ void updateBullets(Game& game, float deltaTime)
                 if (projectile.health <= 0)
                 {
                     projectile.active = false;
-                    game.score += 5;
+                    game.run.score += 5;
                 }
             }
         }
 
-        if (Vector2Distance(bullet.position, game.player.position) > entityDespawnRadius)
+        if (Vector2Distance(bullet.position, game.run.player.position) > entityDespawnRadius)
         {
             bullet.active = false;
         }
@@ -2403,37 +2566,39 @@ void updateBullets(Game& game, float deltaTime)
 void spawnPickup(Game& game, Vector2 position, int value, PickupType type)
 {
     const float lifetime = type == PickupType::XP ? xpPickupLifetime : bonusPickupLifetime;
-    game.pickups.push_back(Pickup{.position = position,
-                                  .value = value,
-                                  .type = type,
-                                  .active = true,
-                                  .lifetime = lifetime,
-                                  .maxLifetime = lifetime});
+    game.run.pickups.push_back(Pickup{.position = position,
+                                      .value = value,
+                                      .type = type,
+                                      .active = true,
+                                      .lifetime = lifetime,
+                                      .maxLifetime = lifetime});
 }
 
 void damageEnemy(Game& game, size_t index, int32_t amount)
 {
-    const auto kind = enemyKinds.at(static_cast<size_t>(game.enemies.at(index).kind));
-    game.enemies.at(index).health -= amount;
+    const auto kind = enemyKinds.at(static_cast<size_t>(game.run.enemies.at(index).kind));
+    game.run.enemies.at(index).health -= amount;
+    game.run.enemies.at(index).hitFlashTimer = UpdateConstants::hitFlashDuration;
 
-    if (game.enemies.at(index).health > 0)
+    if (game.run.enemies.at(index).health > 0)
     {
         return;
     }
 
-    game.enemies.at(index).active = false;
+    game.run.enemies.at(index).active = false;
     int32_t score = kind.score;
-    if (game.enemies.at(index).isElite)
+    if (game.run.enemies.at(index).isElite)
     {
         score *= 2;
     }
-    game.score += score;
-    playSFX(game, game.sounds.explosion);
+    game.run.score += score;
+    playSFX(game, game.resources.sounds.explosion);
     gainNerve(game);
 
-    spawnPickup(game, game.enemies.at(index).position, score, PickupType::XP);
+    spawnPickup(game, game.run.enemies.at(index).position, score, PickupType::XP);
 
-    const Vector2 bonusPos = Vector2Add(game.enemies.at(index).position, Vector2{.x = 8, .y = 8});
+    const Vector2 bonusPos =
+        Vector2Add(game.run.enemies.at(index).position, Vector2{.x = 8, .y = 8});
     const int32_t roll = GetRandomValue(0, 999);
     if (roll < shieldDropChance)
     {
@@ -2450,13 +2615,14 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
         {
             const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
             const Vector2 offset{.x = std::cos(angle) * 10, .y = std::sin(angle) * 10};
-            spawnEnemyAt(game, kind.splitKind, Vector2Add(game.enemies.at(index).position, offset));
+            spawnEnemyAt(game, kind.splitKind,
+                         Vector2Add(game.run.enemies.at(index).position, offset));
         }
     }
 
     if (kind.explodesOnDeath &&
-        Vector2Distance(game.player.position, game.enemies.at(index).position) <=
-            kind.explodeRadius + game.player.radius)
+        Vector2Distance(game.run.player.position, game.run.enemies.at(index).position) <=
+            kind.explodeRadius + game.run.player.radius)
     {
         damagePlayer(game, enemyDamage(game, kind.explodeDamage));
     }
@@ -2464,19 +2630,19 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
 
 void killEnemyForBossAttack(Game& game, size_t index, bool alwaysLoot)
 {
-    if (alwaysLoot || game.settings.difficulty == Difficulty::Easy)
+    if (alwaysLoot || game.resources.settings.difficulty == Difficulty::Easy)
     {
         damageEnemy(game, index, 999);
     }
     else
     {
-        game.enemies.at(index).active = false;
+        game.run.enemies.at(index).active = false;
     }
 }
 
 void updateAsteroids(Game& game, float deltaTime)
 {
-    for (auto& asteroid : game.asteroids)
+    for (auto& asteroid : game.run.asteroids)
     {
         if (!asteroid.active)
         {
@@ -2486,40 +2652,40 @@ void updateAsteroids(Game& game, float deltaTime)
         asteroid.position =
             Vector2Add(asteroid.position, Vector2Scale(asteroid.velocity, deltaTime * frameScale));
 
-        if (Vector2Distance(asteroid.position, game.player.position) > asteroidDespawnRadius)
+        if (Vector2Distance(asteroid.position, game.run.player.position) > asteroidDespawnRadius)
         {
             asteroid.active = false;
             continue;
         }
 
-        if (game.blackhole.active)
+        if (game.run.blackhole.active)
         {
-            const Vector2 toHole = Vector2Subtract(game.blackhole.position, asteroid.position);
+            const Vector2 toHole = Vector2Subtract(game.run.blackhole.position, asteroid.position);
             const float dist = Vector2Length(toHole);
 
-            if (dist <= game.blackhole.influenceRadius && dist > 0)
+            if (dist <= game.run.blackhole.influenceRadius && dist > 0)
             {
                 const Vector2 pull = Vector2Scale(Vector2Normalize(toHole), blackHoleAsteroidPull);
                 asteroid.position =
                     Vector2Add(asteroid.position, Vector2Scale(pull, deltaTime * frameScale));
             }
 
-            if (dist <= game.blackhole.radius)
+            if (dist <= game.run.blackhole.radius)
             {
                 asteroid.active = false;
-                breakAsteroid(game.asteroids, asteroid);
+                breakAsteroid(game.run.asteroids, asteroid);
                 continue;
             }
         }
 
-        if (game.player.health > 0 && game.player.immunityTimer <= 0 &&
-            CheckCollisionCircles(game.player.position, game.player.radius, asteroid.position,
-                                  asteroid.radius))
+        if (game.run.player.health > 0 && game.run.player.immunityTimer <= 0 &&
+            CheckCollisionCircles(game.run.player.position, game.run.player.radius,
+                                  asteroid.position, asteroid.radius))
         {
-            if (game.player.shieldActive)
+            if (game.run.player.shieldActive)
             {
-                game.player.shieldActive = false;
-                game.player.shieldCooldownTimer = UpdateConstants::shieldCooldownDuration;
+                game.run.player.shieldActive = false;
+                game.run.player.shieldCooldownTimer = UpdateConstants::shieldCooldownDuration;
             }
             else
             {
@@ -2527,7 +2693,7 @@ void updateAsteroids(Game& game, float deltaTime)
             }
 
             asteroid.active = false;
-            breakAsteroid(game.asteroids, asteroid);
+            breakAsteroid(game.run.asteroids, asteroid);
         }
     }
 }
@@ -2535,11 +2701,11 @@ void updateAsteroids(Game& game, float deltaTime)
 void updateEnemies(Game& game, float deltaTime)
 {
 
-    game.enemies.reserve(static_cast<size_t>(UpdateConstants::maxEnemies));
+    game.run.enemies.reserve(static_cast<size_t>(UpdateConstants::maxEnemies));
 
-    for (size_t i = 0; i < game.enemies.size(); i++)
+    for (size_t i = 0; i < game.run.enemies.size(); i++)
     {
-        auto& enemy = game.enemies.at(i);
+        auto& enemy = game.run.enemies.at(i);
         if (!enemy.active)
         {
             continue;
@@ -2548,7 +2714,12 @@ void updateEnemies(Game& game, float deltaTime)
         const auto& kind = enemyKinds.at(static_cast<size_t>(enemy.kind));
         float speedMod = enemy.isElite ? 1.2F : 1.0F;
 
-        for (const auto& hazard : game.eliteHazards)
+        if (enemy.hitFlashTimer > 0)
+        {
+            enemy.hitFlashTimer -= deltaTime;
+        }
+
+        for (const auto& hazard : game.run.eliteHazards)
         {
             if (hazard.active && hazard.role == EliteHazardRole::Warlord)
             {
@@ -2561,7 +2732,7 @@ void updateEnemies(Game& game, float deltaTime)
         {
         case EnemyPattern::Chase:
         {
-            const Vector2 dir = Vector2Subtract(game.player.position, enemy.position);
+            const Vector2 dir = Vector2Subtract(game.run.player.position, enemy.position);
             if (Vector2Length(dir) > 0)
             {
                 enemy.position = Vector2Add(
@@ -2572,7 +2743,7 @@ void updateEnemies(Game& game, float deltaTime)
         }
         case EnemyPattern::Zigzag:
         {
-            Vector2 dir = Vector2Subtract(game.player.position, enemy.position);
+            Vector2 dir = Vector2Subtract(game.run.player.position, enemy.position);
             if (Vector2Length(dir) > 0)
             {
                 dir = Vector2Normalize(dir);
@@ -2605,7 +2776,7 @@ void updateEnemies(Game& game, float deltaTime)
                     enemy.telegraphing = true;
                     enemy.stateTimer = chargeTelegraphDuration;
                     const Vector2 dir =
-                        Vector2Normalize(Vector2Subtract(game.player.position, enemy.position));
+                        Vector2Normalize(Vector2Subtract(game.run.player.position, enemy.position));
                     enemy.velocity = Vector2Scale(
                         dir, kind.speed * speedMod * UpdateConstants::enemyChargeDashSpeedMult);
                 }
@@ -2629,13 +2800,13 @@ void updateEnemies(Game& game, float deltaTime)
 
                 enemy.orbitDist -= 9 * speedMod * deltaTime;
             }
-            enemy.position = Vector2Add(game.player.position,
+            enemy.position = Vector2Add(game.run.player.position,
                                         Vector2{.x = std::cos(enemy.orbitAngle) * enemy.orbitDist,
                                                 .y = std::sin(enemy.orbitAngle) * enemy.orbitDist});
             break;
         case EnemyPattern::Turret:
         {
-            const Vector2 toPlayer = Vector2Subtract(game.player.position, enemy.position);
+            const Vector2 toPlayer = Vector2Subtract(game.run.player.position, enemy.position);
             const float playerDist = Vector2Length(toPlayer);
             constexpr float kiteDistance = turretFireRange * 0.55F;
             if (playerDist > 1.0F)
@@ -2662,13 +2833,14 @@ void updateEnemies(Game& game, float deltaTime)
             {
                 enemy.stateTimer = kind.fireInterval / speedMod;
                 const Vector2 dir =
-                    Vector2Normalize(Vector2Subtract(game.player.position, enemy.position));
+                    Vector2Normalize(Vector2Subtract(game.run.player.position, enemy.position));
                 const auto turretProjectileHealth = static_cast<int32_t>(std::max(
-                    1.0F, static_cast<float>(baseProjectileHealth) *
-                              difficultyDefs.at(static_cast<size_t>(game.settings.difficulty))
-                                  .enemyHealthMult *
-                              waveEnemyScale(game)));
-                game.bossProjectiles.push_back(
+                    1.0F,
+                    static_cast<float>(baseProjectileHealth) *
+                        difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty))
+                            .enemyHealthMult *
+                        waveEnemyScale(game)));
+                game.run.bossProjectiles.push_back(
                     BossProjectile{.position = enemy.position,
                                    .velocity = Vector2Scale(dir, kind.projectileSpeed),
                                    .radius = 6,
@@ -2713,7 +2885,7 @@ void updateEnemies(Game& game, float deltaTime)
             }
         }
 
-        if (Vector2Distance(enemy.position, game.player.position) > entityDespawnRadius)
+        if (Vector2Distance(enemy.position, game.run.player.position) > entityDespawnRadius)
         {
             enemy.active = false;
             continue;
@@ -2724,14 +2896,15 @@ void updateEnemies(Game& game, float deltaTime)
             continue;
         }
 
-        const bool collides = game.player.health > 0 &&
-                              CheckCollisionCircles(game.player.position, game.player.radius,
-                                                    enemy.position, kind.radius);
+        const bool collides =
+            game.run.player.health > 0 &&
+            CheckCollisionCircles(game.run.player.position, game.run.player.radius, enemy.position,
+                                  kind.radius);
 
-        if (collides && game.player.dashing && !enemy.hitByDash)
+        if (collides && game.run.player.dashing && !enemy.hitByDash)
         {
             enemy.hitByDash = true;
-            if (game.player.shieldActive)
+            if (game.run.player.shieldActive)
             {
                 damageEnemy(game, i, 999);
                 recordDamage(game, DamageSource::Dash, 999);
@@ -2745,30 +2918,30 @@ void updateEnemies(Game& game, float deltaTime)
 
             if (!enemy.active)
             {
-                game.player.chargeRegenTimer =
-                    std::max(0.0F, game.player.chargeRegenTimer - dashKillChargeRefund);
+                game.run.player.chargeRegenTimer =
+                    std::max(0.0F, game.run.player.chargeRegenTimer - dashKillChargeRefund);
             }
             continue;
         }
 
-        if (collides && !game.player.dashing && game.player.immunityTimer <= 0)
+        if (collides && !game.run.player.dashing && game.run.player.immunityTimer <= 0)
         {
             if (kind.isLeech)
             {
-                game.player.slowTimer = 2.0F;
-                game.player.immunityTimer = 1.0F;
+                game.run.player.slowTimer = 2.0F;
+                game.run.player.immunityTimer = 1.0F;
                 damageEnemy(game, i, 999);
             }
-            else if (game.player.shieldActive)
+            else if (game.run.player.shieldActive)
             {
-                game.player.shieldActive = false;
-                game.player.shieldCooldownTimer = UpdateConstants::shieldCooldownDuration;
+                game.run.player.shieldActive = false;
+                game.run.player.shieldCooldownTimer = UpdateConstants::shieldCooldownDuration;
                 damageEnemy(game, i, 999);
 
                 if (!enemy.active)
                 {
-                    game.player.chargeRegenTimer =
-                        std::max(0.0F, game.player.chargeRegenTimer - shieldKillChargeRefund);
+                    game.run.player.chargeRegenTimer =
+                        std::max(0.0F, game.run.player.chargeRegenTimer - shieldKillChargeRefund);
                 }
             }
             else
@@ -2781,7 +2954,7 @@ void updateEnemies(Game& game, float deltaTime)
 
 void updateProjectiles(Game& game, float deltaTime)
 {
-    for (auto& projectile : game.bossProjectiles)
+    for (auto& projectile : game.run.bossProjectiles)
     {
         if (!projectile.active)
         {
@@ -2802,8 +2975,8 @@ void updateProjectiles(Game& game, float deltaTime)
             }
             else
             {
-                const Vector2 direction =
-                    Vector2Normalize(Vector2Subtract(game.player.position, projectile.position));
+                const Vector2 direction = Vector2Normalize(
+                    Vector2Subtract(game.run.player.position, projectile.position));
                 projectile.velocity = Vector2Scale(direction, homingProjSpeed);
             }
         }
@@ -2812,13 +2985,13 @@ void updateProjectiles(Game& game, float deltaTime)
                                          Vector2Scale(projectile.velocity, deltaTime * frameScale));
         applyWormholeTransit(game, projectile.position, projectile.velocity, projectile.radius);
 
-        if (Vector2Distance(projectile.position, game.player.position) > entityDespawnRadius)
+        if (Vector2Distance(projectile.position, game.run.player.position) > entityDespawnRadius)
         {
             projectile.active = false;
             continue;
         }
 
-        for (auto& asteroid : game.asteroids)
+        for (auto& asteroid : game.run.asteroids)
         {
             if (!asteroid.active || !CheckCollisionCircles(projectile.position, projectile.radius,
                                                            asteroid.position, asteroid.radius))
@@ -2827,7 +3000,7 @@ void updateProjectiles(Game& game, float deltaTime)
             }
 
             asteroid.active = false;
-            breakAsteroid(game.asteroids, asteroid);
+            breakAsteroid(game.run.asteroids, asteroid);
 
             if (projectile.fromPlayer)
             {
@@ -2836,9 +3009,9 @@ void updateProjectiles(Game& game, float deltaTime)
             }
         }
 
-        for (size_t j = 0; j < game.enemies.size(); j++)
+        for (size_t j = 0; j < game.run.enemies.size(); j++)
         {
-            auto& enemy = game.enemies.at(j);
+            auto& enemy = game.run.enemies.at(j);
             if (!projectile.active || !enemy.active || enemy.phased ||
                 !CheckCollisionCircles(projectile.position, projectile.radius, enemy.position,
                                        enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
@@ -2859,9 +3032,9 @@ void updateProjectiles(Game& game, float deltaTime)
 
         if (projectile.fromPlayer)
         {
-            for (size_t j = 0; j < game.eliteHazards.size(); j++)
+            for (size_t j = 0; j < game.run.eliteHazards.size(); j++)
             {
-                auto& hazard = game.eliteHazards.at(j);
+                auto& hazard = game.run.eliteHazards.at(j);
                 if (!projectile.active || !hazard.active ||
                     !CheckCollisionCircles(projectile.position, projectile.radius, hazard.position,
                                            EliteHazardConstants::radius))
@@ -2876,10 +3049,11 @@ void updateProjectiles(Game& game, float deltaTime)
             }
         }
 
-        if (projectile.active && !projectile.fromPlayer && game.player.health > 0 &&
-            !game.player.shieldActive && !game.player.dashing && game.player.immunityTimer <= 0 &&
-            CheckCollisionCircles(game.player.position, game.player.radius, projectile.position,
-                                  projectile.radius))
+        if (projectile.active && !projectile.fromPlayer && game.run.player.health > 0 &&
+            !game.run.player.shieldActive && !game.run.player.dashing &&
+            game.run.player.immunityTimer <= 0 &&
+            CheckCollisionCircles(game.run.player.position, game.run.player.radius,
+                                  projectile.position, projectile.radius))
         {
             projectile.active = false;
             damagePlayer(game, enemyDamage(game, projectile.damage));
@@ -2889,21 +3063,21 @@ void updateProjectiles(Game& game, float deltaTime)
 
 void filterDeadEntities(Game& game)
 {
-    std::erase_if(game.asteroids, [](const Asteroid& a) { return !a.active; });
-    std::erase_if(game.bullets, [](const Bullet& b) { return !b.active; });
-    std::erase_if(game.bossProjectiles, [](const BossProjectile& p) { return !p.active; });
-    std::erase_if(game.enemies, [](const Enemy& e) { return !e.active; });
-    std::erase_if(game.eliteHazards, [](const EliteHazard& h) { return !h.active; });
-    std::erase_if(game.pickups, [](const Pickup& p) { return !p.active; });
-    std::erase_if(game.mines, [](const Mine& m) { return !m.active; });
+    std::erase_if(game.run.asteroids, [](const Asteroid& a) { return !a.active; });
+    std::erase_if(game.run.bullets, [](const Bullet& b) { return !b.active; });
+    std::erase_if(game.run.bossProjectiles, [](const BossProjectile& p) { return !p.active; });
+    std::erase_if(game.run.enemies, [](const Enemy& e) { return !e.active; });
+    std::erase_if(game.run.eliteHazards, [](const EliteHazard& h) { return !h.active; });
+    std::erase_if(game.run.pickups, [](const Pickup& p) { return !p.active; });
+    std::erase_if(game.run.mines, [](const Mine& m) { return !m.active; });
 }
 
 void updateBgParticles(Game& game)
 {
-    const auto tileW = static_cast<float>(game.screenWidth);
-    const auto tileH = static_cast<float>(game.screenHeight);
+    const auto tileW = static_cast<float>(game.resources.screenWidth);
+    const auto tileH = static_cast<float>(game.resources.screenHeight);
 
-    for (auto& p : game.bgParticles)
+    for (auto& p : game.run.bgParticles)
     {
         p.position = Vector2Add(p.position, p.velocity);
 
@@ -2928,7 +3102,7 @@ void updateBgParticles(Game& game)
 
 void damageEliteHazard(Game& game, size_t index, int32_t amount)
 {
-    auto& hazard = game.eliteHazards.at(index);
+    auto& hazard = game.run.eliteHazards.at(index);
     hazard.health -= amount;
     if (hazard.health > 0)
     {
@@ -2936,8 +3110,8 @@ void damageEliteHazard(Game& game, size_t index, int32_t amount)
     }
 
     hazard.active = false;
-    game.score += eliteHazardScore;
-    playSFX(game, game.sounds.explosion);
+    game.run.score += eliteHazardScore;
+    playSFX(game, game.resources.sounds.explosion);
     gainNerve(game);
 
     spawnPickup(game, hazard.position, 0,
@@ -2948,51 +3122,51 @@ void damageEliteHazard(Game& game, size_t index, int32_t amount)
 void spawnEliteHazard(Game& game, EliteHazardRole role)
 {
 
-    const float halfExtentX = static_cast<float>(game.screenWidth) / 2;
-    const float halfExtentY = static_cast<float>(game.screenHeight) / 2;
+    const float halfExtentX = static_cast<float>(game.resources.screenWidth) / 2;
+    const float halfExtentY = static_cast<float>(game.resources.screenHeight) / 2;
     const float orbitDist = std::min(halfExtentX, halfExtentY) * eliteHazardOrbitDistFrac;
 
     const auto health = static_cast<int32_t>(
         static_cast<float>(eliteHazardBaseHealth) *
-        difficultyDefs.at(static_cast<size_t>(game.settings.difficulty)).enemyHealthMult *
+        difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty)).enemyHealthMult *
         waveEnemyScale(game));
 
     const auto spawnAngle = static_cast<float>(GetRandomValue(0, 359));
     const float spawnRad = spawnAngle * DEG2RAD;
     const Vector2 spawnPos =
-        Vector2Add(game.player.position, Vector2{.x = std::cos(spawnRad) * orbitDist,
-                                                 .y = std::sin(spawnRad) * orbitDist});
+        Vector2Add(game.run.player.position, Vector2{.x = std::cos(spawnRad) * orbitDist,
+                                                     .y = std::sin(spawnRad) * orbitDist});
 
-    game.eliteHazards.push_back(EliteHazard{.position = spawnPos,
-                                            .angle = spawnAngle,
-                                            .role = role,
-                                            .health = health,
-                                            .maxHealth = health,
-                                            .active = true});
+    game.run.eliteHazards.push_back(EliteHazard{.position = spawnPos,
+                                                .angle = spawnAngle,
+                                                .role = role,
+                                                .health = health,
+                                                .maxHealth = health,
+                                                .active = true});
 }
 
 void updateEliteHazards(Game& game, float deltaTime)
 {
 
-    const float halfExtentX = static_cast<float>(game.screenWidth) / 2;
-    const float halfExtentY = static_cast<float>(game.screenHeight) / 2;
+    const float halfExtentX = static_cast<float>(game.resources.screenWidth) / 2;
+    const float halfExtentY = static_cast<float>(game.resources.screenHeight) / 2;
     const float orbitDist = std::min(halfExtentX, halfExtentY) * eliteHazardOrbitDistFrac;
 
-    game.eliteHazardSpawnTimer -= deltaTime;
+    game.run.eliteHazardSpawnTimer -= deltaTime;
 
-    if (!game.sandbox && game.eliteHazardSpawnTimer <= 0)
+    if (!game.sandbox && game.run.eliteHazardSpawnTimer <= 0)
     {
-        if (static_cast<int>(game.eliteHazards.size()) < eliteHazardCap(game))
+        if (static_cast<int>(game.run.eliteHazards.size()) < eliteHazardCap(game))
         {
             spawnEliteHazard(game, GetRandomValue(0, 1) == 0 ? EliteHazardRole::Warlord
                                                              : EliteHazardRole::Suppressor);
         }
-        game.eliteHazardSpawnTimer =
+        game.run.eliteHazardSpawnTimer =
             static_cast<float>(GetRandomValue(static_cast<int32_t>(eliteHazardSpawnIntervalMin),
                                               static_cast<int32_t>(eliteHazardSpawnIntervalMax)));
     }
 
-    for (auto& hazard : game.eliteHazards)
+    for (auto& hazard : game.run.eliteHazards)
     {
         if (!hazard.active)
         {
@@ -3002,14 +3176,14 @@ void updateEliteHazards(Game& game, float deltaTime)
         hazard.angle += eliteHazardOrbitSpin * deltaTime;
         const float rad = hazard.angle * DEG2RAD;
         const Vector2 targetPos =
-            Vector2Add(game.player.position,
+            Vector2Add(game.run.player.position,
                        Vector2{.x = std::cos(rad) * orbitDist, .y = std::sin(rad) * orbitDist});
 
         const float lerpT = std::clamp(eliteHazardFollowRate * deltaTime, 0.0F, 1.0F);
         hazard.position = Vector2Lerp(hazard.position, targetPos, lerpT);
 
-        if (game.player.health > 0 && game.player.immunityTimer <= 0 &&
-            CheckCollisionCircles(game.player.position, game.player.radius, hazard.position,
+        if (game.run.player.health > 0 && game.run.player.immunityTimer <= 0 &&
+            CheckCollisionCircles(game.run.player.position, game.run.player.radius, hazard.position,
                                   EliteHazardConstants::radius))
         {
             damagePlayer(game, enemyDamage(game, eliteHazardContactDamage));
@@ -3021,38 +3195,40 @@ void spawnBlackHole(Game& game)
 {
     const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
     const auto dist = static_cast<float>(GetRandomValue(150, 350));
-    game.blackhole.position = Vector2Add(
-        game.player.position, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
-    game.blackhole.radius = 25;
-    game.blackhole.influenceRadius = 140;
-    game.blackhole.active = true;
-    game.blackhole.timer = static_cast<float>(GetRandomValue(60, 100)) / 10.0F;
+    game.run.blackhole.position =
+        Vector2Add(game.run.player.position,
+                   Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+    game.run.blackhole.radius = 25;
+    game.run.blackhole.influenceRadius = 140;
+    game.run.blackhole.active = true;
+    game.run.blackhole.timer = static_cast<float>(GetRandomValue(60, 100)) / 10.0F;
 }
 
 void updateBlackHole(Game& game, float deltaTime)
 {
-    game.blackhole.timer -= deltaTime;
+    game.run.blackhole.timer -= deltaTime;
 
-    if (!game.sandbox && !game.blackhole.active && game.blackhole.timer <= 0)
+    if (!game.sandbox && !game.run.blackhole.active && game.run.blackhole.timer <= 0)
     {
         spawnBlackHole(game);
     }
-    else if (game.blackhole.active && game.blackhole.timer <= 0)
+    else if (game.run.blackhole.active && game.run.blackhole.timer <= 0)
     {
-        game.blackhole.active = false;
-        game.blackhole.timer = static_cast<float>(GetRandomValue(50, 90)) / 10.0F;
+        game.run.blackhole.active = false;
+        game.run.blackhole.timer = static_cast<float>(GetRandomValue(50, 90)) / 10.0F;
     }
 
-    if (game.blackhole.active)
+    if (game.run.blackhole.active)
     {
-        const Vector2 toPlayer = Vector2Subtract(game.player.position, game.blackhole.position);
+        const Vector2 toPlayer =
+            Vector2Subtract(game.run.player.position, game.run.blackhole.position);
         const float dist = Vector2Length(toPlayer);
 
-        if (dist > game.blackhole.influenceRadius)
+        if (dist > game.run.blackhole.influenceRadius)
         {
             const Vector2 drift = Vector2Scale(Vector2Normalize(toPlayer), blackHoleChaseSpeed);
-            game.blackhole.position =
-                Vector2Add(game.blackhole.position, Vector2Scale(drift, deltaTime * frameScale));
+            game.run.blackhole.position = Vector2Add(game.run.blackhole.position,
+                                                     Vector2Scale(drift, deltaTime * frameScale));
         }
     }
 }
@@ -3064,31 +3240,31 @@ void spawnWormholePair(Game& game)
     const float angleB = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
     const auto distB = static_cast<float>(GetRandomValue(300, 600));
 
-    game.wormhole.positionA =
-        Vector2Add(game.player.position,
+    game.run.wormhole.positionA =
+        Vector2Add(game.run.player.position,
                    Vector2{.x = std::cos(angleA) * distA, .y = std::sin(angleA) * distA});
-    game.wormhole.positionB =
-        Vector2Add(game.player.position,
+    game.run.wormhole.positionB =
+        Vector2Add(game.run.player.position,
                    Vector2{.x = std::cos(angleB) * distB, .y = std::sin(angleB) * distB});
-    game.wormhole.facingA = static_cast<WormholeFacing>(GetRandomValue(0, 3));
-    game.wormhole.facingB = static_cast<WormholeFacing>(GetRandomValue(0, 3));
-    game.wormhole.radius = wormholeRadius;
-    game.wormhole.active = true;
-    game.wormhole.timer = wormholeLifetime;
+    game.run.wormhole.facingA = static_cast<WormholeFacing>(GetRandomValue(0, 3));
+    game.run.wormhole.facingB = static_cast<WormholeFacing>(GetRandomValue(0, 3));
+    game.run.wormhole.radius = wormholeRadius;
+    game.run.wormhole.active = true;
+    game.run.wormhole.timer = wormholeLifetime;
 }
 
 void updateWormhole(Game& game, float deltaTime)
 {
-    game.wormhole.timer -= deltaTime;
+    game.run.wormhole.timer -= deltaTime;
 
-    if (!game.sandbox && !game.wormhole.active && game.wormhole.timer <= 0)
+    if (!game.sandbox && !game.run.wormhole.active && game.run.wormhole.timer <= 0)
     {
         spawnWormholePair(game);
     }
-    else if (game.wormhole.active && game.wormhole.timer <= 0)
+    else if (game.run.wormhole.active && game.run.wormhole.timer <= 0)
     {
-        game.wormhole.active = false;
-        game.wormhole.timer =
+        game.run.wormhole.active = false;
+        game.run.wormhole.timer =
             static_cast<float>(GetRandomValue(static_cast<int32_t>(wormholeSpawnCooldownMin),
                                               static_cast<int32_t>(wormholeSpawnCooldownMax)));
     }
@@ -3097,22 +3273,23 @@ void updateWormhole(Game& game, float deltaTime)
 auto applyWormholeTransit(const Game& game, Vector2& position, Vector2& velocity,
                           float entityRadius) -> bool
 {
-    if (!game.wormhole.active)
+    if (!game.run.wormhole.active)
     {
         return false;
     }
 
-    const bool atA = Vector2Distance(position, game.wormhole.positionA) <= game.wormhole.radius;
+    const bool atA =
+        Vector2Distance(position, game.run.wormhole.positionA) <= game.run.wormhole.radius;
     const bool atB =
-        !atA && Vector2Distance(position, game.wormhole.positionB) <= game.wormhole.radius;
+        !atA && Vector2Distance(position, game.run.wormhole.positionB) <= game.run.wormhole.radius;
     if (!atA && !atB)
     {
         return false;
     }
 
-    const WormholeFacing entryFacing = atA ? game.wormhole.facingA : game.wormhole.facingB;
-    const WormholeFacing exitFacing = atA ? game.wormhole.facingB : game.wormhole.facingA;
-    const Vector2 exitPoint = atA ? game.wormhole.positionB : game.wormhole.positionA;
+    const WormholeFacing entryFacing = atA ? game.run.wormhole.facingA : game.run.wormhole.facingB;
+    const WormholeFacing exitFacing = atA ? game.run.wormhole.facingB : game.run.wormhole.facingA;
+    const Vector2 exitPoint = atA ? game.run.wormhole.positionB : game.run.wormhole.positionA;
 
     const float deltaDegrees =
         (static_cast<float>(exitFacing) - static_cast<float>(entryFacing)) * 90.0F;
@@ -3126,7 +3303,7 @@ auto applyWormholeTransit(const Game& game, Vector2& position, Vector2& velocity
     }
 
     position =
-        Vector2Add(exitPoint, Vector2Scale(exitDir, game.wormhole.radius + entityRadius + 4));
+        Vector2Add(exitPoint, Vector2Scale(exitDir, game.run.wormhole.radius + entityRadius + 4));
 
     return true;
 }
@@ -3156,7 +3333,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             {
             case BossAttack::Spread:
                 boss.color = Palette::BossSpread;
-                game.spreadWindupShots = 0;
+                game.run.spreadWindupShots = 0;
                 break;
             case BossAttack::Slam:
                 boss.color = Palette::Accent;
@@ -3190,12 +3367,12 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 break;
             }
 
-            playSFX(game, game.sounds.bossWindUp);
+            playSFX(game, game.resources.sounds.bossWindUp);
         }
         break;
     case BossState::WINDING_UP:
         boss.stateTimer -= deltaTime;
-        boss.targetPosition = game.player.position;
+        boss.targetPosition = game.run.player.position;
 
         if (boss.stateTimer <= 0)
         {
@@ -3211,19 +3388,19 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 std::clamp(1 - boss.stateTimer / UpdateConstants::slamDuration, 0.0F, 1.0F);
             const float radius = bossConstants::maxSlamRadius * progress;
 
-            for (auto& asteroid : game.asteroids)
+            for (auto& asteroid : game.run.asteroids)
             {
                 if (asteroid.active &&
                     Vector2Distance(bossCenter, asteroid.position) <= radius + asteroid.radius)
                 {
                     asteroid.active = false;
-                    breakAsteroid(game.asteroids, asteroid);
+                    breakAsteroid(game.run.asteroids, asteroid);
                 }
             }
 
-            for (size_t i = 0; i < game.enemies.size(); i++)
+            for (size_t i = 0; i < game.run.enemies.size(); i++)
             {
-                const auto& e = game.enemies.at(i);
+                const auto& e = game.run.enemies.at(i);
                 if (e.active && !e.phased &&
                     Vector2Distance(bossCenter, e.position) <=
                         radius + enemyKinds.at(static_cast<size_t>(e.kind)).radius)
@@ -3249,23 +3426,24 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         if (boss.attack == BossAttack::Spread)
         {
             boss.barrageTimer -= deltaTime;
-            const int targetRounds =
-                spreadRoundsByDifficulty.at(static_cast<size_t>(game.settings.difficulty));
-            if (boss.barrageTimer <= 0 && game.spreadWindupShots < targetRounds)
+            const int targetRounds = spreadRoundsByDifficulty.at(
+                static_cast<size_t>(game.resources.settings.difficulty));
+            if (boss.barrageTimer <= 0 && game.run.spreadWindupShots < targetRounds)
             {
                 boss.barrageTimer = spreadRoundInterval;
-                game.spreadWindupShots++;
-                playSFX(game, game.sounds.spreadBurst);
+                game.run.spreadWindupShots++;
+                playSFX(game, game.resources.sounds.spreadBurst);
                 triggerShake(game, 5, 0.2F);
 
                 const Vector2 aimDir =
-                    Vector2Normalize(Vector2Subtract(game.player.position, bossCenter));
+                    Vector2Normalize(Vector2Subtract(game.run.player.position, bossCenter));
                 const float baseAngle = std::atan2(aimDir.y, aimDir.x);
                 const auto roundProjectileHealth = static_cast<int32_t>(std::max(
-                    1.0F, static_cast<float>(baseProjectileHealth) *
-                              difficultyDefs.at(static_cast<size_t>(game.settings.difficulty))
-                                  .enemyHealthMult *
-                              waveEnemyScale(game)));
+                    1.0F,
+                    static_cast<float>(baseProjectileHealth) *
+                        difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty))
+                            .enemyHealthMult *
+                        waveEnemyScale(game)));
                 constexpr int32_t half = spreadBulletsPerRound / 2;
                 for (int32_t i = -half; i < spreadBulletsPerRound - half; i++)
                 {
@@ -3273,7 +3451,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                     const Vector2 vel{.x = std::cos(angle) * spreadProjSpeed,
                                       .y = std::sin(angle) * spreadProjSpeed};
 
-                    game.bossProjectiles.push_back(
+                    game.run.bossProjectiles.push_back(
                         BossProjectile{.position = bossCenter,
                                        .velocity = vel,
                                        .radius = 7,
@@ -3315,9 +3493,9 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             {
                 boss.barrageTimer = barrageFireInterval;
                 const Vector2 direction =
-                    Vector2Normalize(Vector2Subtract(game.player.position, bossCenter));
+                    Vector2Normalize(Vector2Subtract(game.run.player.position, bossCenter));
 
-                game.bossProjectiles.push_back(
+                game.run.bossProjectiles.push_back(
                     BossProjectile{.position = bossCenter,
                                    .velocity = Vector2Scale(direction, barrageProjSpeed),
                                    .radius = 6,
@@ -3326,7 +3504,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                                    .fromPlayer = false,
                                    .damage = crossfireProjectileDamage(game),
                                    .health = 1});
-                playSFX(game, game.sounds.spreadBurst);
+                playSFX(game, game.resources.sounds.spreadBurst);
             }
         }
 
@@ -3337,8 +3515,8 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             {
                 boss.barrageTimer = homingBarrageFireInterval;
                 const Vector2 direction =
-                    Vector2Normalize(Vector2Subtract(game.player.position, bossCenter));
-                game.bossProjectiles.push_back(
+                    Vector2Normalize(Vector2Subtract(game.run.player.position, bossCenter));
+                game.run.bossProjectiles.push_back(
                     BossProjectile{.position = bossCenter,
                                    .velocity = Vector2Scale(direction, homingProjSpeed),
                                    .radius = 6,
@@ -3347,19 +3525,19 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                                    .fromPlayer = false,
                                    .damage = crossfireProjectileDamage(game),
                                    .health = 1});
-                playSFX(game, game.sounds.spreadBurst);
+                playSFX(game, game.resources.sounds.spreadBurst);
             }
         }
 
         if (boss.attack == BossAttack::GravityWell)
         {
-            const Vector2 toBoss = Vector2Subtract(bossCenter, game.player.position);
+            const Vector2 toBoss = Vector2Subtract(bossCenter, game.run.player.position);
             if (Vector2Length(toBoss) > 0)
             {
                 const Vector2 pull =
                     Vector2Scale(Vector2Normalize(toBoss), gravityWellPullStrength);
-                game.player.position =
-                    Vector2Add(game.player.position, Vector2Scale(pull, deltaTime * frameScale));
+                game.run.player.position = Vector2Add(game.run.player.position,
+                                                      Vector2Scale(pull, deltaTime * frameScale));
             }
         }
 
@@ -3390,19 +3568,19 @@ auto bossWindupDuration(BossAttack attack) -> float
 
 void processBeamAttack(Game& game, Boss& boss, Vector2 beamStart, Vector2 beamEnd)
 {
-    for (auto& asteroid : game.asteroids)
+    for (auto& asteroid : game.run.asteroids)
     {
         if (asteroid.active &&
             CheckCollisionCircleLine(asteroid.position, asteroid.radius, beamStart, beamEnd))
         {
             asteroid.active = false;
-            breakAsteroid(game.asteroids, asteroid);
+            breakAsteroid(game.run.asteroids, asteroid);
         }
     }
 
-    for (size_t i = 0; i < game.enemies.size(); i++)
+    for (size_t i = 0; i < game.run.enemies.size(); i++)
     {
-        const auto& e = game.enemies.at(i);
+        const auto& e = game.run.enemies.at(i);
         if (e.active && !e.phased &&
             CheckCollisionCircleLine(e.position, enemyKinds.at(static_cast<size_t>(e.kind)).radius,
                                      beamStart, beamEnd))
@@ -3411,17 +3589,18 @@ void processBeamAttack(Game& game, Boss& boss, Vector2 beamStart, Vector2 beamEn
         }
     }
 
-    if (game.player.health <= 0 || game.player.dashing)
+    if (game.run.player.health <= 0 || game.run.player.dashing)
     {
         return;
     }
 
-    if (!CheckCollisionCircleLine(game.player.position, game.player.radius, beamStart, beamEnd))
+    if (!CheckCollisionCircleLine(game.run.player.position, game.run.player.radius, beamStart,
+                                  beamEnd))
     {
         return;
     }
 
-    if (game.player.shieldActive)
+    if (game.run.player.shieldActive)
     {
         boss.beamShieldLatched = true;
         return;
@@ -3430,11 +3609,11 @@ void processBeamAttack(Game& game, Boss& boss, Vector2 beamStart, Vector2 beamEn
     if (boss.beamShieldLatched)
     {
         boss.beamShieldLatched = false;
-        damagePlayer(game, game.player.maxHealth);
+        damagePlayer(game, game.run.player.maxHealth);
         return;
     }
 
-    if (game.player.immunityTimer <= 0)
+    if (game.run.player.immunityTimer <= 0)
     {
         damagePlayer(game, enemyDamage(game, 1));
     }
@@ -3451,7 +3630,7 @@ void forceBossAttack(Game& game, Boss& boss, BossAttack attack)
     {
     case BossAttack::Spread:
         boss.color = Palette::BossSpread;
-        game.spreadWindupShots = 0;
+        game.run.spreadWindupShots = 0;
         break;
     case BossAttack::Slam:
         boss.color = Palette::Accent;
@@ -3485,7 +3664,7 @@ void forceBossAttack(Game& game, Boss& boss, BossAttack attack)
         break;
     }
 
-    playSFX(game, game.sounds.bossWindUp);
+    playSFX(game, game.resources.sounds.bossWindUp);
 }
 
 void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
@@ -3498,29 +3677,31 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
 
     const auto projectileHealth = static_cast<int32_t>(std::max(
         1.0F, static_cast<float>(baseProjectileHealth) *
-                  difficultyDefs.at(static_cast<size_t>(game.settings.difficulty)).enemyHealthMult *
+                  difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty))
+                      .enemyHealthMult *
                   waveEnemyScale(game)));
 
     switch (boss.attack)
     {
     case BossAttack::Beam:
         boss.stateTimer = beamAttackDuration;
-        playSFX(game, game.sounds.beamFire);
+        playSFX(game, game.resources.sounds.beamFire);
         triggerShake(game, 5, 0.2F);
         break;
     case BossAttack::Spread:
     {
         const int rounds =
-            spreadRoundsByDifficulty.at(static_cast<size_t>(game.settings.difficulty));
+            spreadRoundsByDifficulty.at(static_cast<size_t>(game.resources.settings.difficulty));
         boss.stateTimer = static_cast<float>(rounds) * spreadRoundInterval + 0.2F;
         boss.barrageTimer = 0;
-        game.spreadWindupShots = 0;
+        game.run.spreadWindupShots = 0;
         break;
     }
     case BossAttack::Slam:
         boss.stateTimer = UpdateConstants::slamDuration;
         boss.slamHit = false;
-        playSFX(game, game.sounds.slamBoom);
+        playSFX(game, game.resources.sounds.slamBoom);
+        duckBGM(game);
         triggerShake(game, 10, 0.4F);
         break;
     case BossAttack::WormholeBeam:
@@ -3532,15 +3713,16 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
             static_cast<float>(GetRandomValue(static_cast<int32_t>(wormholeBeamFlankMinDist),
                                               static_cast<int32_t>(wormholeBeamFlankMaxDist)));
         boss.wormholeBeamOrigin =
-            Vector2Add(game.player.position, Vector2{.x = std::cos(flankAngle) * flankDist,
-                                                     .y = std::sin(flankAngle) * flankDist});
-        playSFX(game, game.sounds.beamFire);
+            Vector2Add(game.run.player.position, Vector2{.x = std::cos(flankAngle) * flankDist,
+                                                         .y = std::sin(flankAngle) * flankDist});
+        playSFX(game, game.resources.sounds.beamFire);
         triggerShake(game, 6, 0.25F);
         break;
     }
     case BossAttack::MineDrop:
         boss.stateTimer = 0.5F;
-        playSFX(game, game.sounds.slamBoom);
+        playSFX(game, game.resources.sounds.slamBoom);
+        duckBGM(game);
         for (int i = 0; i < mineDropCount; i++)
         {
             const float angle = static_cast<float>(i) * (360.0F / mineDropCount) * DEG2RAD;
@@ -3548,28 +3730,28 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
             const Vector2 pos = Vector2Add(
                 bossCenter, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
 
-            game.bossProjectiles.push_back(BossProjectile{.position = pos,
-                                                          .velocity = Vector2{},
-                                                          .radius = mineDropRadius,
-                                                          .homing = false,
-                                                          .active = true,
-                                                          .fromPlayer = false,
-                                                          .damage = mineDropDamage,
-                                                          .health = projectileHealth});
+            game.run.bossProjectiles.push_back(BossProjectile{.position = pos,
+                                                              .velocity = Vector2{},
+                                                              .radius = mineDropRadius,
+                                                              .homing = false,
+                                                              .active = true,
+                                                              .fromPlayer = false,
+                                                              .damage = mineDropDamage,
+                                                              .health = projectileHealth});
         }
         break;
     case BossAttack::ChargeDash:
         boss.stateTimer = chargeDashDuration;
         boss.chargeVelocity = Vector2Scale(aimDirection, chargeDashSpeed);
-        playSFX(game, game.sounds.bossWindUp);
+        playSFX(game, game.resources.sounds.bossWindUp);
         triggerShake(game, 8, 0.3F);
         break;
     case BossAttack::SummonAdds:
     {
         boss.stateTimer = 0.6F;
-        playSFX(game, game.sounds.spreadBurst);
+        playSFX(game, game.resources.sounds.spreadBurst);
         const int addsCount =
-            summonAddsCountByDifficulty.at(static_cast<size_t>(game.settings.difficulty));
+            summonAddsCountByDifficulty.at(static_cast<size_t>(game.resources.settings.difficulty));
         for (int i = 0; i < addsCount; i++)
         {
             spawnEnemy(game);
@@ -3578,20 +3760,21 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
     }
     case BossAttack::ShockwaveStomp:
         boss.stateTimer = UpdateConstants::shockwaveStompDuration;
-        playSFX(game, game.sounds.slamBoom);
+        playSFX(game, game.resources.sounds.slamBoom);
+        duckBGM(game);
         triggerShake(game, 10, 0.35F);
-        for (auto& asteroid : game.asteroids)
+        for (auto& asteroid : game.run.asteroids)
         {
             if (asteroid.active && Vector2Distance(bossCenter, asteroid.position) <=
                                        UpdateConstants::shockwaveStompRadius + asteroid.radius)
             {
                 asteroid.active = false;
-                breakAsteroid(game.asteroids, asteroid);
+                breakAsteroid(game.run.asteroids, asteroid);
             }
         }
-        for (size_t i = 0; i < game.enemies.size(); i++)
+        for (size_t i = 0; i < game.run.enemies.size(); i++)
         {
-            const auto& e = game.enemies.at(i);
+            const auto& e = game.run.enemies.at(i);
             if (e.active && !e.phased &&
                 Vector2Distance(bossCenter, e.position) <=
                     UpdateConstants::shockwaveStompRadius +
@@ -3600,9 +3783,10 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
                 killEnemyForBossAttack(game, i, false);
             }
         }
-        if (game.player.health > 0 && !game.player.shieldActive && !game.player.dashing &&
-            Vector2Distance(bossCenter, game.player.position) <=
-                UpdateConstants::shockwaveStompRadius + game.player.radius)
+        if (game.run.player.health > 0 && !game.run.player.shieldActive &&
+            !game.run.player.dashing &&
+            Vector2Distance(bossCenter, game.run.player.position) <=
+                UpdateConstants::shockwaveStompRadius + game.run.player.radius)
         {
             damagePlayer(game, enemyDamage(game, 2));
         }
@@ -3610,16 +3794,16 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
     case BossAttack::Barrage:
         boss.stateTimer = barrageDuration;
         boss.barrageTimer = 0;
-        playSFX(game, game.sounds.spreadBurst);
+        playSFX(game, game.resources.sounds.spreadBurst);
         break;
     case BossAttack::GravityWell:
         boss.stateTimer = gravityWellDuration;
-        playSFX(game, game.sounds.bossWindUp);
+        playSFX(game, game.resources.sounds.bossWindUp);
         break;
     case BossAttack::HomingBarrage:
         boss.stateTimer = barrageDuration;
         boss.barrageTimer = 0;
-        playSFX(game, game.sounds.homingLaunch);
+        playSFX(game, game.resources.sounds.homingLaunch);
         break;
     }
 }
@@ -3634,25 +3818,25 @@ auto UpdateGame(Game& game, float deltaTime) -> bool
     updateBgParticles(game);
     updateDeathParticles(game, deltaTime);
     updateBgmLayers(game, deltaTime);
-    UpdateMusicStream(game.bgm.base);
-    UpdateMusicStream(game.bgm.intensity);
-    UpdateMusicStream(game.bgm.miniboss);
-    UpdateMusicStream(game.bgm.megaboss);
-    UpdateMusicStream(game.bgm.swarmBoss);
+    UpdateMusicStream(game.resources.bgm.base);
+    UpdateMusicStream(game.resources.bgm.intensity);
+    UpdateMusicStream(game.resources.bgm.miniboss);
+    UpdateMusicStream(game.resources.bgm.megaboss);
+    UpdateMusicStream(game.resources.bgm.swarmBoss);
 
-    if (game.shakeTimer > 0)
+    if (game.run.shakeTimer > 0)
     {
-        game.shakeTimer -= deltaTime;
-        if (game.shakeTimer <= 0)
+        game.run.shakeTimer -= deltaTime;
+        if (game.run.shakeTimer <= 0)
         {
-            game.shakeTimer = 0;
-            game.shakeIntensity = 0;
+            game.run.shakeTimer = 0;
+            game.run.shakeIntensity = 0;
         }
     }
 
-    if (game.hitPauseTimer > 0)
+    if (game.run.hitPauseTimer > 0)
     {
-        game.hitPauseTimer -= deltaTime;
+        game.run.hitPauseTimer -= deltaTime;
         return false;
     }
 

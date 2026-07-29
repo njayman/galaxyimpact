@@ -10,8 +10,6 @@
 #include <numbers>
 #include <vector>
 
-auto LoadSounds() -> Sounds { return Sounds{}; }
-
 namespace
 {
 
@@ -402,6 +400,184 @@ auto loadMusicFromSamples(std::vector<std::byte>& wavStorage,
     return music;
 }
 
+constexpr float defaultSfxVolume = 0.35F;
+
+auto loadSoundFromSamples(const std::vector<float>& samples,
+                          float volume = defaultSfxVolume) -> Sound
+{
+    const std::vector<std::byte> wavBytes = encodeWAV(toPcm16(samples));
+    const auto* wavData = reinterpret_cast<const unsigned char*>(wavBytes.data());
+    Wave wave = LoadWaveFromMemory(".wav", wavData, static_cast<int>(wavBytes.size()));
+    Sound sound = LoadSoundFromWave(wave);
+    UnloadWave(wave);
+    SetSoundVolume(sound, volume);
+    return sound;
+}
+
+auto generateShootSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.10F), 0.0F);
+    addSquare(out, 0.0F, 900.0F, 0.14F, 0.04F);
+    addSquare(out, 0.0F, 1400.0F, 0.06F, 0.025F);
+    return out;
+}
+
+auto generateHitSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.15F), 0.0F);
+    addNoise(out, 0.0F, 0.35F, 0.05F);
+    addTone(out, 0.0F, 180.0F, 0.2F, 0.08F);
+    return out;
+}
+
+auto generateExplosionSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.4F), 0.0F);
+    addKick(out, 0.0F, 0.35F, 140, 40, 0.12F, 0.20F);
+    addNoise(out, 0.0F, 0.4F, 0.15F);
+    addNoise(out, 0.02F, 0.2F, 0.10F);
+    return out;
+}
+
+auto generateMenuMoveSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.08F), 0.0F);
+    addSquare(out, 0.0F, 700.0F, 0.15F, 0.04F);
+    return out;
+}
+
+auto generateMenuConfirmSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.18F), 0.0F);
+    addSquare(out, 0.0F, 700.0F, 0.15F, 0.05F);
+    addSquare(out, 0.06F, 1050.0F, 0.18F, 0.08F);
+    return out;
+}
+
+auto generateVictorySfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.6F), 0.0F);
+    constexpr std::array<float, 4> notes{523.25F, 659.25F, 783.99F, 1046.50F};
+    for (size_t i = 0; i < notes.size(); i++)
+    {
+        addTone(out, static_cast<float>(i) * 0.1F, notes.at(i), 0.18F, 0.18F);
+    }
+    return out;
+}
+
+auto generateDefeatSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.8F), 0.0F);
+    constexpr std::array<float, 3> notes{392.00F, 329.63F, 220.00F};
+    for (size_t i = 0; i < notes.size(); i++)
+    {
+        addTone(out, static_cast<float>(i) * 0.2F, notes.at(i), 0.22F, 0.35F);
+    }
+    return out;
+}
+
+auto generateCriticalSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.15F), 0.0F);
+    addSquare(out, 0.0F, 1600.0F, 0.22F, 0.05F);
+    addSquare(out, 0.0F, 2200.0F, 0.12F, 0.04F);
+    return out;
+}
+
+auto generateBossWindUpSfx() -> std::vector<float>
+{
+    constexpr float duration = 0.6F;
+    std::vector<float> out(secondsToSamples(duration), 0.0F);
+    for (int i = 0; i < 12; i++)
+    {
+        const float t = static_cast<float>(i) * (duration / 12.0F);
+        const float freq = 100.0F + static_cast<float>(i) * 40.0F;
+        addSaw(out, t, freq, 0.1F, 0.08F);
+    }
+    return out;
+}
+
+auto generateBeamFireSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.25F), 0.0F);
+    addSaw(out, 0.0F, 500.0F, 0.2F, 0.20F);
+    addSaw(out, 0.0F, 505.0F, 0.15F, 0.20F);
+    return out;
+}
+
+auto generateHomingLaunchSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.3F), 0.0F);
+    addNoise(out, 0.0F, 0.15F, 0.15F);
+    addKick(out, 0.0F, 0.2F, 300, 700, 0.15F, 0.15F);
+    return out;
+}
+
+auto generateSpreadBurstSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.15F), 0.0F);
+    addNoise(out, 0.0F, 0.3F, 0.05F);
+    addSquare(out, 0.0F, 300.0F, 0.2F, 0.06F);
+    return out;
+}
+
+auto generateSlamBoomSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.5F), 0.0F);
+    addKick(out, 0.0F, 0.4F, 120, 30, 0.15F, 0.25F);
+    addNoise(out, 0.0F, 0.35F, 0.2F);
+    return out;
+}
+
+auto generateNerveChargeSfx() -> std::vector<float>
+{
+    constexpr float duration = 0.35F;
+    std::vector<float> out(secondsToSamples(duration), 0.0F);
+    addKick(out, 0.0F, 0.22F, 200, 900, duration, duration * 0.9F);
+    addSaw(out, 0.0F, 200.0F, 0.05F, duration);
+    return out;
+}
+
+auto generateNerveReleaseSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.4F), 0.0F);
+    addKick(out, 0.0F, 0.4F, 180, 50, 0.12F, 0.22F);
+    addNoise(out, 0.0F, 0.3F, 0.15F);
+    addSquare(out, 0.0F, 220.0F, 0.15F, 0.18F);
+    addSquare(out, 0.0F, 330.0F, 0.10F, 0.18F);
+    return out;
+}
+
+auto generateNerveFizzleSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.2F), 0.0F);
+    addKick(out, 0.0F, 0.18F, 500, 120, 0.15F, 0.12F);
+    addNoise(out, 0.0F, 0.15F, 0.08F);
+    return out;
+}
+
+}
+
+auto LoadSounds() -> Sounds
+{
+    Sounds sounds{};
+    sounds.shoot = loadSoundFromSamples(generateShootSfx(), 0.16F);
+    sounds.hit = loadSoundFromSamples(generateHitSfx());
+    sounds.explosion = loadSoundFromSamples(generateExplosionSfx());
+    sounds.menuMove = loadSoundFromSamples(generateMenuMoveSfx());
+    sounds.menuConfirm = loadSoundFromSamples(generateMenuConfirmSfx());
+    sounds.victory = loadSoundFromSamples(generateVictorySfx());
+    sounds.defeat = loadSoundFromSamples(generateDefeatSfx());
+    sounds.critical = loadSoundFromSamples(generateCriticalSfx());
+    sounds.bossWindUp = loadSoundFromSamples(generateBossWindUpSfx());
+    sounds.beamFire = loadSoundFromSamples(generateBeamFireSfx());
+    sounds.homingLaunch = loadSoundFromSamples(generateHomingLaunchSfx());
+    sounds.spreadBurst = loadSoundFromSamples(generateSpreadBurstSfx());
+    sounds.slamBoom = loadSoundFromSamples(generateSlamBoomSfx());
+    sounds.nerveCharge = loadSoundFromSamples(generateNerveChargeSfx());
+    sounds.nerveRelease = loadSoundFromSamples(generateNerveReleaseSfx());
+    sounds.nerveFizzle = loadSoundFromSamples(generateNerveFizzleSfx());
+    return sounds;
 }
 
 auto loadBGM() -> BgmLayers

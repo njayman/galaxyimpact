@@ -25,6 +25,9 @@ struct Sounds
     Sound homingLaunch;
     Sound spreadBurst;
     Sound slamBoom;
+    Sound nerveCharge;
+    Sound nerveRelease;
+    Sound nerveFizzle;
 };
 
 auto LoadSounds() -> Sounds;
@@ -41,6 +44,7 @@ struct BgmLayers
     float megabossVolume = 0;
     float swarmBossVolume = 0;
     float calmTimer = 0;
+    float duckTimer = 0;
 
     std::vector<std::byte> baseWav;
     std::vector<std::byte> intensityWav;

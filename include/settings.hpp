@@ -46,6 +46,9 @@ constexpr std::array<ResolutionOption, 5> resolutionOptions{
 
 constexpr std::array<int32_t, 3> fpsOptions{60, 120, 240};
 
+constexpr std::array<float, 4> hudScaleOptions{1.0F, 1.25F, 1.5F, 1.75F};
+constexpr int32_t defaultHudScaleIndex = 1;
+
 struct Settings
 {
     int32_t resolutionIndex{};
@@ -53,6 +56,7 @@ struct Settings
     bool bgmOn{true};
     bool soundOn{true};
     int32_t fpsIndex{};
+    int32_t hudScaleIndex{defaultHudScaleIndex};
 };
 
 auto loadSettings() -> Settings;

@@ -17,6 +17,19 @@ enum class EnemyPattern : std::uint8_t
     Stationary
 };
 
+enum class EnemyShape : std::uint8_t
+{
+    Circle,
+    Triangle,
+    Square,
+    Diamond,
+    Pentagon,
+    Hexagon,
+    Octagon,
+    Ring,
+    Star
+};
+
 const float eliteChance = 0.06;
 
 class Enemy
@@ -35,6 +48,7 @@ class Enemy
     float orbitDist;
     bool isElite;
     bool hitByDash;
+    float hitFlashTimer;
 };
 
 enum class EliteHazardRole : std::uint8_t
@@ -70,6 +84,7 @@ struct EnemyKind
     int score;
     EnemyPattern pattern;
     Color color;
+    EnemyShape shape;
     int minWave;
     bool splitsOnDeath = false;
     int splitKind = 0;
@@ -97,6 +112,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 5,
               .pattern = EnemyPattern::Chase,
               .color = Palette::BossIdle,
+              .shape = EnemyShape::Circle,
               .minWave = 1},
     EnemyKind{.name = "Swarmling",
               .radius = 8,
@@ -106,6 +122,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 3,
               .pattern = EnemyPattern::Chase,
               .color = Palette::Haze,
+              .shape = EnemyShape::Triangle,
               .minWave = 1},
     EnemyKind{.name = "Brute",
               .radius = 22,
@@ -115,6 +132,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 15,
               .pattern = EnemyPattern::Chase,
               .color = Palette::StructDark,
+              .shape = EnemyShape::Hexagon,
               .minWave = 2},
     EnemyKind{.name = "Zigzagger",
               .radius = 12,
@@ -124,6 +142,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 8,
               .pattern = EnemyPattern::Zigzag,
               .color = Palette::BossSpread,
+              .shape = EnemyShape::Diamond,
               .minWave = 2},
     EnemyKind{.name = "Charger",
               .radius = 14,
@@ -133,6 +152,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 10,
               .pattern = EnemyPattern::Charge,
               .color = Palette::AccentDim,
+              .shape = EnemyShape::Triangle,
               .minWave = 3},
     EnemyKind{.name = "Orbiter",
               .radius = 12,
@@ -142,6 +162,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 8,
               .pattern = EnemyPattern::Orbit,
               .color = Palette::Shield,
+              .shape = EnemyShape::Ring,
               .minWave = 3},
     EnemyKind{.name = "Splitter",
               .radius = 16,
@@ -151,6 +172,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 10,
               .pattern = EnemyPattern::Chase,
               .color = Palette::StructMid,
+              .shape = EnemyShape::Square,
               .minWave = 2,
               .splitsOnDeath = true,
               .splitKind = enemyKindSwarmling,
@@ -163,6 +185,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 12,
               .pattern = EnemyPattern::Turret,
               .color = Palette::BossHoming,
+              .shape = EnemyShape::Octagon,
               .minWave = 3,
               .fireInterval = 2.5,
               .projectileSpeed = 6},
@@ -174,6 +197,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 14,
               .pattern = EnemyPattern::Turret,
               .color = Palette::Crit,
+              .shape = EnemyShape::Pentagon,
               .minWave = 5,
               .fireInterval = 3.5,
               .projectileSpeed = 6},
@@ -185,6 +209,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 16,
               .pattern = EnemyPattern::Chase,
               .color = Palette::Haze,
+              .shape = EnemyShape::Ring,
               .minWave = 4},
     EnemyKind{.name = "Bomber",
               .radius = 14,
@@ -194,6 +219,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 12,
               .pattern = EnemyPattern::Chase,
               .color = Palette::Accent,
+              .shape = EnemyShape::Star,
               .minWave = 4,
               .explodesOnDeath = true,
               .explodeDamage = 2,
@@ -206,6 +232,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 8,
               .pattern = EnemyPattern::Chase,
               .color = Palette::Charge,
+              .shape = EnemyShape::Diamond,
               .minWave = 3,
               .isLeech = true},
     EnemyKind{.name = "Swarm Mother",
@@ -216,6 +243,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 20,
               .pattern = EnemyPattern::Spawner,
               .color = Palette::BossSpread,
+              .shape = EnemyShape::Octagon,
               .minWave = 5,
               .spawnKind = enemyKindSwarmling,
               .spawnCount = 2,
@@ -228,6 +256,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 18,
               .pattern = EnemyPattern::Chase,
               .color = Palette::StructLight,
+              .shape = EnemyShape::Ring,
               .minWave = 6,
               .phaseCycle = true},
     EnemyKind{.name = "Mine",
@@ -238,6 +267,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 10,
               .pattern = EnemyPattern::Stationary,
               .color = Palette::AccentDim,
+              .shape = EnemyShape::Star,
               .minWave = 3},
     EnemyKind{.name = "Laser Fence",
               .radius = 26,
@@ -247,6 +277,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 15,
               .pattern = EnemyPattern::Stationary,
               .color = Palette::Accent,
+              .shape = EnemyShape::Square,
               .minWave = 6},
     EnemyKind{.name = "Void Rift",
               .radius = 22,
@@ -256,6 +287,7 @@ constexpr std::array<EnemyKind, 17> enemyKinds{
               .score = 20,
               .pattern = EnemyPattern::Spawner,
               .color = Palette::BossIdle,
+              .shape = EnemyShape::Ring,
               .minWave = 7,
               .spawnKind = enemyKindSwarmling,
               .spawnCount = 3,
