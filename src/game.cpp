@@ -145,6 +145,7 @@ auto InitGame() -> Game
     game.resources.font = loadGameFont();
 
     game.resources.settings = loadSettings();
+    game.resources.achievements = loadAchievements();
 
     game.resources.bgm = loadBGM();
     PlayMusicStream(game.resources.bgm.base);
@@ -222,7 +223,13 @@ void resetRun(Game& game)
                              .nerve = 0,
                              .nerveCharging = false,
                              .nerveChargeTimer = 0,
-                             .nerveChargeFeedTimer = 0};
+                             .nerveChargeFeedTimer = 0,
+                             .elementalBuffTimer = {},
+                             .regenTimer = 0,
+                             .regenRate = 0,
+                             .overchargeTimer = 0,
+                             .dashTrailUnlocked = false,
+                             .secondWindReady = false};
 
     game.run.bosses.clear();
 
@@ -241,7 +248,15 @@ void resetRun(Game& game)
     game.run.orbitBladeProjectiles.clear();
     game.run.nerveBallProjectiles.clear();
     game.run.nerveSpiralProjectiles.clear();
+    game.run.elementalFields.clear();
     game.run.deathParticles.clear();
+    game.run.dashTrailParticles.clear();
+    game.run.damageNumbers.clear();
+    game.run.weaponDowngrade = std::nullopt;
+    game.run.followerDrones.clear();
+    game.run.laserDrones.clear();
+    game.run.turrets.clear();
+    game.run.chainLightningBolts.clear();
     game.run.weapons = {Weapon{.type = ship.defaultWeapon, .level = 1}};
     game.run.skillLevels.fill(0);
     game.run.skillLevels.at(
@@ -258,7 +273,6 @@ void resetRun(Game& game)
     game.run.wormhole.timer = static_cast<float>(GetRandomValue(400, 700)) / 10.0F;
     game.run.asteroidSpawnTimer = 1.0F;
     game.run.enemySpawnTimer = 1.0F;
-    game.run.spreadWindupShots = 0;
 
     game.run.xp = 0;
     game.run.level = 1;
@@ -276,5 +290,7 @@ void resetRun(Game& game)
     game.run.nerveBurstFlashEnd = Vector2{};
     game.run.score = 0;
     game.run.scoreRecorded = false;
+    game.run.achievementToast.clear();
+    game.run.achievementToastTimer = 0;
     game.state = GameState::GAMEPLAY;
 }

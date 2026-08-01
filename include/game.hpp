@@ -1,5 +1,6 @@
 #pragma once
 
+#include "achievements.hpp"
 #include "entities/boss.hpp"
 #include "entities/enemy.hpp"
 #include "entities/item.hpp"
@@ -14,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -38,7 +40,8 @@ enum class GameState : std::uint8_t
     PAUSED,
     GAME_OVER,
     LEVEL_UP,
-    SETTINGS
+    SETTINGS,
+    ACHIEVEMENTS
 };
 
 // Engine/asset-level resources: window & render setup, loaded audio/fonts, persisted settings
@@ -58,6 +61,7 @@ struct GameResources
     Settings settings;
     std::vector<int32_t> highScores;
     std::shared_ptr<highscore::Repository> highScoreRepo;
+    Achievements achievements;
 };
 
 // Per-run gameplay state: entities, timers, and score. Fully reinitialized by resetRun() at the
@@ -77,6 +81,7 @@ struct GameplayState
     std::vector<OrbitBladeProjectile> orbitBladeProjectiles;
     std::vector<OrbitBladeProjectile> nerveBallProjectiles;
     std::vector<NerveSpiralProjectile> nerveSpiralProjectiles;
+    std::vector<ElementalField> elementalFields;
     std::vector<Weapon> weapons;
     std::array<int, static_cast<size_t>(SkillType::Count)> skillLevels;
     std::vector<LevelUpChoice> pendingChoices;
@@ -92,9 +97,15 @@ struct GameplayState
     std::vector<Star> borderStars;
     std::vector<GasCloud> gasClouds;
     std::vector<Particle> deathParticles;
+    std::vector<Particle> dashTrailParticles;
+    std::vector<DamageNumber> damageNumbers;
+    std::optional<WeaponDowngrade> weaponDowngrade;
+    std::vector<FollowerDrone> followerDrones;
+    std::vector<LaserDrone> laserDrones;
+    std::vector<Turret> turrets;
+    std::vector<ChainLightningBolt> chainLightningBolts;
     float asteroidSpawnTimer;
     float enemySpawnTimer;
-    int spreadWindupShots;
     int xp;
     int level;
     int xpToNext;
@@ -110,6 +121,8 @@ struct GameplayState
     float hitPauseTimer;
     float nerveBurstFlashTimer;
     Vector2 nerveBurstFlashEnd;
+    std::string achievementToast;
+    float achievementToastTimer;
 };
 
 // Move-only: copy would double-free the raylib GPU/audio handles held in `resources`
@@ -134,6 +147,7 @@ struct Game
     int sandboxKindIndex;
     bool sandboxDeathEnabled;
     int sandboxBossAttackIndex;
+    int sandboxPickupIndex;
 
     GameResources resources;
     GameplayState run;

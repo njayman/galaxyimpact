@@ -6,7 +6,26 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "update.hpp"
+#include <array>
 #include <cmath>
+
+namespace
+{
+// Index 0 is XP (sandbox-only extra, not part of the shared catalog since it's never offered as a
+// deliberate pickup/level-up choice); indices 1.. mirror pickupCatalog (include/entities/item.hpp),
+// the single shared list also used by the level-up "Pickup" choice and the post-cap reward pool.
+constexpr size_t sandboxPickupCount = pickupCatalog.size() + 1;
+
+auto sandboxPickupOption(int32_t index) -> PickupCatalogEntry
+{
+    if (index == 0)
+    {
+        return PickupCatalogEntry{PickupType::XP, ElementType::Static, ElementMechanism::Infusion,
+                                  "XP"};
+    }
+    return pickupCatalog.at(static_cast<size_t>(index) - 1);
+}
+}
 
 void enterSandbox(Game& game)
 {
@@ -16,6 +35,7 @@ void enterSandbox(Game& game)
     game.run.blackhole.active = false;
     game.sandboxDeathEnabled = false;
     game.sandboxBossAttackIndex = 0;
+    game.sandboxPickupIndex = 0;
 }
 
 void updateSandboxInput(Game& game)
@@ -138,6 +158,24 @@ void updateSandboxInput(Game& game)
                                                          : EliteHazardRole::Warlord);
     }
 
+    if (IsKeyPressed(KEY_APOSTROPHE))
+    {
+        game.sandboxPickupIndex =
+            (game.sandboxPickupIndex + 1) % static_cast<int>(sandboxPickupCount);
+    }
+    if (IsKeyPressed(KEY_SEMICOLON))
+    {
+        game.sandboxPickupIndex =
+            (game.sandboxPickupIndex - 1 + static_cast<int>(sandboxPickupCount)) %
+            static_cast<int>(sandboxPickupCount);
+    }
+
+    if (IsKeyPressed(KEY_P))
+    {
+        const auto option = sandboxPickupOption(game.sandboxPickupIndex);
+        spawnPickup(game, mouseWorldPos(game), 0, option.type, option.element, option.mechanism);
+    }
+
     if (IsKeyPressed(KEY_O) && !game.run.bosses.empty())
     {
         Boss* nearest = &game.run.bosses.front();
@@ -153,4 +191,9 @@ void updateSandboxInput(Game& game)
         }
         forceBossAttack(game, *nearest, static_cast<BossAttack>(game.sandboxBossAttackIndex));
     }
+}
+
+auto sandboxPickupName(int32_t index) -> std::string_view
+{
+    return sandboxPickupOption(index).name;
 }

@@ -1,6 +1,8 @@
 #pragma once
 
+#include "entities/item.hpp"
 #include "raylib.h"
+#include <array>
 #include <cstdint>
 
 class Player
@@ -29,8 +31,17 @@ class Player
     bool nerveCharging;
     float nerveChargeTimer;
     float nerveChargeFeedTimer;
+    std::array<float, static_cast<size_t>(ElementType::Count)> elementalBuffTimer;
+    float regenTimer;
+    float regenRate;
+    float overchargeTimer;
+    bool dashTrailUnlocked;
+    bool secondWindReady;
 };
 
+// Every field is still value-initialized via aggregate init at every construction site; the
+// missing-member-init check below is a false positive triggered only by the defaulted fields.
+// NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
 class Bullet
 {
   public:
@@ -40,6 +51,50 @@ class Bullet
     Color color;
     bool active;
     int damage;
+    int pierceRemaining = 0;
+    int ricochetRemaining = 0;
+    float splashRadius = 0;
+    DamageSource source = DamageSource::Forward;
+};
+
+// M15 amplifier: orbits/follows the player, melees whichever active enemy is nearest within
+// meleeRange every attackInterval seconds. See updateFollowerDrones (src/update.cpp).
+class FollowerDrone
+{
+  public:
+    Vector2 position;
+    float orbitAngle;
+    float attackTimer;
+};
+
+// M15 amplifier: same cadence as FollowerDrone but attacks at range instead of melee. See
+// updateLaserDrones (src/update.cpp).
+class LaserDrone
+{
+  public:
+    Vector2 position;
+    float orbitAngle;
+    float attackTimer;
+    float beamFlashTimer;
+    Vector2 beamTarget;
+};
+
+// M15 Turret Deploy: a stationary auto-firing emplacement that despawns after `life` seconds.
+class Turret
+{
+  public:
+    Vector2 position;
+    float life;
+    float fireTimer;
+};
+
+// Pure VFX for Chain Lightning's arc — no gameplay effect, just fades out over `timer`.
+class ChainLightningBolt
+{
+  public:
+    Vector2 from;
+    Vector2 to;
+    float timer;
 };
 
 class Mine

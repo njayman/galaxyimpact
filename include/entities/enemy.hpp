@@ -53,6 +53,13 @@ class Enemy
     float orbitDamageAccum;
     bool beamContact;
     float beamDamageAccum;
+    bool debuffStatic;
+    bool debuffFreeze;
+    bool debuffConfuse;
+    float burnDps;
+    float burnDamageAccum;
+    float confuseWanderTimer;
+    Vector2 confuseWanderDir;
 };
 
 enum class EliteHazardRole : std::uint8_t

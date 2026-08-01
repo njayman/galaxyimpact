@@ -40,15 +40,20 @@ enum class BossAttack : std::uint8_t
     ShockwaveStomp,
     Barrage,
     GravityWell,
-    HomingBarrage
+    HomingBarrage,
+
+    Count
 };
 
-constexpr int bossAttackCount = 11;
+constexpr int bossAttackCount = static_cast<int>(BossAttack::Count);
 
 constexpr std::array<std::string_view, bossAttackCount> bossAttackNames{
     "Beam",       "Spread",         "Slam",    "WormholeBeam", "MineDrop",     "ChargeDash",
     "SummonAdds", "ShockwaveStomp", "Barrage", "GravityWell",  "HomingBarrage"};
 
+// Every field is still value-initialized via aggregate init at every construction site; the
+// missing-member-init check below is a false positive triggered only by isFinalBoss's default.
+// NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
 class Boss
 {
   public:
@@ -64,12 +69,12 @@ class Boss
     float attackTimer;
     float stateTimer;
     Vector2 targetPosition;
-    float beamRotation;
     bool slamHit;
     bool beamShieldLatched;
     Vector2 wormholeBeamOrigin;
     Vector2 chargeVelocity;
     float barrageTimer;
+    int spreadWindupShots;
     bool hitByDash;
     bool isMega;
     bool isSwarm;
@@ -80,6 +85,10 @@ class Boss
     float orbitDamageAccum;
     bool beamContact;
     float beamDamageAccum;
+
+    // M11: the wave-100 (and every 100th wave after, once infinite mode is unlocked) placeholder
+    // final boss. Defeating it flips Achievements::infiniteModeUnlocked.
+    bool isFinalBoss = false;
 };
 
 struct BossType
@@ -194,6 +203,9 @@ constexpr std::array<BossType, 20> bossTypes{
              .shape = BossShape::TwinDome},
 };
 
+// Every field is still value-initialized via aggregate init at every construction site; the
+// missing-member-init check below is a false positive triggered only by huntingNewTarget's default.
+// NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
 class BossProjectile
 {
   public:
@@ -206,6 +218,15 @@ class BossProjectile
 
     int damage;
     int health;
+
+    // Evolved (Seeker Swarm) player homing missiles only: true while flying straight because no
+    // untargeted enemy existed at spawn time, false once it has a locked target (or for any
+    // non-evolved / boss-owned projectile, which never sets this).
+    bool huntingNewTarget = false;
+
+    // M15 Ricochet, player homing missiles only: bounces remaining before the missile deactivates
+    // on its next enemy hit instead of retargeting. Always 0 for boss-owned projectiles.
+    int32_t ricochetRemaining = 0;
 };
 
 class BossDeathShockwave

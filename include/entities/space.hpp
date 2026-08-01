@@ -32,6 +32,16 @@ class Particle
     Color color;
 };
 
+// M18: floating combat text — one per damage instance dealt to an enemy/boss/hazard.
+class DamageNumber
+{
+  public:
+    Vector2 position;
+    int32_t amount;
+    float timer;
+    float maxTimer;
+};
+
 class GasCloud
 {
   public:

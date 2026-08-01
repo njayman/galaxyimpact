@@ -6,6 +6,8 @@
 #include "game.hpp"
 #include "raylib.h"
 #include <optional>
+#include <utility>
+#include <vector>
 
 namespace UpdateConstants
 {
@@ -32,17 +34,22 @@ auto nerveFrac(const Game& game) -> float;
 auto isNerveChargeFeeding(const Game& game) -> bool;
 auto chargeRegenDuration(const Game& game) -> float;
 auto aimAtMouse(const Game& game) -> Vector2;
+auto mouseWorldPos(const Game& game) -> Vector2;
 auto orbitRadius(int32_t level) -> float;
 auto orbitBladeCount(int32_t level) -> int32_t;
 auto orbitBladePosition(const Game& game, Vector2 center, float radius, int32_t index,
                         int32_t count) -> Vector2;
 auto shockwaveRadius(int32_t level, bool evolved) -> float;
+auto beamAimDirection(const Game& game, bool evolved) -> Vector2;
 auto beamLength(const Game& game, int32_t level, bool evolved) -> float;
 auto waveEnemyScale(const Game& game) -> float;
 auto isFusedPassive(const Game& game, SkillType id) -> bool;
 auto hasWeapon(const Game& game, WeaponType kind) -> bool;
 auto weaponForGrantSkill(SkillType id) -> std::optional<WeaponType>;
+auto weaponEvolved(const Game& game, WeaponType kind) -> bool;
 auto bossWindupDuration(BossAttack attack) -> float;
+auto wormholeBentBeamSegments(const Game& game, Vector2 start,
+                              Vector2 end) -> std::vector<std::pair<Vector2, Vector2>>;
 
 auto UpdateGame(Game& game, float deltaTime) -> bool;
 
@@ -56,3 +63,13 @@ void forceBossAttack(Game& game, Boss& boss, BossAttack attack);
 void spawnBlackHole(Game& game);
 void spawnWormholePair(Game& game);
 void spawnEliteHazard(Game& game, EliteHazardRole role);
+void spawnPickup(Game& game, Vector2 position, int value, PickupType type,
+                 ElementType element = ElementType::Static,
+                 ElementMechanism mechanism = ElementMechanism::Infusion);
+
+auto isWeaponTypeUnlocked(const Game& game, WeaponType weapon) -> bool;
+void recordWeaponKill(Game& game, WeaponType weapon);
+void recordSkillMaxed(Game& game, SkillType id);
+void recordDashKill(Game& game, int32_t enemyKindIndex);
+void recordDashOrNerveKill(Game& game);
+void recordWaveReached(Game& game, int32_t wave);

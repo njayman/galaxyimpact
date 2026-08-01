@@ -12,6 +12,7 @@
 #include "raygui.h"
 #include "raylib.h"
 #include "raymath.h"
+#include "sandbox.hpp"
 #include "settings.hpp"
 #include "update.hpp"
 #include <algorithm>
@@ -91,6 +92,7 @@ void drawChargeParticles(Vector2 center, float fraction, Color color, float maxR
                          float minRadius);
 void drawComet(const BossProjectile& projectile);
 void drawHUD(const Game& game);
+void drawActiveBuffs(const Game& game, int32_t x, int32_t y);
 void drawDownwardTriangleIcon(float cx, int32_t y, float size, Color fillColor, bool filled);
 void drawHealthBar(const Game& game, int32_t x, int32_t y);
 auto healthBarWidthWithLabel() -> int32_t;
@@ -191,7 +193,7 @@ void drawTitle(const Game& game)
     applyGuiScale(game);
     windowText(game, "GALAXY IMPACT", game.resources.windowWidth / 2, 80, 50, Palette::Accent);
 
-    drawMenu(game, "", {"Start", "Settings", "Exit"}, MenuLayout::titleMenuY);
+    drawMenu(game, "", {"Start", "Achievements", "Settings", "Exit"}, MenuLayout::titleMenuY);
     drawHighScores(game,
                    game.resources.windowWidth / 2 - static_cast<int32_t>(80 * guiUiScale(game)),
                    static_cast<int32_t>(280 * guiUiScale(game)), game.resources.highScores);
@@ -333,6 +335,50 @@ void drawSettings(const Game& game)
                game.resources.windowWidth / 2, hintY, 16, Palette::StructMid);
 }
 
+void drawAchievements(const Game& game)
+{
+    applyGuiScale(game);
+    const auto& ach = game.resources.achievements;
+    windowText(game, "ACHIEVEMENTS", game.resources.windowWidth / 2, 60, 34, Palette::Accent);
+
+    const std::string summary =
+        std::format("Weapon slots: {}/6   Highest wave: {}   Infinite mode: {}", ach.slotCap,
+                    ach.highestWaveReached, ach.infiniteModeUnlocked ? "Unlocked" : "Locked");
+    windowText(game, summary.c_str(), game.resources.windowWidth / 2, 110, 18,
+               Palette::StructLight);
+
+    constexpr int32_t rowsPerColumn = 7;
+    constexpr int32_t rowHeight = 32;
+    constexpr int32_t columnWidth = 520;
+    const int32_t leftX = game.resources.windowWidth / 2 - columnWidth;
+    const int32_t topY = 170;
+
+    for (size_t i = 0; i < static_cast<size_t>(WeaponType::Count); i++)
+    {
+        const auto weapon = static_cast<WeaponType>(i);
+        const bool unlocked = isWeaponTypeUnlocked(game, weapon);
+        const int32_t column = static_cast<int32_t>(i) / rowsPerColumn;
+        const int32_t row = static_cast<int32_t>(i) % rowsPerColumn;
+        const int32_t x = leftX + column * columnWidth;
+        const int32_t y = topY + row * rowHeight;
+
+        std::string line = std::string(weaponDisplayName(weapon)) + ": " +
+                           (unlocked ? "Unlocked" : "Locked") +
+                           std::format(" ({} kills)", ach.killsByWeapon.at(i));
+        constexpr size_t evolvableWeaponCount = 6;
+        if (i < evolvableWeaponCount)
+        {
+            line += ach.evolutionUnlocked.at(i) ? "  [Evolution unlocked]" : "  [Evolution locked]";
+        }
+
+        drawText(game, line.c_str(), x, y, 18,
+                 unlocked ? Palette::StructLight : Palette::StructMid);
+    }
+
+    windowText(game, "Click / Enter / Esc: back", game.resources.windowWidth / 2,
+               topY + rowsPerColumn * rowHeight + 30, 16, Palette::StructMid);
+}
+
 void drawSkillIcon(SkillType id, Vector2 c, float s, Color color)
 {
     if (const auto kind = weaponForGrantSkill(id); kind.has_value())
@@ -378,6 +424,37 @@ void drawWeaponIcon(WeaponType kind, Vector2 c, float s, Color color)
     case WeaponType::Shock:
         DrawCircleLines(static_cast<int32_t>(c.x), static_cast<int32_t>(c.y), s, color);
         DrawCircleLines(static_cast<int32_t>(c.x), static_cast<int32_t>(c.y), s * 0.5F, color);
+        break;
+    case WeaponType::Ricochet:
+        DrawLineEx(Vector2{.x = c.x - s, .y = c.y - s}, Vector2{.x = c.x, .y = c.y + s}, 2, color);
+        DrawLineEx(Vector2{.x = c.x, .y = c.y + s}, Vector2{.x = c.x + s, .y = c.y - s}, 2, color);
+        break;
+    case WeaponType::FollowerDrone:
+        DrawCircleV(c, s * 0.4F, color);
+        DrawCircleLines(static_cast<int32_t>(c.x), static_cast<int32_t>(c.y), s, color);
+        break;
+    case WeaponType::LaserDrone:
+        DrawCircleV(c, s * 0.4F, color);
+        DrawLineEx(c, Vector2{.x = c.x + s, .y = c.y}, 2, color);
+        break;
+    case WeaponType::FlakCannon:
+        DrawCircleV(c, s * 0.5F, color);
+        DrawCircleLines(static_cast<int32_t>(c.x), static_cast<int32_t>(c.y), s, Fade(color, 0.5F));
+        break;
+    case WeaponType::Railgun:
+        DrawLineEx(Vector2{.x = c.x - s, .y = c.y}, Vector2{.x = c.x + s, .y = c.y}, 4, color);
+        break;
+    case WeaponType::ChainLightning:
+        DrawLineEx(Vector2{.x = c.x - s, .y = c.y - s}, Vector2{.x = c.x, .y = c.y}, 2, color);
+        DrawLineEx(Vector2{.x = c.x, .y = c.y}, Vector2{.x = c.x + s, .y = c.y - s}, 2, color);
+        break;
+    case WeaponType::TurretDeploy:
+        DrawRectangle(static_cast<int32_t>(c.x - s * 0.4F), static_cast<int32_t>(c.y - s * 0.4F),
+                      static_cast<int32_t>(s * 0.8F), static_cast<int32_t>(s * 0.8F), color);
+        break;
+    case WeaponType::Flamethrower:
+        DrawTriangle(Vector2{.x = c.x - s, .y = c.y}, Vector2{.x = c.x + s * 0.6F, .y = c.y - s},
+                     Vector2{.x = c.x + s * 0.6F, .y = c.y + s}, color);
         break;
     case WeaponType::Count:
         break;
@@ -563,22 +640,37 @@ void drawLevelUp(const Game& game)
                 color = Palette::Crit;
             }
             break;
-        case ChoiceType::LifeOrb:
-            name = std::format("{} x Life Orb", choice.count);
-            desc = "All slots full and maxed - a health reward, plus a small permanent damage "
-                   "bump.";
+        case ChoiceType::Pickup:
+        {
+            // libstdc++'s array iterator is a raw pointer, but libc++ (Emscripten) wraps it, so
+            // "auto*" fails there. NOLINTNEXTLINE(readability-qualified-auto)
+            const auto found = std::ranges::find_if(pickupCatalog,
+                                                    [&](const PickupCatalogEntry& e)
+                                                    {
+                                                        return e.type == choice.pickupType &&
+                                                               e.element == choice.element &&
+                                                               e.mechanism == choice.mechanism;
+                                                    });
+            name = found != pickupCatalog.end() ? std::string(found->name) : "Pickup";
+            desc = "Skip the skill picks - take this pickup instead, applied instantly.";
+            if (choice.pickupType == PickupType::Elemental)
+            {
+                color = elementColors.at(static_cast<size_t>(choice.element));
+            }
             break;
-        case ChoiceType::Shield:
-            name = std::format("{} x Shield", choice.count);
-            desc = "All slots full and maxed - a shield reward, plus a small permanent damage "
-                   "bump.";
-            break;
+        }
         case ChoiceType::Skill:
         default:
         {
             const auto& def = Skills.at(static_cast<size_t>(choice.skill));
             const int lvl = game.run.skillLevels.at(static_cast<size_t>(choice.skill));
-            name = std::format("{} (Lv {})", def.name, lvl + 1);
+            std::string_view skillName = def.name;
+            if (const auto weapon = weaponForGrantSkill(choice.skill);
+                weapon.has_value() && weaponEvolved(game, *weapon))
+            {
+                skillName = evolvedWeaponName.at(static_cast<size_t>(*weapon));
+            }
+            name = std::format("{} (Lv {})", skillName, lvl + 1);
             desc = def.description;
             if (const auto hint = evolutionHint(game, choice.skill); !hint.empty())
             {
@@ -592,7 +684,19 @@ void drawLevelUp(const Game& game)
 
         if (i == game.menuIndex)
         {
-            color = choice.type == ChoiceType::Evolve ? Palette::Crit : Palette::Accent;
+            if (choice.type == ChoiceType::Evolve)
+            {
+                color = Palette::Crit;
+            }
+            else if (choice.type == ChoiceType::Pickup &&
+                     choice.pickupType == PickupType::Elemental)
+            {
+                color = elementColors.at(static_cast<size_t>(choice.element));
+            }
+            else
+            {
+                color = Palette::Accent;
+            }
         }
 
         const auto nameSize = static_cast<int32_t>(static_cast<float>(nameFontSize) * scale);
@@ -663,6 +767,17 @@ void drawGameplayWorld(const Game& game)
 {
     drawBackgroundStars(game, game.run.player.position);
 
+    // M22: arena boundary indicator — a glowing ring at the actual out-of-bounds radius, only
+    // drawn once the player gets close enough that it could plausibly be on screen (the arena is
+    // huge, so testing this avoids drawing a 20000-radius circle every frame for nothing).
+    constexpr float arenaBoundaryVisibleMargin = 2000.0F;
+    if (const float distFromCenter = Vector2Length(game.run.player.position);
+        distFromCenter > GameConstants::arenaHalf - arenaBoundaryVisibleMargin)
+    {
+        DrawCircleLines(0, 0, GameConstants::arenaHalf, Fade(Palette::Shield, 0.5F));
+        DrawCircleLines(0, 0, GameConstants::arenaHalf - 6, Fade(Palette::Accent, 0.25F));
+    }
+
     for (const auto& c : game.run.gasClouds)
     {
         DrawCircleV(c.position, c.radius, c.color);
@@ -730,11 +845,62 @@ void drawGameplayWorld(const Game& game)
             DrawCircleV(p.position, 6, Fade(Palette::Shield, alpha));
             DrawCircleLinesV(p.position, 7, Fade(Palette::Haze, 0.8F * alpha));
             break;
+        case PickupType::Elemental:
+        {
+            const Color color = elementColors.at(static_cast<size_t>(p.element));
+            DrawPoly(p.position, 4, 7, static_cast<float>(GetTime()) * 90.0F, Fade(color, alpha));
+            DrawCircleLinesV(p.position, 9, Fade(color, 0.6F * alpha));
+            break;
+        }
+        case PickupType::Regen:
+            DrawCircleV(p.position, 6, Fade(Palette::Heal, alpha));
+            DrawCircleLinesV(p.position, 7, Fade(WHITE, 0.6F * alpha));
+            break;
+        case PickupType::DashTrail:
+            DrawPoly(p.position, 3, 7, static_cast<float>(GetTime()) * 60.0F,
+                     Fade(Palette::Accent, alpha));
+            break;
+        case PickupType::MagnetPulse:
+            DrawCircleLinesV(p.position, 8, Fade(Palette::Shield, alpha));
+            DrawCircleLinesV(p.position, 5, Fade(Palette::Shield, 0.6F * alpha));
+            break;
+        case PickupType::Overcharge:
+            DrawPoly(p.position, 6, 7, static_cast<float>(GetTime()) * 120.0F,
+                     Fade(Palette::Charge, alpha));
+            break;
+        case PickupType::SecondWind:
+            DrawCircleV(p.position, 6, Fade(Palette::Crit, alpha));
+            DrawCircleLinesV(p.position, 8, Fade(Palette::Crit, 0.5F * alpha));
+            break;
+        case PickupType::Danger:
+        {
+            // M23: deliberately unfriendly compared to every other pickup here — a jagged dark
+            // shape with a pulsing red outline, echoing elite-hazard visual language, so it reads
+            // as "don't touch this" rather than a normal reward.
+            const float pulse = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 10.0F);
+            DrawPoly(p.position, 5, 9, static_cast<float>(GetTime()) * -140.0F,
+                     Fade(Palette::Void, alpha));
+            DrawPolyLines(p.position, 5, 10, static_cast<float>(GetTime()) * -140.0F,
+                          Fade(Palette::Crit, alpha * pulse));
+            break;
+        }
         default:
             DrawCircleV(p.position, 4, Fade(Palette::Charge, alpha));
             DrawCircleLinesV(p.position, 5, Fade(Palette::Crit, 0.6F * alpha));
             break;
         }
+    }
+
+    for (const auto& field : game.run.elementalFields)
+    {
+        if (!field.active)
+        {
+            continue;
+        }
+        const Color color = elementColors.at(static_cast<size_t>(field.element));
+        DrawCircleV(field.position, field.radius, Fade(color, 0.12F));
+        DrawCircleLines(static_cast<int32_t>(field.position.x),
+                        static_cast<int32_t>(field.position.y), field.radius, Fade(color, 0.5F));
     }
 
     for (const auto& boss : game.run.bosses)
@@ -751,6 +917,37 @@ void drawGameplayWorld(const Game& game)
         DrawCircleV(m.position, 6, Palette::Crit);
         DrawCircleLines(static_cast<int32_t>(m.position.x), static_cast<int32_t>(m.position.y),
                         m.radius, Fade(Palette::Crit, 0.2F));
+    }
+
+    for (const auto& turret : game.run.turrets)
+    {
+        DrawRectangle(static_cast<int32_t>(turret.position.x - 8),
+                      static_cast<int32_t>(turret.position.y - 8), 16, 16, Palette::Accent);
+        DrawRectangleLines(static_cast<int32_t>(turret.position.x - 8),
+                           static_cast<int32_t>(turret.position.y - 8), 16, 16,
+                           Fade(Palette::StructLight, 0.6F));
+    }
+
+    for (const auto& drone : game.run.followerDrones)
+    {
+        DrawCircleV(drone.position, 8, Palette::Accent);
+        DrawCircleLines(static_cast<int32_t>(drone.position.x),
+                        static_cast<int32_t>(drone.position.y), 8.0F, Palette::StructLight);
+    }
+
+    for (const auto& drone : game.run.laserDrones)
+    {
+        DrawCircleV(drone.position, 7, Palette::Crit);
+        if (drone.beamFlashTimer > 0)
+        {
+            DrawLineEx(drone.position, drone.beamTarget, 2,
+                       Fade(Palette::Crit, drone.beamFlashTimer / 0.15F));
+        }
+    }
+
+    for (const auto& bolt : game.run.chainLightningBolts)
+    {
+        DrawLineEx(bolt.from, bolt.to, 2, Fade(Palette::Crit, bolt.timer / 0.2F));
     }
 
     for (const auto& wave : game.run.bossDeathShockwaves)
@@ -825,6 +1022,32 @@ void drawGameplayWorld(const Game& game)
     for (const auto& p : game.run.deathParticles)
     {
         DrawCircleV(p.position, p.radius, Fade(p.color, p.life / p.maxLife));
+    }
+
+    for (const auto& p : game.run.dashTrailParticles)
+    {
+        const float fade = p.life / p.maxLife;
+        const float flicker = 0.75F + 0.25F * std::sin(static_cast<float>(GetTime()) * 24.0F +
+                                                       p.position.x * 0.1F + p.position.y * 0.1F);
+
+        DrawCircleV(p.position, p.radius * fade, Fade(p.color, 0.18F * fade * flicker));
+        DrawCircleLines(static_cast<int32_t>(p.position.x), static_cast<int32_t>(p.position.y),
+                        p.radius * fade * 0.65F, Fade(Palette::Crit, 0.5F * fade));
+        DrawCircleV(p.position, p.radius * fade * 0.22F, Fade(WHITE, 0.6F * fade * flicker));
+    }
+
+    constexpr int32_t bigDamageThreshold = 15;
+    for (const auto& number : game.run.damageNumbers)
+    {
+        const float alpha = number.timer / number.maxTimer;
+        const bool big = number.amount >= bigDamageThreshold;
+        const std::string text = std::format("{}", number.amount);
+        const int32_t fontSize = big ? 20 : 14;
+        const Vector2 size =
+            MeasureTextEx(game.resources.font, text.c_str(), static_cast<float>(fontSize), 1.0F);
+        drawText(game, text.c_str(), static_cast<int32_t>(number.position.x - size.x / 2),
+                 static_cast<int32_t>(number.position.y - size.y / 2), fontSize,
+                 Fade(big ? Palette::Crit : Palette::StructLight, alpha));
     }
 }
 
@@ -915,12 +1138,14 @@ void drawShip(const Game& game)
     if (game.run.player.dashing)
     {
         const Vector2 dashDir = Vector2Normalize(game.run.player.dashVelocity);
+        const Color trailColor =
+            game.run.player.dashTrailUnlocked ? Palette::Accent : Palette::Crit;
         for (int i = 1; i <= 3; i++)
         {
             const Vector2 trailPos =
                 Vector2Subtract(p, Vector2Scale(dashDir, static_cast<float>(i) * 10));
             DrawCircleV(trailPos, r * (1 - static_cast<float>(i) * 0.2F),
-                        Fade(Palette::Crit, 0.35F / static_cast<float>(i)));
+                        Fade(trailColor, 0.35F / static_cast<float>(i)));
         }
     }
 
@@ -1255,29 +1480,33 @@ void drawBoss(const Game& game, const Boss& boss)
 
     if (boss.state == BossState::SHOOTING && boss.attack == BossAttack::Beam)
     {
-        const Vector2 beamStart = bossCenter;
         const Vector2 direction =
             Vector2Normalize(Vector2Subtract(boss.targetPosition, bossCenter));
-        const Vector2 beamEnd = Vector2Add(beamStart, Vector2Scale(direction, 2000));
+        const Vector2 beamEnd = Vector2Add(bossCenter, Vector2Scale(direction, 2000));
 
-        float beamLength = 2000;
-        for (const auto& a : game.run.asteroids)
+        for (const auto& [segStart, segEnd] : wormholeBentBeamSegments(game, bossCenter, beamEnd))
         {
-            if (CheckCollisionCircleLine(a.position, a.radius, beamStart, beamEnd))
+            float beamLength = Vector2Distance(segStart, segEnd);
+            for (const auto& a : game.run.asteroids)
             {
-                if (const float dist = Vector2Distance(bossCenter, a.position) - a.radius;
-                    dist < beamLength)
+                if (CheckCollisionCircleLine(a.position, a.radius, segStart, segEnd))
                 {
-                    beamLength = dist;
+                    if (const float dist = Vector2Distance(segStart, a.position) - a.radius;
+                        dist < beamLength)
+                    {
+                        beamLength = dist;
+                    }
                 }
             }
+
+            const Vector2 segDir = Vector2Normalize(Vector2Subtract(segEnd, segStart));
+            const float rotation = std::atan2(segDir.y, segDir.x) * RAD2DEG;
+            const Rectangle beamRec{
+                .x = segStart.x, .y = segStart.y, .width = beamLength, .height = 20};
+            const Vector2 beamOrigin{.x = 0, .y = beamRec.height / 2};
+
+            DrawRectanglePro(beamRec, beamOrigin, rotation, Fade(Palette::Accent, 0.7F));
         }
-
-        const Rectangle beamRec{
-            .x = bossCenter.x, .y = bossCenter.y, .width = beamLength, .height = 20};
-        const Vector2 beamOrigin{.x = 0, .y = beamRec.height / 2};
-
-        DrawRectanglePro(beamRec, beamOrigin, boss.beamRotation, Fade(Palette::Accent, 0.7F));
     }
 
     if (boss.state == BossState::SHOOTING && boss.attack == BossAttack::Slam)
@@ -1394,7 +1623,7 @@ void drawOrbitBlades(const Game& game)
         }
         case WeaponType::Beam:
         {
-            const Vector2 dir = aimAtMouse(game);
+            const Vector2 dir = beamAimDirection(game, w.evolved);
             const float length = beamLength(game, w.level, w.evolved);
             const Vector2 start = game.run.player.position;
             const Vector2 end = Vector2Add(start, Vector2Scale(dir, length));
@@ -1543,6 +1772,8 @@ void drawHUD(const Game& game)
     drawChargePips(game, 10, y);
     y += 24;
     drawDebuffIndicator(game, 10, y);
+    y += 24;
+    drawActiveBuffs(game, 10, y);
 
     constexpr int32_t abilitySlotCount = ItemConstants::maxAbilitySlots;
     constexpr int32_t abilityBoxSize = 28;
@@ -1558,6 +1789,14 @@ void drawHUD(const Game& game)
              "Move: WASD | Dash: L-Click | Shield: R-Click | Burst: Space | Pause: Esc | F11: "
              "Fullscreen",
              10, scaledScreenHeight - 28, 18, Palette::StructMid);
+
+    if (game.run.achievementToastTimer > 0)
+    {
+        const auto textWidth = static_cast<int32_t>(
+            MeasureTextEx(game.resources.font, game.run.achievementToast.c_str(), 24, 1).x);
+        drawText(game, game.run.achievementToast.c_str(), (scaledScreenWidth - textWidth) / 2, 100,
+                 24, Palette::Charge);
+    }
 
     if (game.sandbox)
     {
@@ -1728,19 +1967,78 @@ void drawDebuffIndicator(const Game& game, int32_t x, int32_t y)
     drawText(game, "SUPPRESSED: weapon cooldowns +40%", x + 20, y, 16, Palette::Shield);
 }
 
+void drawActiveBuffs(const Game& game, int32_t x, int32_t y)
+{
+    const auto& player = game.run.player;
+    int32_t cursorX = x;
+
+    for (size_t e = 0; e < static_cast<size_t>(ElementType::Count); e++)
+    {
+        const float timer = player.elementalBuffTimer.at(e);
+        if (timer <= 0)
+        {
+            continue;
+        }
+        const Color color = elementColors.at(e);
+        DrawCircleV(Vector2{.x = static_cast<float>(cursorX) + 7, .y = static_cast<float>(y) + 9},
+                    7, color);
+        const std::string label = std::format("{} {:.0f}s", elementNames.at(e), std::ceil(timer));
+        drawText(game, label.c_str(), cursorX + 18, y, 16, color);
+        cursorX += 18 + static_cast<int32_t>(label.size()) * 9 + 14;
+    }
+
+    if (player.regenTimer > 0)
+    {
+        DrawCircleV(Vector2{.x = static_cast<float>(cursorX) + 7, .y = static_cast<float>(y) + 9},
+                    7, Palette::Accent);
+        const std::string label = std::format("Regen {:.0f}s", std::ceil(player.regenTimer));
+        drawText(game, label.c_str(), cursorX + 18, y, 16, Palette::Accent);
+        cursorX += 18 + static_cast<int32_t>(label.size()) * 9 + 14;
+    }
+
+    if (player.overchargeTimer > 0)
+    {
+        DrawCircleV(Vector2{.x = static_cast<float>(cursorX) + 7, .y = static_cast<float>(y) + 9},
+                    7, Palette::Charge);
+        const std::string label =
+            std::format("Overcharge {:.0f}s", std::ceil(player.overchargeTimer));
+        drawText(game, label.c_str(), cursorX + 18, y, 16, Palette::Charge);
+        cursorX += 18 + static_cast<int32_t>(label.size()) * 9 + 14;
+    }
+
+    if (player.secondWindReady)
+    {
+        DrawCircleV(Vector2{.x = static_cast<float>(cursorX) + 7, .y = static_cast<float>(y) + 9},
+                    7, Palette::Crit);
+        drawText(game, "Second Wind", cursorX + 18, y, 16, Palette::Crit);
+        cursorX += 18 + 11 * 9 + 14;
+    }
+
+    if (player.dashTrailUnlocked)
+    {
+        DrawCircleV(Vector2{.x = static_cast<float>(cursorX) + 7, .y = static_cast<float>(y) + 9},
+                    7, Palette::Shield);
+        drawText(game, "Dash Trail", cursorX + 18, y, 16, Palette::Shield);
+    }
+}
+
 void drawSandboxHUD(const Game& game)
 {
     const std::string kindName(enemyKinds.at(static_cast<size_t>(game.sandboxKindIndex)).name);
     const std::string attackName(
         bossAttackNames.at(static_cast<size_t>(game.sandboxBossAttackIndex)));
-    const std::array<std::string, 6> lines{
+    const std::string pickupName(sandboxPickupName(game.sandboxPickupIndex));
+    const std::string shipName(currentShip(game).name);
+    const std::array<std::string, 7> lines{
         "SANDBOX",
         std::format("[ / ]: cycle enemy ({})   E: spawn enemy   B: spawn boss", kindName),
         "K: clear board   L: level-up picker   H: full heal   R: reset abilities",
         std::format("G: death {}   , / . : cycle boss attack ({})   O: command nearest boss",
                     game.sandboxDeathEnabled ? "ON" : "OFF", attackName),
-        std::format("- / + : wave ({})", game.run.waveNumber),
+        std::format("- / + : wave ({})   I / Shift+I: cycle ship ({})", game.run.waveNumber,
+                    shipName),
         "N: spawn black hole   M: spawn wormhole   U: spawn hazard (+Shift: debuff)",
+        std::format("; / ': cycle pickup ({})   P: drop selected pickup", pickupName),
     };
 
     int32_t y =
@@ -1777,6 +2075,7 @@ auto drawGame(Game& game) -> void
         break;
     case GameState::SHIP_SELECT:
     case GameState::SETTINGS:
+    case GameState::ACHIEVEMENTS:
         if (game.settingsReturnState == GameState::PAUSED ||
             game.settingsReturnState == GameState::GAME_OVER)
         {
@@ -1849,6 +2148,7 @@ auto drawGame(Game& game) -> void
         break;
     case GameState::SHIP_SELECT:
     case GameState::SETTINGS:
+    case GameState::ACHIEVEMENTS:
         if (game.settingsReturnState == GameState::PAUSED)
         {
             drawHUD(game);
@@ -1877,7 +2177,7 @@ auto drawGame(Game& game) -> void
         break;
     case GameState::PAUSED:
         drawOverlay(game);
-        drawMenu(game, "PAUSED", {"Resume", "Settings", "New Game", "Exit"},
+        drawMenu(game, "PAUSED", {"Resume", "Achievements", "Settings", "New Game", "Exit"},
                  MenuLayout::pausedMenuY);
         break;
     case GameState::LEVEL_UP:
@@ -1891,6 +2191,10 @@ auto drawGame(Game& game) -> void
     case GameState::SETTINGS:
         drawOverlay(game);
         drawSettings(game);
+        break;
+    case GameState::ACHIEVEMENTS:
+        drawOverlay(game);
+        drawAchievements(game);
         break;
     }
 

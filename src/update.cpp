@@ -12,10 +12,12 @@
 #include "sandbox.hpp"
 #include <algorithm>
 #include <array>
+#include <cfloat>
 #include <cmath>
 #include <cstddef>
 #include <numbers>
 #include <optional>
+#include <string>
 #include <vector>
 
 constexpr float frameScale = UpdateConstants::frameScale;
@@ -53,6 +55,78 @@ constexpr float orbitLaunchInterval = 2.2F;
 constexpr float orbitRegrowDuration = 0.35F;
 constexpr float nerveSpiralSpinSpeed = 14.0F;
 constexpr float cameraDespawnMargin = 80.0F;
+constexpr float freezeSlowMult = 0.5F;
+constexpr float confuseWanderInterval = 1.0F;
+// Elemental debuffs are a helping hand, not a primary damage source.
+constexpr float baseBurnDps = 3.0F;
+// Duration for temporary player-side pickup effects (elemental Infusion/Field, Regen), by
+// Difficulty (Easy/Normal/Hard) — longer on harder difficulties to help offset tougher enemies.
+constexpr std::array<float, 3> difficultyPickupDuration{20.0F, 40.0F, 60.0F};
+constexpr float elementalFieldRadius = 90.0F;
+constexpr float regenRate = 0.4F;
+constexpr float overchargeDuration = 8.0F;
+constexpr float overchargeDamageMult = 1.5F;
+constexpr float dashTrailRadius = 24.0F;
+constexpr int32_t dashTrailDamage = 4;
+constexpr float dashTrailParticleLife = 0.9F;
+constexpr float magnetPulseSnapDistance = 40.0F;
+constexpr float dangerDowngradeDuration = 10.0F;
+constexpr int32_t dangerDowngradeLevels = 2;
+// Out of 1000 rolls, independent of (and rarer than) the "good" rare bonus roll above.
+constexpr int32_t dangerPickupChance = 2;
+
+// M26: Dash Trail/Second Wind are the catalog's "permanent" (non-timed) effects; they get offered
+// more often at higher wave numbers instead of adding new pickup types.
+auto isPermanentPickup(PickupType type) -> bool
+{
+    return type == PickupType::DashTrail || type == PickupType::SecondWind;
+}
+
+// Capped so early waves aren't starved of permanent pickups and late waves don't guarantee them.
+auto permanentPickupBiasWeight(int32_t wave) -> float
+{
+    constexpr float maxBias = 4.0F;
+    constexpr float waveDivisor = 25.0F;
+    return std::min(maxBias, 1.0F + static_cast<float>(wave) / waveDivisor);
+}
+
+// M26: temporary-buff durations (Regen, Overcharge, elemental Infusion/Field) scale up with wave
+// number, capped at +50% so it can't snowball into an imbalance in a long/infinite-mode run.
+auto pickupDurationScale(int32_t wave) -> float
+{
+    constexpr float maxBonus = 0.5F;
+    constexpr float waveDivisor = 200.0F;
+    return 1.0F + std::min(maxBonus, static_cast<float>(wave) / waveDivisor);
+}
+
+auto pickWeightedPickupIndex(int32_t wave) -> size_t
+{
+    std::array<float, pickupCatalog.size()> weights{};
+    float total = 0.0F;
+    for (size_t i = 0; i < pickupCatalog.size(); i++)
+    {
+        weights.at(i) =
+            isPermanentPickup(pickupCatalog.at(i).type) ? permanentPickupBiasWeight(wave) : 1.0F;
+        total += weights.at(i);
+    }
+
+    constexpr int32_t rollResolution = 100000;
+    float roll = static_cast<float>(GetRandomValue(0, rollResolution)) /
+                 static_cast<float>(rollResolution) * total;
+    for (size_t i = 0; i < weights.size(); i++)
+    {
+        if (roll < weights.at(i))
+        {
+            return i;
+        }
+        roll -= weights.at(i);
+    }
+    return weights.size() - 1;
+}
+// Out of 1000 rolls: very rare, on top of (not instead of) the existing shield/life-orb rolls.
+constexpr int32_t rareBonusDropChance = 3;
+constexpr int32_t rareBonusCategoryCount =
+    6; // Regen/DashTrail/MagnetPulse/Overcharge/SecondWind/Elemental
 constexpr float dashKillChargeRefund = 0.6F;
 constexpr float shieldKillChargeRefund = 0.6F;
 constexpr float bossBodyLingerLimit = 1.0F;
@@ -91,6 +165,7 @@ constexpr float bgmDuckStrength = 0.5F;
 
 constexpr int miniBossWaveInterval = 5;
 constexpr int megaBossWaveInterval = 10;
+constexpr int finalBossWaveInterval = 100;
 constexpr int bossSwarmInterval = 50;
 constexpr float miniBossHealthMult = 0.5F;
 constexpr float miniBossSizeMult = 0.7F;
@@ -153,8 +228,23 @@ constexpr float spreadRoundInterval = 0.25F;
 constexpr float gravityWellPullStrength = 1.6F;
 constexpr float gravityWellDuration = 2.0F;
 
+// Indices 6-13 are the M15 additions: Ricochet/FollowerDrone/LaserDrone are amplifiers with no
+// fire-cooldown of their own (never read from this table), the rest are new primary weapons.
 constexpr std::array<float, static_cast<size_t>(WeaponType::Count)> weaponBaseCooldown{
-    0.38F, 0.85F, 1.0F, 0.7F, 0.6F, 1.5F};
+    0.38F, 0.85F, 1.0F, 0.7F, 0.6F, 1.5F, 0.0F, 0.0F, 0.0F, 0.9F, 1.8F, 2.2F, 6.0F, 0.0F};
+
+constexpr float droneMeleeRange = 60.0F;
+constexpr float droneAttackIntervalBase = 0.6F;
+constexpr float laserDroneRangeBase = 220.0F;
+constexpr float droneOrbitRadius = 70.0F;
+constexpr float turretLife = 8.0F;
+constexpr float turretFireInterval = 0.8F;
+constexpr float flakSplashRadius = 40.0F;
+constexpr float flamethrowerRange = 160.0F;
+constexpr float flamethrowerHalfAngle = 20.0F * DEG2RAD;
+constexpr float flamethrowerOffAngle = 45.0F * DEG2RAD;
+constexpr float chainLightningRange = 260.0F;
+constexpr float chainLightningBoltLife = 0.2F;
 
 struct WaveHitResult
 {
@@ -205,8 +295,19 @@ void updatePlayerMovement(Game& game, float deltaTime);
 void updateShieldAndBarrier(Game& game, float deltaTime);
 void updateAbilityCharges(Game& game, float deltaTime);
 auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>;
+auto nearestEnemyExcluding(const Game& game, Vector2 from,
+                           Vector2 exclude) -> std::optional<Vector2>;
 auto weaponCooldown(const Game& game, WeaponType kind, int32_t level, bool evolved) -> float;
 auto weaponDamage(const Game& game, int32_t level) -> int32_t;
+auto ricochetLevel(const Game& game) -> int32_t;
+auto shipCurrentDamage(const Game& game) -> float;
+auto droneDamageFraction(int32_t level) -> float;
+void updateFollowerDrones(Game& game, float deltaTime);
+void updateLaserDrones(Game& game, float deltaTime);
+void updateTurrets(Game& game, float deltaTime);
+void updateFlamethrower(Game& game, float deltaTime);
+void updateChainLightningBolts(Game& game, float deltaTime);
+void fireChainLightning(Game& game, const Weapon& weapon);
 auto mineCount(int32_t level, bool evolved) -> int;
 auto mineRadius(bool evolved) -> float;
 auto mineDamage(const Game& game, int32_t level, bool evolved) -> int32_t;
@@ -216,7 +317,14 @@ auto nearestEnemyWithin(const Game& game, Vector2 from, float maxDist) -> std::o
 auto nearestAsteroidWithin(const Game& game, Vector2 from, float maxDist) -> std::optional<Vector2>;
 void updateWeapons(Game& game, float deltaTime);
 void recordDamage(Game& game, DamageSource source, int32_t amount);
-void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSource source);
+auto currentBurnDps(const Game& game) -> float;
+void applyElementDebuff(Enemy& enemy, ElementType element, float burnDps);
+void applyActiveElementalDebuffs(Game& game, Enemy& enemy);
+void collectElementalPickup(Game& game, ElementType element, ElementMechanism mechanism);
+void updateElementalFields(Game& game, float deltaTime);
+void updatePlayerBuffs(Game& game, float deltaTime);
+void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSource source,
+              float knockback = 0);
 void updateWaveSpawner(Game& game, float deltaTime);
 auto asteroidIntervalMultiplier(const Game& game) -> float;
 auto asteroidCap(const Game& game) -> int;
@@ -226,24 +334,28 @@ void damageEliteHazard(Game& game, size_t index, int32_t amount);
 auto enemyDamage(const Game& game, int32_t base) -> int32_t;
 void spawnEnemy(Game& game);
 void spawnBossWave(Game& game, float healthMult, float sizeMult, bool isMega);
+void spawnFinalBossWave(Game& game);
 auto bossMoveCountForDifficulty(Difficulty difficulty) -> int;
 auto sampleBossMoveset(int count) -> std::vector<BossAttack>;
 auto spawnRingPosition(const Game& game) -> Vector2;
 void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter);
 void updatePickups(Game& game, float deltaTime);
+void applyPickupEffect(Game& game, PickupType type, ElementType element, ElementMechanism mechanism,
+                       const Pickup* except = nullptr);
 void collectLifeOrb(Game& game);
 auto equippedSlotCount(const Game& game) -> int;
 auto sampleDistinct(std::vector<SkillType> ids, int count) -> std::vector<SkillType>;
 auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>;
-auto rollRewardChoices() -> std::vector<LevelUpChoice>;
-auto weaponEvolved(const Game& game, WeaponType kind) -> bool;
+auto rollRewardChoices(const Game& game) -> std::vector<LevelUpChoice>;
 void applySkill(Game& game, SkillType id);
 void grantOrLevelWeapon(Game& game, WeaponType kind);
 void applyEvolution(Game& game, WeaponType kind);
 void updateBullets(Game& game, float deltaTime);
 void damageEnemy(Game& game, size_t index, int32_t amount);
+void damageBoss(Game& game, Boss& boss, int32_t amount);
 void killEnemyForBossAttack(Game& game, size_t index, bool alwaysLoot);
-void spawnPickup(Game& game, Vector2 position, int value, PickupType type);
+void spawnRareBonusPickup(Game& game, Vector2 position);
+void spawnRareDangerPickup(Game& game, Vector2 position);
 void updateAsteroids(Game& game, float deltaTime);
 void updateEnemies(Game& game, float deltaTime);
 void updateProjectiles(Game& game, float deltaTime);
@@ -258,6 +370,17 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter);
 void processBeamAttack(Game& game, Boss& boss, Vector2 beamStart, Vector2 beamEnd);
 void updateBgmLayers(Game& game, float deltaTime);
 
+// M22: screen shake proportional to damage dealt, layered on top of (not replacing) the existing
+// hand-tuned per-event shakes elsewhere — triggerShake only ever increases toward the larger of
+// the two, so a big scripted attack shake is never undercut by a small per-hit one.
+auto damageShakeIntensity(int32_t amount) -> float
+{
+    constexpr float perDamageUnit = 0.4F;
+    constexpr float maxIntensity = 9.0F;
+    return std::min(maxIntensity, static_cast<float>(amount) * perDamageUnit);
+}
+constexpr float damageShakeDuration = 0.12F;
+
 void triggerShake(Game& game, float intensity, float duration)
 {
     if (intensity > game.run.shakeIntensity)
@@ -269,6 +392,63 @@ void triggerShake(Game& game, float intensity, float duration)
         game.run.shakeTimer = duration;
         game.run.shakeDuration = duration;
     }
+}
+
+// M18: floating damage number, spawned alongside every hit that reduces an enemy/boss/hazard's
+// health. Small random horizontal jitter keeps overlapping hits (e.g. a pierced line of enemies)
+// from stacking illegibly on top of each other.
+void spawnDamageNumber(Game& game, Vector2 position, int32_t amount)
+{
+    constexpr float damageNumberLife = 0.6F;
+    constexpr float jitterRange = 10.0F;
+    const Vector2 jittered{
+        .x = position.x + (static_cast<float>(GetRandomValue(-100, 100)) / 100.0F) * jitterRange,
+        .y = position.y};
+    game.run.damageNumbers.push_back(DamageNumber{.position = jittered,
+                                                  .amount = amount,
+                                                  .timer = damageNumberLife,
+                                                  .maxTimer = damageNumberLife});
+}
+
+void updateDamageNumbers(Game& game, float deltaTime)
+{
+    constexpr float riseSpeed = 45.0F;
+    for (auto& number : game.run.damageNumbers)
+    {
+        number.position.y -= riseSpeed * deltaTime;
+        number.timer -= deltaTime;
+    }
+    std::erase_if(game.run.damageNumbers, [](const DamageNumber& n) { return n.timer <= 0; });
+}
+
+// M23: restores the Danger-pickup weapon downgrade once its timer runs out. If the weapon is
+// somehow gone by then (shouldn't normally happen — weapons are never removed mid-run) this is a
+// no-op rather than a crash.
+void updateWeaponDowngrade(Game& game, float deltaTime)
+{
+    if (!game.run.weaponDowngrade.has_value())
+    {
+        return;
+    }
+
+    auto& downgrade = *game.run.weaponDowngrade;
+    downgrade.timer -= deltaTime;
+    if (downgrade.timer > 0)
+    {
+        return;
+    }
+
+    for (auto& weapon : game.run.weapons)
+    {
+        if (weapon.type == downgrade.type)
+        {
+            weapon.level += downgrade.amount;
+            game.run.achievementToast = std::string(weaponDisplayName(weapon.type)) + " restored!";
+            game.run.achievementToastTimer = 3.0F;
+            break;
+        }
+    }
+    game.run.weaponDowngrade = std::nullopt;
 }
 
 void triggerHitPause(Game& game, float duration)
@@ -284,7 +464,7 @@ void duckBGM(Game& game) { game.resources.bgm.duckTimer = bgmDuckDuration; }
 auto updateTitle(Game& game) -> bool
 {
     const auto [index, confirmed] = updateMenuSelectionWindow(
-        game, game.menuIndex, 3, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
+        game, game.menuIndex, 4, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
         MenuLayout::buttonGap, MenuLayout::titleMenuY);
     playMenuSounds(game, index, confirmed);
     game.menuIndex = index;
@@ -300,16 +480,30 @@ auto updateTitle(Game& game) -> bool
             break;
         case 1:
             game.settingsReturnState = GameState::TITLE;
+            game.state = GameState::ACHIEVEMENTS;
+            break;
+        case 2:
+            game.settingsReturnState = GameState::TITLE;
             game.menuIndex = 0;
             game.state = GameState::SETTINGS;
             break;
-        case 2:
+        case 3:
             return true;
         default:
             break;
         }
     }
 
+    return false;
+}
+
+auto updateAchievements(Game& game) -> bool
+{
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) ||
+        IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    {
+        game.state = game.settingsReturnState;
+    }
     return false;
 }
 
@@ -347,7 +541,7 @@ auto updatePaused(Game& game) -> bool
     }
 
     const auto [index, confirmed] = updateMenuSelectionWindow(
-        game, game.menuIndex, 4, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
+        game, game.menuIndex, 5, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
         MenuLayout::buttonGap, MenuLayout::pausedMenuY);
     playMenuSounds(game, index, confirmed);
     game.menuIndex = index;
@@ -361,15 +555,19 @@ auto updatePaused(Game& game) -> bool
             break;
         case 1:
             game.settingsReturnState = GameState::PAUSED;
+            game.state = GameState::ACHIEVEMENTS;
+            break;
+        case 2:
+            game.settingsReturnState = GameState::PAUSED;
             game.menuIndex = 0;
             game.state = GameState::SETTINGS;
             break;
-        case 2:
+        case 3:
             game.menuIndex = game.resources.settings.shipIndex;
             game.settingsReturnState = GameState::PAUSED;
             game.state = GameState::SHIP_SELECT;
             break;
-        case 3:
+        case 4:
             return true;
         default:
             break;
@@ -431,20 +629,8 @@ auto updateLevelUp(Game& game) -> bool
         case ChoiceType::Evolve:
             applyEvolution(game, choice.weapon.value());
             break;
-        case ChoiceType::LifeOrb:
-            for (int32_t i = 0; i < choice.count; i++)
-            {
-                collectLifeOrb(game);
-            }
-            break;
-        case ChoiceType::Shield:
-            for (int32_t i = 0; i < choice.count; i++)
-            {
-                if (game.run.player.shieldStacks < currentShip(game).maxShieldStacks)
-                {
-                    game.run.player.shieldStacks++;
-                }
-            }
+        case ChoiceType::Pickup:
+            applyPickupEffect(game, choice.pickupType, choice.element, choice.mechanism);
             break;
         case ChoiceType::Skill:
         default:
@@ -501,7 +687,8 @@ auto updateSettings(Game& game) -> bool
     bool confirm = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
 
     const Vector2 mouseDelta = GetMouseDelta();
-    const bool mouseMoved = mouseDelta.x != 0 || mouseDelta.y != 0;
+    const bool mouseMoved =
+        std::abs(mouseDelta.x) > FLT_EPSILON || std::abs(mouseDelta.y) > FLT_EPSILON;
     if (mouseMoved)
     {
         if (const auto row = hoveredColumnRow(settingsRowCount, MenuLayout::settingsWidth,
@@ -846,6 +1033,15 @@ void damagePlayer(Game& game, int32_t amount)
     game.run.player.health -= reduced;
     game.run.player.immunityTimer = 1.0F;
 
+    if (game.run.player.health <= 0 && game.run.player.secondWindReady)
+    {
+        game.run.player.secondWindReady = false;
+        game.run.player.health = 1.0F;
+        playSFX(game, game.resources.sounds.victory);
+        triggerShake(game, 8, 0.3F);
+        return;
+    }
+
     if (game.run.player.health <= 0)
     {
         game.state = GameState::GAME_OVER;
@@ -859,6 +1055,29 @@ void damagePlayer(Game& game, int32_t amount)
     {
         playSFX(game, game.resources.sounds.hit);
         triggerShake(game, 4, 0.2F);
+    }
+}
+
+// M22: shared kill-explosion burst for enemies/elite hazards/bosses (reuses the same
+// `deathParticles` vector/update/draw path as the player's own death explosion). Bosses pass a
+// bigger particleCount/speedScale for a more dramatic pop.
+void spawnKillExplosion(Game& game, Vector2 position, Color color, int32_t particleCount,
+                        float speedScale)
+{
+    for (int i = 0; i < particleCount; i++)
+    {
+        const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+        const float speed = static_cast<float>(GetRandomValue(15, 60)) / 10.0F * speedScale;
+        const Vector2 velocity{.x = std::cos(angle) * speed, .y = std::sin(angle) * speed};
+        const float life = static_cast<float>(GetRandomValue(30, 60)) / 100.0F;
+
+        game.run.deathParticles.push_back(
+            Particle{.position = position,
+                     .velocity = velocity,
+                     .radius = static_cast<float>(GetRandomValue(2, 4)) * speedScale,
+                     .life = life,
+                     .maxLife = life,
+                     .color = color});
     }
 }
 
@@ -925,6 +1144,13 @@ void updateGameplay(Game& game, float deltaTime)
     updateNerveBallProjectiles(game, deltaTime);
     updateNerveSpiralProjectiles(game, deltaTime);
     updateBeamContact(game, deltaTime);
+    updateFollowerDrones(game, deltaTime);
+    updateLaserDrones(game, deltaTime);
+    updateTurrets(game, deltaTime);
+    updateFlamethrower(game, deltaTime);
+    updateChainLightningBolts(game, deltaTime);
+    updateElementalFields(game, deltaTime);
+    updatePlayerBuffs(game, deltaTime);
     updateWaveSpawner(game, deltaTime);
     updateBlackHole(game, deltaTime);
     updateWormhole(game, deltaTime);
@@ -986,11 +1212,14 @@ void updateGameplay(Game& game, float deltaTime)
             spawnPickup(game, bossCenter, 0, PickupType::Shield);
             spawnPickup(game, bossCenter, 0, PickupType::LifeOrb);
         }
+        spawnRareBonusPickup(game, bossCenter);
+        spawnRareDangerPickup(game, bossCenter);
 
         game.run.bossDeathShockwaves.push_back(
             BossDeathShockwave{.timer = UpdateConstants::bossDeathShockwaveDuration,
                                .position = bossCenter,
                                .hit = false});
+        spawnKillExplosion(game, bossCenter, boss.baseColor, 40, 2.2F);
 
         if (game.run.player.health > 0)
         {
@@ -998,6 +1227,14 @@ void updateGameplay(Game& game, float deltaTime)
             triggerShake(game, 14, 0.6F);
             triggerHitPause(game, 0.2F);
             gainNerve(game);
+        }
+
+        if (boss.isFinalBoss && !game.resources.achievements.infiniteModeUnlocked)
+        {
+            game.resources.achievements.infiniteModeUnlocked = true;
+            saveAchievements(game.resources.achievements);
+            game.run.achievementToast = "Infinite mode unlocked!";
+            game.run.achievementToastTimer = 4.0F;
         }
     }
     if (anyBossKilledThisFrame)
@@ -1230,8 +1467,7 @@ void updatePlayerMovement(Game& game, float deltaTime)
                     static_cast<float>(game.run.player.shieldActive ? bossRamDamage * 2
                                                                     : bossRamDamage) *
                     quirkMult * currentShip(game).damageMult);
-                boss.health -= ramDamage;
-                boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+                damageBoss(game, boss, ramDamage);
                 if (game.run.player.shieldActive)
                 {
                     game.run.player.chargeRegenTimer =
@@ -1361,6 +1597,20 @@ auto aimAtMouse(const Game& game) -> Vector2
     return Vector2Normalize(dir);
 }
 
+auto mouseWorldPos(const Game& game) -> Vector2
+{
+    const Vector2 mouse = GetMousePosition();
+    const Rectangle box = letterBoxRect(game);
+    const Vector2 center{.x = box.x + box.width / 2, .y = box.y + box.height / 2};
+    const float scale = game.resources.renderScale;
+    if (scale <= 0)
+    {
+        return game.run.player.position;
+    }
+    return Vector2Add(game.run.player.position,
+                      Vector2Scale(Vector2Subtract(mouse, center), 1.0F / scale));
+}
+
 auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>
 {
     float best = -1;
@@ -1404,6 +1654,53 @@ auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>
     return target;
 }
 
+// Seeker Swarm (evolved Homing Missiles): picks the nearest target that isn't the one another
+// missile in the same volley already locked onto, so a 2-missile volley spreads across 2 enemies.
+auto nearestEnemyExcluding(const Game& game, Vector2 from,
+                           Vector2 exclude) -> std::optional<Vector2>
+{
+    constexpr float excludeEpsilon = 0.5F;
+    float best = -1;
+    Vector2 target{};
+    bool found = false;
+
+    for (const auto& enemy : game.run.enemies)
+    {
+        if (!enemy.active || Vector2Distance(enemy.position, exclude) <= excludeEpsilon)
+        {
+            continue;
+        }
+        const float d = Vector2Distance(from, enemy.position);
+        if (best < 0 || d < best)
+        {
+            best = d;
+            target = enemy.position;
+            found = true;
+        }
+    }
+
+    for (const auto& hazard : game.run.eliteHazards)
+    {
+        if (!hazard.active || Vector2Distance(hazard.position, exclude) <= excludeEpsilon)
+        {
+            continue;
+        }
+        const float d = Vector2Distance(from, hazard.position);
+        if (best < 0 || d < best)
+        {
+            best = d;
+            target = hazard.position;
+            found = true;
+        }
+    }
+
+    if (!found)
+    {
+        return std::nullopt;
+    }
+    return target;
+}
+
 auto orbitRadius(int32_t level) -> float { return 55 + static_cast<float>(level) * 4; }
 
 auto orbitBladeCount(int32_t level) -> int32_t { return 2 + level / 2; }
@@ -1416,6 +1713,23 @@ auto orbitBladePosition(const Game& game, Vector2 center, float radius, int32_t 
         static_cast<float>(index) * 2 * std::numbers::pi_v<float> / static_cast<float>(count);
     return Vector2Add(center,
                       Vector2{.x = std::cos(angle) * radius, .y = std::sin(angle) * radius});
+}
+
+auto beamAimDirection(const Game& game, bool evolved) -> Vector2
+{
+    const Vector2 dir = aimAtMouse(game);
+    if (!evolved)
+    {
+        return dir;
+    }
+    // Lance Sweep: oscillate the aim direction across a narrow arc instead of a fixed line.
+    constexpr float sweepArcDegrees = 40.0F;
+    constexpr float sweepSpeed = 2.0F;
+    const float sweepAngle =
+        std::sin(static_cast<float>(GetTime()) * sweepSpeed) * (sweepArcDegrees / 2) * DEG2RAD;
+    const float cosA = std::cos(sweepAngle);
+    const float sinA = std::sin(sweepAngle);
+    return Vector2{.x = dir.x * cosA - dir.y * sinA, .y = dir.x * sinA + dir.y * cosA};
 }
 
 auto beamLength(const Game& game, int32_t level, bool evolved) -> float
@@ -1476,7 +1790,48 @@ auto weaponDamage(const Game& game, int32_t level) -> int32_t
                            game.run.skillLevels.at(static_cast<size_t>(SkillType::Damage)));
     dmg *= 1 + postCapDamageBonusPerLevel * static_cast<float>(game.run.postCapDamageLevels);
     dmg *= currentShip(game).damageMult;
+    if (game.run.player.overchargeTimer > 0)
+    {
+        dmg *= overchargeDamageMult;
+    }
     return static_cast<int32_t>(dmg);
+}
+
+// M15: how many extra enemies a "stops on contact" projectile bounces to (0 if Ricochet isn't
+// equipped). Only meaningful for weapons that don't already pierce — callers gate on that.
+auto ricochetLevel(const Game& game) -> int32_t
+{
+    for (const auto& w : game.run.weapons)
+    {
+        if (w.type == WeaponType::Ricochet)
+        {
+            return w.level;
+        }
+    }
+    return 0;
+}
+
+// M15 drones: "50/70/70/90% of the ship's current damage" is read as this level-independent base
+// damage figure (already scales with the Damage skill, post-cap bonus, ship multiplier,
+// overcharge).
+auto shipCurrentDamage(const Game& game) -> float
+{
+    return static_cast<float>(weaponDamage(game, 0));
+}
+
+// M15 drones: 50% base, +20% at level>=2, +20% more at level>=4 (Follower/Laser Drone share this).
+auto droneDamageFraction(int32_t level) -> float
+{
+    float fraction = 0.5F;
+    if (level >= 2)
+    {
+        fraction += 0.2F;
+    }
+    if (level >= 4)
+    {
+        fraction += 0.2F;
+    }
+    return fraction;
 }
 
 auto mineCount(int32_t level, bool evolved) -> int
@@ -1563,10 +1918,43 @@ auto nearestAsteroidWithin(const Game& game, Vector2 from, float maxDist) -> std
     return target;
 }
 
+// Cluster Charges: an evolved mine detonating force-detonates any other active evolved mine
+// within chainRadius, cascading in the same frame for a single connected blast.
+void detonateMine(Game& game, size_t index)
+{
+    Mine& mine = game.run.mines.at(index);
+    if (!mine.active)
+    {
+        return;
+    }
+    mine.active = false;
+    aoePulse(game, mine.position, mine.radius, mine.damage, DamageSource::Mine);
+
+    if (!mine.evolved)
+    {
+        return;
+    }
+    constexpr float chainRadius = 80.0F;
+    const Vector2 origin = mine.position;
+    for (size_t j = 0; j < game.run.mines.size(); j++)
+    {
+        if (j == index)
+        {
+            continue;
+        }
+        const Mine& other = game.run.mines.at(j);
+        if (other.active && other.evolved && Vector2Distance(origin, other.position) <= chainRadius)
+        {
+            detonateMine(game, j);
+        }
+    }
+}
+
 void updateMines(Game& game, float deltaTime)
 {
-    for (auto& mine : game.run.mines)
+    for (size_t i = 0; i < game.run.mines.size(); i++)
     {
+        Mine& mine = game.run.mines.at(i);
         if (!mine.active)
         {
             continue;
@@ -1616,8 +2004,7 @@ void updateMines(Game& game, float deltaTime)
 
         if (detonate)
         {
-            mine.active = false;
-            aoePulse(game, mine.position, mine.radius, mine.damage, DamageSource::Mine);
+            detonateMine(game, i);
         }
     }
 }
@@ -1678,7 +2065,10 @@ void updateWeapons(Game& game, float deltaTime)
                     .radius = projectileSize,
                     .color = color,
                     .active = true,
-                    .damage = dmg});
+                    .damage = dmg,
+                    .pierceRemaining = w.evolved ? 2 : 0,
+                    .ricochetRemaining = w.evolved ? 0 : ricochetLevel(game),
+                    .source = DamageSource::Forward});
             }
             playSFX(game, game.resources.sounds.shoot);
             break;
@@ -1692,23 +2082,44 @@ void updateWeapons(Game& game, float deltaTime)
                 dmg = static_cast<int32_t>(static_cast<float>(dmg) * 1.5F);
             }
             bool fired = false;
+            std::optional<Vector2> firstTarget;
             for (int m = 0; m < missiles; m++)
             {
-                if (const auto target = nearestEnemy(game, game.run.player.position);
-                    target.has_value())
+                const auto target =
+                    (w.evolved && m > 0 && firstTarget.has_value())
+                        ? nearestEnemyExcluding(game, game.run.player.position, *firstTarget)
+                        : nearestEnemy(game, game.run.player.position);
+                bool huntingNewTarget = false;
+                Vector2 dir{};
+                if (target.has_value())
                 {
-                    const Vector2 dir =
-                        Vector2Normalize(Vector2Subtract(*target, game.run.player.position));
-                    game.run.bossProjectiles.push_back(
-                        BossProjectile{.position = game.run.player.position,
-                                       .velocity = Vector2Scale(dir, homingProjSpeed * 1.5F),
-                                       .radius = 6,
-                                       .homing = true,
-                                       .active = true,
-                                       .fromPlayer = true,
-                                       .damage = dmg});
-                    fired = true;
+                    dir = Vector2Normalize(Vector2Subtract(*target, game.run.player.position));
+                    if (m == 0)
+                    {
+                        firstTarget = target;
+                    }
                 }
+                else if (w.evolved && firstTarget.has_value())
+                {
+                    // Seeker Swarm, no free target at spawn: fly straight until one appears.
+                    dir = Vector2Normalize(Vector2Subtract(*firstTarget, game.run.player.position));
+                    huntingNewTarget = true;
+                }
+                else
+                {
+                    continue;
+                }
+                game.run.bossProjectiles.push_back(
+                    BossProjectile{.position = game.run.player.position,
+                                   .velocity = Vector2Scale(dir, homingProjSpeed * 1.5F),
+                                   .radius = 6,
+                                   .homing = true,
+                                   .active = true,
+                                   .fromPlayer = true,
+                                   .damage = dmg,
+                                   .huntingNewTarget = huntingNewTarget,
+                                   .ricochetRemaining = ricochetLevel(game)});
+                fired = true;
             }
             if (fired)
             {
@@ -1728,13 +2139,83 @@ void updateWeapons(Game& game, float deltaTime)
                     game.run.player.health++;
                 }
             }
-            aoePulse(game, game.run.player.position, radius, dmg, DamageSource::Shock);
+            aoePulse(game, game.run.player.position, radius, dmg, DamageSource::Shock,
+                     w.evolved ? 40.0F : 0.0F);
             w.flashTimer = UpdateConstants::shockFlashDuration;
             break;
         }
         case WeaponType::Mine:
             spawnMines(game, w);
             break;
+        case WeaponType::FlakCannon:
+        {
+            const Vector2 dir = aimAtMouse(game);
+            const int32_t pellets = 3 + (w.level >= 2 ? 2 : 0);
+            const int32_t dmg = weaponDamage(game, w.level);
+            const bool pierces = w.level >= 3;
+            for (int32_t s = 0; s < pellets; s++)
+            {
+                const float angleOffset =
+                    (static_cast<float>(s) - static_cast<float>(pellets - 1) / 2) * 8.0F * DEG2RAD;
+                const float cosA = std::cos(angleOffset);
+                const float sinA = std::sin(angleOffset);
+                const Vector2 rotated{.x = dir.x * cosA - dir.y * sinA,
+                                      .y = dir.x * sinA + dir.y * cosA};
+                game.run.bullets.push_back(Bullet{
+                    .position = game.run.player.position,
+                    .velocity =
+                        Vector2Scale(rotated, projectileSpeed * currentShip(game).bulletSpeedMult),
+                    .radius = projectileSize,
+                    .color = Palette::Accent,
+                    .active = true,
+                    .damage = dmg,
+                    .pierceRemaining = pierces ? 1 : 0,
+                    .ricochetRemaining = pierces ? 0 : ricochetLevel(game),
+                    .splashRadius = flakSplashRadius,
+                    .source = DamageSource::FlakCannon});
+            }
+            playSFX(game, game.resources.sounds.shoot);
+            break;
+        }
+        case WeaponType::Railgun:
+        {
+            const Vector2 dir = aimAtMouse(game);
+            int32_t dmg = weaponDamage(game, w.level) * 2;
+            if (w.level >= 3)
+            {
+                dmg = static_cast<int32_t>(static_cast<float>(dmg) * 1.3F);
+            }
+            game.run.bullets.push_back(Bullet{
+                .position = game.run.player.position,
+                .velocity =
+                    Vector2Scale(dir, projectileSpeed * 1.6F * currentShip(game).bulletSpeedMult),
+                .radius = projectileSize * 1.5F,
+                .color = Palette::Crit,
+                .active = true,
+                .damage = dmg,
+                .pierceRemaining = 999,
+                .source = DamageSource::Railgun});
+            playSFX(game, game.resources.sounds.shoot);
+            break;
+        }
+        case WeaponType::ChainLightning:
+            fireChainLightning(game, w);
+            break;
+        case WeaponType::TurretDeploy:
+        {
+            const int32_t count = w.level >= 3 ? 2 : 1;
+            for (int32_t s = 0; s < count; s++)
+            {
+                game.run.turrets.push_back(Turret{.position = game.run.player.position,
+                                                  .life = turretLife + (w.level >= 2 ? 4.0F : 0.0F),
+                                                  .fireTimer = turretFireInterval});
+            }
+            break;
+        }
+        case WeaponType::Ricochet:
+        case WeaponType::FollowerDrone:
+        case WeaponType::LaserDrone:
+        case WeaponType::Flamethrower:
         case WeaponType::Orbit:
         case WeaponType::Beam:
         case WeaponType::Count:
@@ -1749,19 +2230,30 @@ void recordDamage(Game& game, DamageSource source, int32_t amount)
     game.run.damageMeter.total += amount;
 }
 
-void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSource source)
+void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSource source,
+              float knockback)
 {
     bool hitAny = false;
 
     for (size_t j = 0; j < game.run.enemies.size(); j++)
     {
-        const auto& enemy = game.run.enemies.at(j);
+        auto& enemy = game.run.enemies.at(j);
         if (enemy.active && !enemy.phased &&
             Vector2Distance(center, enemy.position) <=
                 radius + enemyKinds.at(static_cast<size_t>(enemy.kind)).radius)
         {
             damageEnemy(game, j, dmg);
             recordDamage(game, source, dmg);
+            if (!enemy.active && (source == DamageSource::Mine || source == DamageSource::Shock))
+            {
+                recordWeaponKill(game, source == DamageSource::Mine ? WeaponType::Mine
+                                                                    : WeaponType::Shock);
+            }
+            if (knockback > 0 && Vector2Distance(center, enemy.position) > 0.01F)
+            {
+                const Vector2 pushDir = Vector2Normalize(Vector2Subtract(enemy.position, center));
+                enemy.position = Vector2Add(enemy.position, Vector2Scale(pushDir, knockback));
+            }
             hitAny = true;
         }
     }
@@ -1864,6 +2356,10 @@ void updateOrbitBladeContact(Game& game, float deltaTime)
             const auto hit = static_cast<int32_t>(firstHit);
             damageEnemy(game, j, hit);
             recordDamage(game, DamageSource::Orbit, hit);
+            if (!enemy.active)
+            {
+                recordWeaponKill(game, WeaponType::Orbit);
+            }
         }
         else
         {
@@ -1873,6 +2369,10 @@ void updateOrbitBladeContact(Game& game, float deltaTime)
                 const auto tick = static_cast<int32_t>(enemy.orbitDamageAccum);
                 damageEnemy(game, j, tick);
                 recordDamage(game, DamageSource::Orbit, tick);
+                if (!enemy.active)
+                {
+                    recordWeaponKill(game, WeaponType::Orbit);
+                }
                 enemy.orbitDamageAccum -= static_cast<float>(tick);
             }
         }
@@ -1933,8 +2433,7 @@ void updateOrbitBladeContact(Game& game, float deltaTime)
         {
             boss.orbitContact = true;
             const auto hit = static_cast<int32_t>(firstHit);
-            boss.health -= hit;
-            boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+            damageBoss(game, boss, hit);
             recordDamage(game, DamageSource::Orbit, hit);
         }
         else
@@ -1943,8 +2442,7 @@ void updateOrbitBladeContact(Game& game, float deltaTime)
             if (boss.orbitDamageAccum >= 1.0F)
             {
                 const auto tick = static_cast<int32_t>(boss.orbitDamageAccum);
-                boss.health -= tick;
-                boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+                damageBoss(game, boss, tick);
                 recordDamage(game, DamageSource::Orbit, tick);
                 boss.orbitDamageAccum -= static_cast<float>(tick);
             }
@@ -1958,6 +2456,19 @@ void updateOrbitBladeContact(Game& game, float deltaTime)
             asteroid.active = false;
             game.run.score += asteroidScore(asteroid.tier);
             breakAsteroid(game.run.asteroids, asteroid);
+        }
+    }
+
+    // Aegis Ring: evolved Orbit Blades destroy incoming boss projectiles outright on contact.
+    if (w.evolved)
+    {
+        for (auto& projectile : game.run.bossProjectiles)
+        {
+            if (projectile.active && !projectile.fromPlayer &&
+                touchesAnyBlade(projectile.position, projectile.radius))
+            {
+                projectile.active = false;
+            }
         }
     }
 }
@@ -2102,8 +2613,7 @@ void updatePiercingProjectiles(Game& game, float deltaTime,
                                      .height = boss.size.y};
             if (CheckCollisionCircleRec(proj.position, proj.radius, bossRect))
             {
-                boss.health -= proj.damage;
-                boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+                damageBoss(game, boss, proj.damage);
                 recordDamage(game, source, proj.damage);
             }
         }
@@ -2175,6 +2685,10 @@ void updateNerveSpiralProjectiles(Game& game, float deltaTime)
                 {
                     damageEnemy(game, j, spiral.damagePerBlade);
                     recordDamage(game, DamageSource::Nerve, spiral.damagePerBlade);
+                    if (!enemy.active)
+                    {
+                        recordDashOrNerveKill(game);
+                    }
                 }
             }
 
@@ -2202,8 +2716,7 @@ void updateNerveSpiralProjectiles(Game& game, float deltaTime)
                                          .height = boss.size.y};
                 if (CheckCollisionCircleRec(bladePos, orbitBladeHitRadius, bossRect))
                 {
-                    boss.health -= spiral.damagePerBlade;
-                    boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+                    damageBoss(game, boss, spiral.damagePerBlade);
                     recordDamage(game, DamageSource::Nerve, spiral.damagePerBlade);
                 }
             }
@@ -2251,7 +2764,7 @@ void updateBeamContact(Game& game, float deltaTime)
     }
 
     const Weapon& w = *it;
-    const Vector2 dir = aimAtMouse(game);
+    const Vector2 dir = beamAimDirection(game, w.evolved);
     const float length = beamLength(game, w.level, w.evolved);
     auto firstHit = static_cast<float>(weaponDamage(game, w.level)) * beamDamageMult;
     if (w.evolved)
@@ -2280,6 +2793,10 @@ void updateBeamContact(Game& game, float deltaTime)
             const auto hit = static_cast<int32_t>(firstHit);
             damageEnemy(game, j, hit);
             recordDamage(game, DamageSource::Beam, hit);
+            if (!enemy.active)
+            {
+                recordWeaponKill(game, WeaponType::Beam);
+            }
         }
         else
         {
@@ -2289,6 +2806,10 @@ void updateBeamContact(Game& game, float deltaTime)
                 const auto tick = static_cast<int32_t>(enemy.beamDamageAccum);
                 damageEnemy(game, j, tick);
                 recordDamage(game, DamageSource::Beam, tick);
+                if (!enemy.active)
+                {
+                    recordWeaponKill(game, WeaponType::Beam);
+                }
                 enemy.beamDamageAccum -= static_cast<float>(tick);
             }
         }
@@ -2344,8 +2865,7 @@ void updateBeamContact(Game& game, float deltaTime)
         {
             boss.beamContact = true;
             const auto hit = static_cast<int32_t>(firstHit);
-            boss.health -= hit;
-            boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+            damageBoss(game, boss, hit);
             recordDamage(game, DamageSource::Beam, hit);
         }
         else
@@ -2354,8 +2874,7 @@ void updateBeamContact(Game& game, float deltaTime)
             if (boss.beamDamageAccum >= 1.0F)
             {
                 const auto tick = static_cast<int32_t>(boss.beamDamageAccum);
-                boss.health -= tick;
-                boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+                damageBoss(game, boss, tick);
                 recordDamage(game, DamageSource::Beam, tick);
                 boss.beamDamageAccum -= static_cast<float>(tick);
             }
@@ -2386,6 +2905,10 @@ void nerveLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg, float ext
         {
             damageEnemy(game, j, dmg);
             recordDamage(game, DamageSource::Nerve, dmg);
+            if (!enemy.active)
+            {
+                recordDashOrNerveKill(game);
+            }
         }
     }
 
@@ -2422,8 +2945,7 @@ void nerveLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg, float ext
                                  .y = boss.position.y + boss.size.y / 2};
         if (CheckCollisionCircleLine(bossCenter, boss.size.x / 2 + extraRadius, start, end))
         {
-            boss.health -= dmg;
-            boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+            damageBoss(game, boss, dmg);
             recordDamage(game, DamageSource::Nerve, dmg);
         }
     }
@@ -2529,8 +3051,16 @@ void updateWaveSpawner(Game& game, float deltaTime)
         {
             game.run.waveNumber++;
             game.run.waveTimer = GameConstants::waveDuration;
+            recordWaveReached(game, game.run.waveNumber);
 
-            if (game.run.waveNumber % megaBossWaveInterval == 0)
+            // M11: wave 100 (and every 100th wave after, since reaching wave 200+ is only
+            // possible once the wave-100 boss has already been beaten) spawns the final boss
+            // instead of a normal mega-boss.
+            if (game.run.waveNumber % finalBossWaveInterval == 0)
+            {
+                spawnFinalBossWave(game);
+            }
+            else if (game.run.waveNumber % megaBossWaveInterval == 0)
             {
                 spawnBossWave(game, megaBossHealthMult, megaBossSizeMult, true);
             }
@@ -2745,7 +3275,8 @@ auto sampleBossMoveset(int count) -> std::vector<BossAttack>
     return pool;
 }
 
-void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega, bool isSwarm)
+void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega, bool isSwarm,
+                       bool isFinal = false)
 {
     const int32_t tier = game.run.waveNumber / megaBossWaveInterval;
 
@@ -2755,6 +3286,8 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
         Vector2Add(game.run.player.position,
                    Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
 
+    // M11: the wave-100 placeholder final boss is a deliberately-picked, stat-boosted BossType
+    // rather than a random one — a bespoke final-boss shape/identity is a later pass.
     auto typeIndex =
         static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(bossTypes.size()) - 1));
     if constexpr (DemoConfig::isDemoBuild)
@@ -2762,12 +3295,17 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
         typeIndex = DemoConfig::allowedBossTypeIndices.at(static_cast<size_t>(GetRandomValue(
             0, static_cast<int32_t>(DemoConfig::allowedBossTypeIndices.size()) - 1)));
     }
+    if (isFinal)
+    {
+        typeIndex = bossTypes.size() - 1;
+    }
     const auto& type = bossTypes.at(typeIndex);
 
+    const float finalBossMult = isFinal ? 3.0F : 1.0F;
     const auto health = static_cast<int32_t>(
-        static_cast<float>(500 + tier * 250) * healthMult * type.healthMult *
+        static_cast<float>(500 + tier * 250) * healthMult * type.healthMult * finalBossMult *
         difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty)).enemyHealthMult);
-    const float size = 100.0F * sizeMult * type.sizeMult;
+    const float size = 100.0F * sizeMult * type.sizeMult * (isFinal ? 1.3F : 1.0F);
 
     auto moveset =
         sampleBossMoveset(bossMoveCountForDifficulty(game.resources.settings.difficulty));
@@ -2786,7 +3324,6 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
              .attackTimer = static_cast<float>(GetRandomValue(15, 35)) / 10.0F,
              .stateTimer = 0,
              .targetPosition = Vector2{},
-             .beamRotation = 0,
              .slamHit = false,
              .beamShieldLatched = false,
              .wormholeBeamOrigin = Vector2{},
@@ -2797,7 +3334,8 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
              .isSwarm = isSwarm,
              .strafePhase = static_cast<float>(GetRandomValue(0, 628)) / 100.0F,
              .hitFlashTimer = 0,
-             .shape = type.shape});
+             .shape = type.shape,
+             .isFinalBoss = isFinal});
 }
 
 void spawnBossWave(Game& game, float healthMult, float sizeMult, bool isMega)
@@ -2809,6 +3347,15 @@ void spawnBossWave(Game& game, float healthMult, float sizeMult, bool isMega)
     {
         spawnBossInstance(game, healthMult, sizeMult, isMega, isSwarm);
     }
+    playSFX(game, game.resources.sounds.bossWindUp);
+}
+
+// M11: wave 100 (and every 100th wave after, once infinite mode is unlocked) spawns this single
+// stat-boosted placeholder boss instead of a normal mega-boss.
+void spawnFinalBossWave(Game& game)
+{
+    game.run.bossSpawnCount++;
+    spawnBossInstance(game, megaBossHealthMult, megaBossSizeMult, true, false, true);
     playSFX(game, game.resources.sounds.bossWindUp);
 }
 
@@ -2910,26 +3457,227 @@ void updatePickups(Game& game, float deltaTime)
         {
             pickup.active = false;
 
-            switch (pickup.type)
+            if (pickup.type == PickupType::XP)
             {
-            case PickupType::XP:
                 game.run.xp += pickup.value;
-                break;
-            case PickupType::LifeOrb:
-                collectLifeOrb(game);
-                break;
-            case PickupType::Shield:
-                if (game.run.player.shieldStacks < currentShip(game).maxShieldStacks)
-                {
-                    game.run.player.shieldStacks++;
-                }
-                playSFX(game, game.resources.sounds.menuConfirm);
-                break;
-            default:
-                break;
+            }
+            else
+            {
+                applyPickupEffect(game, pickup.type, pickup.element, pickup.mechanism, &pickup);
             }
         }
     }
+}
+
+// Shared by world-pickup collection and the instant level-up "Pickup" choice. `except` excludes
+// the originating world pickup from MagnetPulse's sweep (nullptr when there isn't one, i.e. when
+// applied directly from a level-up choice).
+void applyPickupEffect(Game& game, PickupType type, ElementType element, ElementMechanism mechanism,
+                       const Pickup* except)
+{
+    switch (type)
+    {
+    case PickupType::XP:
+        break;
+    case PickupType::LifeOrb:
+        collectLifeOrb(game);
+        break;
+    case PickupType::Shield:
+        if (game.run.player.shieldStacks < currentShip(game).maxShieldStacks)
+        {
+            game.run.player.shieldStacks++;
+        }
+        playSFX(game, game.resources.sounds.menuConfirm);
+        break;
+    case PickupType::Elemental:
+        collectElementalPickup(game, element, mechanism);
+        break;
+    case PickupType::Regen:
+        game.run.player.regenTimer =
+            difficultyPickupDuration.at(static_cast<size_t>(game.resources.settings.difficulty)) *
+            pickupDurationScale(game.run.waveNumber);
+        game.run.player.regenRate = regenRate;
+        playSFX(game, game.resources.sounds.menuConfirm);
+        break;
+    case PickupType::DashTrail:
+        game.run.player.dashTrailUnlocked = true;
+        playSFX(game, game.resources.sounds.menuConfirm);
+        break;
+    case PickupType::MagnetPulse:
+        for (auto& other : game.run.pickups)
+        {
+            if (other.active && &other != except)
+            {
+                const Vector2 toPlayer = Vector2Subtract(game.run.player.position, other.position);
+                if (Vector2Length(toPlayer) > magnetPulseSnapDistance)
+                {
+                    other.position = Vector2Subtract(
+                        game.run.player.position,
+                        Vector2Scale(Vector2Normalize(toPlayer), magnetPulseSnapDistance));
+                }
+            }
+        }
+        playSFX(game, game.resources.sounds.menuConfirm);
+        break;
+    case PickupType::Overcharge:
+        game.run.player.overchargeTimer =
+            overchargeDuration * pickupDurationScale(game.run.waveNumber);
+        playSFX(game, game.resources.sounds.menuConfirm);
+        break;
+    case PickupType::SecondWind:
+        game.run.player.secondWindReady = true;
+        playSFX(game, game.resources.sounds.menuConfirm);
+        break;
+    case PickupType::Danger:
+        // One downgrade at a time, kept simple: a second Danger pickup while one is already
+        // active is a no-op rather than stacking or restacking the timer.
+        if (!game.run.weaponDowngrade.has_value() && !game.run.weapons.empty())
+        {
+            auto& weapon = game.run.weapons.at(static_cast<size_t>(
+                GetRandomValue(0, static_cast<int32_t>(game.run.weapons.size()) - 1)));
+            const int32_t amount = std::min(dangerDowngradeLevels, weapon.level - 1);
+            if (amount > 0)
+            {
+                weapon.level -= amount;
+                game.run.weaponDowngrade = WeaponDowngrade{
+                    .type = weapon.type, .amount = amount, .timer = dangerDowngradeDuration};
+                triggerShake(game, 6, 0.25F);
+                playSFX(game, game.resources.sounds.explosion);
+                game.run.achievementToast =
+                    std::string(weaponDisplayName(weapon.type)) + " downgraded!";
+                game.run.achievementToastTimer = 3.0F;
+            }
+        }
+        break;
+    case PickupType::Count:
+        break;
+    }
+}
+
+void collectElementalPickup(Game& game, ElementType element, ElementMechanism mechanism)
+{
+    const float burnDps = currentBurnDps(game);
+
+    switch (mechanism)
+    {
+    case ElementMechanism::Infusion:
+        game.run.player.elementalBuffTimer.at(static_cast<size_t>(element)) =
+            difficultyPickupDuration.at(static_cast<size_t>(game.resources.settings.difficulty)) *
+            pickupDurationScale(game.run.waveNumber);
+        break;
+    case ElementMechanism::Nova:
+        for (auto& enemy : game.run.enemies)
+        {
+            if (enemy.active && !enemy.phased)
+            {
+                applyElementDebuff(enemy, element, burnDps);
+            }
+        }
+        break;
+    case ElementMechanism::Field:
+        game.run.elementalFields.push_back(
+            ElementalField{.position = game.run.player.position,
+                           .radius = elementalFieldRadius,
+                           .timer = difficultyPickupDuration.at(
+                                        static_cast<size_t>(game.resources.settings.difficulty)) *
+                                    pickupDurationScale(game.run.waveNumber),
+                           .element = element,
+                           .active = true});
+        break;
+    case ElementMechanism::Count:
+        break;
+    }
+
+    playSFX(game, game.resources.sounds.menuConfirm);
+}
+
+void updateElementalFields(Game& game, float deltaTime)
+{
+    const float burnDps = currentBurnDps(game);
+
+    for (auto& field : game.run.elementalFields)
+    {
+        if (!field.active)
+        {
+            continue;
+        }
+
+        field.timer -= deltaTime;
+        if (field.timer <= 0)
+        {
+            field.active = false;
+            continue;
+        }
+
+        for (auto& enemy : game.run.enemies)
+        {
+            if (enemy.active && !enemy.phased &&
+                CheckCollisionCircles(field.position, field.radius, enemy.position,
+                                      enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
+            {
+                applyElementDebuff(enemy, field.element, burnDps);
+            }
+        }
+    }
+
+    std::erase_if(game.run.elementalFields, [](const ElementalField& f) { return !f.active; });
+}
+
+void updatePlayerBuffs(Game& game, float deltaTime)
+{
+    auto& player = game.run.player;
+
+    for (auto& timer : player.elementalBuffTimer)
+    {
+        if (timer > 0)
+        {
+            timer = std::max(0.0F, timer - deltaTime);
+        }
+    }
+
+    if (player.regenTimer > 0)
+    {
+        player.regenTimer = std::max(0.0F, player.regenTimer - deltaTime);
+        player.health = std::min(player.maxHealth, player.health + player.regenRate * deltaTime);
+    }
+
+    if (player.overchargeTimer > 0)
+    {
+        player.overchargeTimer = std::max(0.0F, player.overchargeTimer - deltaTime);
+    }
+
+    if (player.dashing && player.dashTrailUnlocked)
+    {
+        const float jitterAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+        const float jitterSpeed = static_cast<float>(GetRandomValue(2, 8)) / 10.0F;
+        game.run.dashTrailParticles.push_back(
+            Particle{.position = player.position,
+                     .velocity = Vector2{.x = std::cos(jitterAngle) * jitterSpeed,
+                                         .y = std::sin(jitterAngle) * jitterSpeed},
+                     .radius = dashTrailRadius,
+                     .life = dashTrailParticleLife,
+                     .maxLife = dashTrailParticleLife,
+                     .color = Palette::Accent});
+
+        for (size_t i = 0; i < game.run.enemies.size(); i++)
+        {
+            auto& enemy = game.run.enemies.at(i);
+            if (enemy.active && !enemy.phased &&
+                CheckCollisionCircles(player.position, dashTrailRadius, enemy.position,
+                                      enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
+            {
+                damageEnemy(game, i, dashTrailDamage);
+                recordDamage(game, DamageSource::Dash, dashTrailDamage);
+            }
+        }
+    }
+
+    for (auto& particle : game.run.dashTrailParticles)
+    {
+        particle.position = Vector2Add(particle.position, particle.velocity);
+        particle.life -= deltaTime;
+    }
+    std::erase_if(game.run.dashTrailParticles, [](const Particle& p) { return p.life <= 0; });
 }
 
 void collectLifeOrb(Game& game)
@@ -2991,13 +3739,18 @@ auto sampleDistinct(std::vector<SkillType> ids, int count) -> std::vector<SkillT
     return ids;
 }
 
-auto demoSkillAllowed(SkillType id) -> bool
+auto demoSkillAllowed(const Game& game, SkillType id) -> bool
 {
     for (size_t i = 0; i < weaponGrantSkill.size(); i++)
     {
-        if (weaponGrantSkill.at(i) == id || skillLinkedPassive.at(i) == id)
+        const auto kind = static_cast<WeaponType>(i);
+        if (weaponGrantSkill.at(i) == id)
         {
-            return DemoConfig::isWeaponAllowed(static_cast<WeaponType>(i));
+            return DemoConfig::isWeaponAllowed(kind) && isWeaponTypeUnlocked(game, kind);
+        }
+        if (skillLinkedPassive.at(i) == id)
+        {
+            return DemoConfig::isWeaponAllowed(kind);
         }
     }
     return true;
@@ -3005,7 +3758,7 @@ auto demoSkillAllowed(SkillType id) -> bool
 
 auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
 {
-    const bool slotsFull = equippedSlotCount(game) >= ItemConstants::maxAbilitySlots;
+    const bool slotsFull = equippedSlotCount(game) >= game.resources.achievements.slotCap;
 
     std::vector<SkillType> eligible;
     eligible.reserve(static_cast<size_t>(SkillType::Count));
@@ -3013,7 +3766,7 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
     {
         const auto id = static_cast<SkillType>(i);
         if (isFusedPassive(game, id) || game.run.skillLevels.at(i) >= Skills.at(i).maxLevel ||
-            !demoSkillAllowed(id))
+            !demoSkillAllowed(game, id))
         {
             continue;
         }
@@ -3026,16 +3779,55 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
     std::vector<LevelUpChoice> choices;
     if (eligible.empty())
     {
-        choices = rollRewardChoices();
+        choices = rollRewardChoices(game);
 
         game.run.postCapDamageLevels++;
     }
     else
     {
-        for (const auto id : sampleDistinct(eligible, 3))
+        // Affinity: the first choice always favors a skill/weapon already owned, so early levels
+        // (few unlocked weapon slots) aren't dominated by picks for things not yet equipped.
+        std::vector<SkillType> owned;
+        for (const auto id : eligible)
+        {
+            if (game.run.skillLevels.at(static_cast<size_t>(id)) > 0)
+            {
+                owned.push_back(id);
+            }
+        }
+
+        std::vector<SkillType> picks;
+        if (owned.empty())
+        {
+            picks = sampleDistinct(eligible, 3);
+        }
+        else
+        {
+            picks = sampleDistinct(owned, 1);
+            std::vector<SkillType> rest;
+            rest.reserve(eligible.size());
+            for (const auto id : eligible)
+            {
+                if (id != picks.front())
+                {
+                    rest.push_back(id);
+                }
+            }
+            const auto more = sampleDistinct(rest, 2);
+            picks.insert(picks.end(), more.begin(), more.end());
+        }
+
+        for (const auto id : picks)
         {
             choices.push_back(LevelUpChoice{.type = ChoiceType::Skill, .skill = id});
         }
+
+        // Always offer an escape hatch: a random pickup in case none of the skill picks appeal.
+        const auto& entry = pickupCatalog.at(pickWeightedPickupIndex(game.run.waveNumber));
+        choices.push_back(LevelUpChoice{.type = ChoiceType::Pickup,
+                                        .pickupType = entry.type,
+                                        .element = entry.element,
+                                        .mechanism = entry.mechanism});
     }
 
     std::vector<WeaponType> evolvable;
@@ -3046,7 +3838,8 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
         const auto passive = skillLinkedPassive.at(i);
         if (hasWeapon(game, kind) && !weaponEvolved(game, kind) &&
             game.run.skillLevels.at(static_cast<size_t>(grantSkill)) >= 3 &&
-            game.run.skillLevels.at(static_cast<size_t>(passive)) >= 3)
+            game.run.skillLevels.at(static_cast<size_t>(passive)) >= 3 &&
+            game.resources.achievements.evolutionUnlocked.at(i))
         {
             evolvable.push_back(kind);
         }
@@ -3061,25 +3854,28 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
     return choices;
 }
 
-auto rollRewardChoices() -> std::vector<LevelUpChoice>
+auto rollRewardChoices(const Game& game) -> std::vector<LevelUpChoice>
 {
-    std::vector<LevelUpChoice> pool{
-        LevelUpChoice{.type = ChoiceType::LifeOrb, .count = 1},
-        LevelUpChoice{.type = ChoiceType::LifeOrb, .count = 2},
-        LevelUpChoice{.type = ChoiceType::LifeOrb, .count = 3},
-        LevelUpChoice{.type = ChoiceType::Shield, .count = 1},
-        LevelUpChoice{.type = ChoiceType::Shield, .count = 2},
-        LevelUpChoice{.type = ChoiceType::Shield, .count = 3},
-    };
-
-    const auto n = static_cast<int32_t>(pool.size());
-    for (int32_t i = 0; i < 3; i++)
+    std::vector<size_t> picked;
+    while (picked.size() < 3 && picked.size() < pickupCatalog.size())
     {
-        const int32_t j = i + GetRandomValue(0, n - i - 1);
-        std::swap(pool.at(static_cast<size_t>(i)), pool.at(static_cast<size_t>(j)));
+        const size_t idx = pickWeightedPickupIndex(game.run.waveNumber);
+        if (std::ranges::find(picked, idx) == picked.end())
+        {
+            picked.push_back(idx);
+        }
     }
-    pool.resize(3);
-    return pool;
+
+    std::vector<LevelUpChoice> choices;
+    for (const auto idx : picked)
+    {
+        const auto& entry = pickupCatalog.at(idx);
+        choices.push_back(LevelUpChoice{.type = ChoiceType::Pickup,
+                                        .pickupType = entry.type,
+                                        .element = entry.element,
+                                        .mechanism = entry.mechanism});
+    }
+    return choices;
 }
 
 auto weaponEvolved(const Game& game, WeaponType kind) -> bool
@@ -3101,6 +3897,11 @@ void applySkill(Game& game, SkillType id)
     if (const auto kind = weaponForGrantSkill(id); kind.has_value())
     {
         grantOrLevelWeapon(game, *kind);
+        if (game.run.skillLevels.at(static_cast<size_t>(id)) >=
+            Skills.at(static_cast<size_t>(id)).maxLevel)
+        {
+            recordSkillMaxed(game, id);
+        }
         return;
     }
 
@@ -3181,9 +3982,8 @@ void updateBullets(Game& game, float deltaTime)
                 CheckCollisionCircleRec(bullet.position, bullet.radius, bossRect))
             {
                 bullet.active = false;
-                boss.health -= bullet.damage;
-                boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
-                recordDamage(game, DamageSource::Forward, bullet.damage);
+                damageBoss(game, boss, bullet.damage);
+                recordDamage(game, bullet.source, bullet.damage);
             }
         }
 
@@ -3210,7 +4010,7 @@ void updateBullets(Game& game, float deltaTime)
             {
                 bullet.active = false;
                 damageEliteHazard(game, j, bullet.damage);
-                recordDamage(game, DamageSource::Forward, bullet.damage);
+                recordDamage(game, bullet.source, bullet.damage);
             }
         }
 
@@ -3224,9 +4024,63 @@ void updateBullets(Game& game, float deltaTime)
             const auto& kind = enemyKinds.at(static_cast<size_t>(enemy.kind));
             if (CheckCollisionCircles(bullet.position, bullet.radius, enemy.position, kind.radius))
             {
-                bullet.active = false;
                 damageEnemy(game, j, bullet.damage);
-                recordDamage(game, DamageSource::Forward, bullet.damage);
+                recordDamage(game, bullet.source, bullet.damage);
+                if (!enemy.active)
+                {
+                    if (bullet.source == DamageSource::Forward)
+                    {
+                        recordWeaponKill(game, WeaponType::Forward);
+                    }
+                    else if (bullet.source == DamageSource::FlakCannon)
+                    {
+                        recordWeaponKill(game, WeaponType::FlakCannon);
+                    }
+                    else if (bullet.source == DamageSource::Railgun)
+                    {
+                        recordWeaponKill(game, WeaponType::Railgun);
+                    }
+                    else if (bullet.source == DamageSource::TurretDeploy)
+                    {
+                        recordWeaponKill(game, WeaponType::TurretDeploy);
+                    }
+                }
+
+                // M15 Flak Cannon: splash nearby enemies once on the same hit that damaged the
+                // primary target (a small, accepted overlap rather than excluding the primary).
+                if (bullet.splashRadius > 0)
+                {
+                    aoePulse(game, bullet.position, bullet.splashRadius, bullet.damage / 2,
+                             bullet.source);
+                }
+
+                if (bullet.pierceRemaining > 0)
+                {
+                    // Photon Cannon / Flak Cannon L3 / Railgun: punches through instead of
+                    // stopping at the first enemy.
+                    bullet.pierceRemaining--;
+                }
+                else if (bullet.ricochetRemaining > 0)
+                {
+                    // M15 Ricochet: bounce to another active enemy instead of deactivating.
+                    if (const auto next =
+                            nearestEnemyExcluding(game, bullet.position, enemy.position);
+                        next.has_value())
+                    {
+                        bullet.velocity =
+                            Vector2Scale(Vector2Normalize(Vector2Subtract(*next, bullet.position)),
+                                         Vector2Length(bullet.velocity));
+                        bullet.ricochetRemaining--;
+                    }
+                    else
+                    {
+                        bullet.active = false;
+                    }
+                }
+                else
+                {
+                    bullet.active = false;
+                }
             }
         }
 
@@ -3253,22 +4107,426 @@ void updateBullets(Game& game, float deltaTime)
     }
 }
 
-void spawnPickup(Game& game, Vector2 position, int value, PickupType type)
+// M15 Chain Lightning: instant multi-target hit at fire time (no travelling projectile). Arcs
+// from the nearest enemy to the next-nearest untouched enemy, up to `weapon.level` total targets.
+void fireChainLightning(Game& game, const Weapon& weapon)
+{
+    const int32_t dmg = weaponDamage(game, weapon.level);
+
+    auto target = nearestEnemyWithin(game, game.run.player.position, chainLightningRange);
+    if (!target.has_value())
+    {
+        return;
+    }
+
+    Vector2 from = game.run.player.position;
+    for (int32_t hit = 0; hit < weapon.level; hit++)
+    {
+        if (!target.has_value())
+        {
+            break;
+        }
+        const Vector2 to = *target;
+
+        for (size_t j = 0; j < game.run.enemies.size(); j++)
+        {
+            auto& enemy = game.run.enemies.at(j);
+            if (enemy.active && !enemy.phased &&
+                Vector2Distance(enemy.position, to) <=
+                    enemyKinds.at(static_cast<size_t>(enemy.kind)).radius)
+            {
+                damageEnemy(game, j, dmg);
+                recordDamage(game, DamageSource::ChainLightning, dmg);
+                if (!enemy.active)
+                {
+                    recordWeaponKill(game, WeaponType::ChainLightning);
+                }
+                break;
+            }
+        }
+
+        game.run.chainLightningBolts.push_back(
+            ChainLightningBolt{.from = from, .to = to, .timer = chainLightningBoltLife});
+
+        from = to;
+        target = nearestEnemyExcluding(game, to, to);
+    }
+    playSFX(game, game.resources.sounds.shoot);
+}
+
+void updateChainLightningBolts(Game& game, float deltaTime)
+{
+    for (auto& bolt : game.run.chainLightningBolts)
+    {
+        bolt.timer -= deltaTime;
+    }
+    std::erase_if(game.run.chainLightningBolts,
+                  [](const ChainLightningBolt& bolt) { return bolt.timer <= 0; });
+}
+
+// M15 Follower Drone / Laser Drone: keeps the live drone count in sync with the weapon's current
+// level (1 drone at L1, 2 at L3+), independent of exactly when the level-up happened.
+auto droneCountForLevel(int32_t level) -> size_t
+{
+    if (level >= 3)
+    {
+        return 2;
+    }
+    return level >= 1 ? 1 : 0;
+}
+
+void updateFollowerDrones(Game& game, float deltaTime)
+{
+    const auto it = std::ranges::find_if(game.run.weapons, [](const Weapon& w)
+                                         { return w.type == WeaponType::FollowerDrone; });
+    if (it == game.run.weapons.end())
+    {
+        game.run.followerDrones.clear();
+        return;
+    }
+
+    const Weapon& w = *it;
+    const size_t desired = droneCountForLevel(w.level);
+    while (game.run.followerDrones.size() < desired)
+    {
+        game.run.followerDrones.push_back(
+            FollowerDrone{.position = game.run.player.position, .orbitAngle = 0, .attackTimer = 0});
+    }
+    game.run.followerDrones.resize(desired);
+
+    const auto dmg = static_cast<int32_t>(shipCurrentDamage(game) * droneDamageFraction(w.level));
+    const float interval = droneAttackIntervalBase / (w.level >= 2 ? 1.3F : 1.0F);
+
+    for (size_t i = 0; i < game.run.followerDrones.size(); i++)
+    {
+        auto& drone = game.run.followerDrones.at(i);
+        drone.orbitAngle += deltaTime * 2.0F;
+        const float angle =
+            drone.orbitAngle + static_cast<float>(i) * 2 * std::numbers::pi_v<float> /
+                                   static_cast<float>(game.run.followerDrones.size());
+        drone.position =
+            Vector2Add(game.run.player.position, Vector2{.x = std::cos(angle) * droneOrbitRadius,
+                                                         .y = std::sin(angle) * droneOrbitRadius});
+
+        drone.attackTimer -= deltaTime;
+        if (drone.attackTimer > 0)
+        {
+            continue;
+        }
+        if (const auto target = nearestEnemyWithin(game, drone.position, droneMeleeRange);
+            target.has_value())
+        {
+            for (size_t j = 0; j < game.run.enemies.size(); j++)
+            {
+                auto& enemy = game.run.enemies.at(j);
+                if (enemy.active && !enemy.phased &&
+                    Vector2Distance(enemy.position, *target) <= 0.01F)
+                {
+                    damageEnemy(game, j, dmg);
+                    recordDamage(game, DamageSource::FollowerDrone, dmg);
+                    if (!enemy.active)
+                    {
+                        recordWeaponKill(game, WeaponType::FollowerDrone);
+                    }
+                    break;
+                }
+            }
+            drone.attackTimer = interval;
+        }
+    }
+}
+
+void updateLaserDrones(Game& game, float deltaTime)
+{
+    const auto it = std::ranges::find_if(game.run.weapons, [](const Weapon& w)
+                                         { return w.type == WeaponType::LaserDrone; });
+    if (it == game.run.weapons.end())
+    {
+        game.run.laserDrones.clear();
+        return;
+    }
+
+    const Weapon& w = *it;
+    const size_t desired = droneCountForLevel(w.level);
+    while (game.run.laserDrones.size() < desired)
+    {
+        game.run.laserDrones.push_back(LaserDrone{.position = game.run.player.position,
+                                                  .orbitAngle = 0,
+                                                  .attackTimer = 0,
+                                                  .beamFlashTimer = 0,
+                                                  .beamTarget = Vector2{}});
+    }
+    game.run.laserDrones.resize(desired);
+
+    const auto dmg = static_cast<int32_t>(shipCurrentDamage(game) * droneDamageFraction(w.level));
+    const float interval = droneAttackIntervalBase;
+    const float range =
+        laserDroneRangeBase + (w.level >= 2 ? 60.0F : 0.0F) + (w.level >= 4 ? 60.0F : 0.0F);
+
+    for (size_t i = 0; i < game.run.laserDrones.size(); i++)
+    {
+        auto& drone = game.run.laserDrones.at(i);
+        drone.orbitAngle -= deltaTime * 1.6F;
+        const float angle = drone.orbitAngle + static_cast<float>(i) * 2 *
+                                                   std::numbers::pi_v<float> /
+                                                   static_cast<float>(game.run.laserDrones.size());
+        drone.position =
+            Vector2Add(game.run.player.position, Vector2{.x = std::cos(angle) * droneOrbitRadius,
+                                                         .y = std::sin(angle) * droneOrbitRadius});
+
+        if (drone.beamFlashTimer > 0)
+        {
+            drone.beamFlashTimer -= deltaTime;
+        }
+
+        drone.attackTimer -= deltaTime;
+        if (drone.attackTimer > 0)
+        {
+            continue;
+        }
+        if (const auto target = nearestEnemyWithin(game, drone.position, range); target.has_value())
+        {
+            for (size_t j = 0; j < game.run.enemies.size(); j++)
+            {
+                auto& enemy = game.run.enemies.at(j);
+                if (enemy.active && !enemy.phased &&
+                    Vector2Distance(enemy.position, *target) <= 0.01F)
+                {
+                    damageEnemy(game, j, dmg);
+                    recordDamage(game, DamageSource::LaserDrone, dmg);
+                    if (!enemy.active)
+                    {
+                        recordWeaponKill(game, WeaponType::LaserDrone);
+                    }
+                    break;
+                }
+            }
+            drone.beamTarget = *target;
+            drone.beamFlashTimer = 0.15F;
+            drone.attackTimer = interval;
+        }
+    }
+}
+
+void updateTurrets(Game& game, float deltaTime)
+{
+    const auto it = std::ranges::find_if(game.run.weapons, [](const Weapon& w)
+                                         { return w.type == WeaponType::TurretDeploy; });
+    const int32_t dmg = it != game.run.weapons.end() ? weaponDamage(game, it->level) : 0;
+
+    for (auto& turret : game.run.turrets)
+    {
+        turret.life -= deltaTime;
+        turret.fireTimer -= deltaTime;
+        if (turret.fireTimer > 0)
+        {
+            continue;
+        }
+        turret.fireTimer = turretFireInterval;
+        if (const auto target = nearestEnemy(game, turret.position); target.has_value())
+        {
+            const Vector2 dir = Vector2Normalize(Vector2Subtract(*target, turret.position));
+            game.run.bullets.push_back(Bullet{.position = turret.position,
+                                              .velocity = Vector2Scale(dir, projectileSpeed),
+                                              .radius = projectileSize,
+                                              .color = Palette::Accent,
+                                              .active = true,
+                                              .damage = dmg,
+                                              .ricochetRemaining = ricochetLevel(game),
+                                              .source = DamageSource::TurretDeploy});
+        }
+    }
+    std::erase_if(game.run.turrets, [](const Turret& turret) { return turret.life <= 0; });
+}
+
+void updateFlamethrower(Game& game, float deltaTime)
+{
+    const auto it = std::ranges::find_if(game.run.weapons, [](const Weapon& w)
+                                         { return w.type == WeaponType::Flamethrower; });
+    if (it == game.run.weapons.end())
+    {
+        return;
+    }
+    const Weapon& w = *it;
+
+    // L3: the cone(s) periodically switch off for a short window, a power/uptime tradeoff.
+    if (w.level >= 3)
+    {
+        const float cycle = std::fmod(static_cast<float>(GetTime()), 4.0F);
+        if (cycle > 3.0F)
+        {
+            return;
+        }
+    }
+
+    const Vector2 aim = aimAtMouse(game);
+    const float range = flamethrowerRange + (w.level >= 3 ? 40.0F : 0.0F);
+    const auto dps = static_cast<float>(weaponDamage(game, w.level)) * 2.0F;
+
+    std::vector<Vector2> coneDirs;
+    if (w.level >= 2)
+    {
+        const float aimAngle = std::atan2(aim.y, aim.x);
+        coneDirs.push_back(Vector2{.x = std::cos(aimAngle + flamethrowerOffAngle),
+                                   .y = std::sin(aimAngle + flamethrowerOffAngle)});
+        coneDirs.push_back(Vector2{.x = std::cos(aimAngle - flamethrowerOffAngle),
+                                   .y = std::sin(aimAngle - flamethrowerOffAngle)});
+    }
+    else
+    {
+        coneDirs.push_back(aim);
+    }
+
+    for (size_t j = 0; j < game.run.enemies.size(); j++)
+    {
+        auto& enemy = game.run.enemies.at(j);
+        if (!enemy.active || enemy.phased)
+        {
+            continue;
+        }
+        const Vector2 toEnemy = Vector2Subtract(enemy.position, game.run.player.position);
+        const float dist = Vector2Length(toEnemy);
+        if (dist > range || dist <= 0.01F)
+        {
+            continue;
+        }
+        const Vector2 dirToEnemy = Vector2Scale(toEnemy, 1.0F / dist);
+        const bool inCone = std::ranges::any_of(
+            coneDirs, [&](const Vector2& dir)
+            { return Vector2DotProduct(dir, dirToEnemy) >= std::cos(flamethrowerHalfAngle); });
+        if (!inCone)
+        {
+            continue;
+        }
+        const auto tick = static_cast<int32_t>(dps * deltaTime);
+        if (tick <= 0)
+        {
+            continue;
+        }
+        damageEnemy(game, j, tick);
+        recordDamage(game, DamageSource::Flamethrower, tick);
+        if (!enemy.active)
+        {
+            recordWeaponKill(game, WeaponType::Flamethrower);
+        }
+    }
+}
+
+void spawnPickup(Game& game, Vector2 position, int value, PickupType type, ElementType element,
+                 ElementMechanism mechanism)
 {
     const float lifetime = type == PickupType::XP ? xpPickupLifetime : bonusPickupLifetime;
     game.run.pickups.push_back(Pickup{.position = position,
                                       .value = value,
                                       .type = type,
+                                      .element = element,
+                                      .mechanism = mechanism,
                                       .active = true,
                                       .lifetime = lifetime,
                                       .maxLifetime = lifetime});
 }
 
+void spawnRareBonusPickup(Game& game, Vector2 position)
+{
+    if (GetRandomValue(0, 999) >= rareBonusDropChance)
+    {
+        return;
+    }
+
+    switch (GetRandomValue(0, rareBonusCategoryCount - 1))
+    {
+    case 0:
+        spawnPickup(game, position, 0, PickupType::Regen);
+        break;
+    case 1:
+        spawnPickup(game, position, 0, PickupType::DashTrail);
+        break;
+    case 2:
+        spawnPickup(game, position, 0, PickupType::MagnetPulse);
+        break;
+    case 3:
+        spawnPickup(game, position, 0, PickupType::Overcharge);
+        break;
+    case 4:
+        spawnPickup(game, position, 0, PickupType::SecondWind);
+        break;
+    default:
+    {
+        const auto element = static_cast<ElementType>(
+            GetRandomValue(0, static_cast<int32_t>(ElementType::Count) - 1));
+        const auto mechanism = static_cast<ElementMechanism>(
+            GetRandomValue(0, static_cast<int32_t>(ElementMechanism::Count) - 1));
+        spawnPickup(game, position, 0, PickupType::Elemental, element, mechanism);
+        break;
+    }
+    }
+}
+
+// M23: independent rare roll from spawnRareBonusPickup, so a Danger pickup can appear alongside
+// (not instead of) a good bonus pickup from the same kill.
+void spawnRareDangerPickup(Game& game, Vector2 position)
+{
+    if (GetRandomValue(0, 999) >= dangerPickupChance)
+    {
+        return;
+    }
+    spawnPickup(game, position, 0, PickupType::Danger);
+}
+
+auto currentBurnDps(const Game& game) -> float
+{
+    return baseBurnDps *
+           difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty))
+               .enemyHealthMult *
+           waveEnemyScale(game);
+}
+
+void applyElementDebuff(Enemy& enemy, ElementType element, float burnDps)
+{
+    switch (element)
+    {
+    case ElementType::Static:
+        enemy.debuffStatic = true;
+        break;
+    case ElementType::Freeze:
+        enemy.debuffFreeze = true;
+        break;
+    case ElementType::Confuse:
+        enemy.debuffConfuse = true;
+        break;
+    case ElementType::Burn:
+        if (enemy.burnDps <= 0)
+        {
+            enemy.burnDps = burnDps;
+        }
+        break;
+    case ElementType::Count:
+        break;
+    }
+}
+
+void applyActiveElementalDebuffs(Game& game, Enemy& enemy)
+{
+    const float burnDps = currentBurnDps(game);
+    for (size_t e = 0; e < static_cast<size_t>(ElementType::Count); e++)
+    {
+        if (game.run.player.elementalBuffTimer.at(e) > 0)
+        {
+            applyElementDebuff(enemy, static_cast<ElementType>(e), burnDps);
+        }
+    }
+}
+
 void damageEnemy(Game& game, size_t index, int32_t amount)
 {
     const auto kind = enemyKinds.at(static_cast<size_t>(game.run.enemies.at(index).kind));
+    const int32_t healthBefore = game.run.enemies.at(index).health;
     game.run.enemies.at(index).health -= amount;
     game.run.enemies.at(index).hitFlashTimer = UpdateConstants::hitFlashDuration;
+    applyActiveElementalDebuffs(game, game.run.enemies.at(index));
+    // Display the actual HP consumed rather than the raw amount, so an instakill (e.g. amount =
+    // 999) shows the enemy's real remaining health instead of a misleadingly huge number.
+    spawnDamageNumber(game, game.run.enemies.at(index).position, std::min(amount, healthBefore));
 
     if (game.run.enemies.at(index).health > 0)
     {
@@ -3280,6 +4538,12 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
     if (game.run.enemies.at(index).isElite)
     {
         score *= 2;
+        triggerHitPause(game, UpdateConstants::hitFlashDuration);
+        spawnKillExplosion(game, game.run.enemies.at(index).position, kind.color, 14, 1.4F);
+    }
+    else
+    {
+        spawnKillExplosion(game, game.run.enemies.at(index).position, kind.color, 8, 1.0F);
     }
     game.run.score += score;
     playSFX(game, game.resources.sounds.explosion);
@@ -3298,6 +4562,8 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
     {
         spawnPickup(game, bonusPos, 0, PickupType::LifeOrb);
     }
+    spawnRareBonusPickup(game, bonusPos);
+    spawnRareDangerPickup(game, bonusPos);
 
     if (kind.splitsOnDeath)
     {
@@ -3315,6 +4581,27 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
             kind.explodeRadius + game.run.player.radius)
     {
         damagePlayer(game, enemyDamage(game, kind.explodeDamage));
+    }
+}
+
+// M18: centralizes every boss.health -= site so damage numbers and proportional hit-stop only
+// need to live in one place instead of being duplicated at each of the ~10 call sites.
+void damageBoss(Game& game, Boss& boss, int32_t amount)
+{
+    boss.health -= amount;
+    boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+    spawnDamageNumber(game, boss.position, amount);
+    triggerShake(game, damageShakeIntensity(amount), damageShakeDuration);
+
+    // Hit-stop scales with how big a bite this hit took out of the boss's max health, so a
+    // single heavy attack (e.g. a nerve burst or evolved weapon) reads as a "heavy" hit without
+    // needing every source of boss damage to hand-tune its own hitstop duration.
+    constexpr float heavyHitFraction = 0.05F;
+    constexpr float heavyHitPause = 0.1F;
+    if (boss.maxHealth > 0 &&
+        static_cast<float>(amount) / static_cast<float>(boss.maxHealth) >= heavyHitFraction)
+    {
+        triggerHitPause(game, heavyHitPause);
     }
 }
 
@@ -3409,6 +4696,22 @@ void updateEnemies(Game& game, float deltaTime)
             enemy.hitFlashTimer -= deltaTime;
         }
 
+        if (enemy.burnDps > 0)
+        {
+            enemy.burnDamageAccum += enemy.burnDps * deltaTime;
+            if (enemy.burnDamageAccum >= 1.0F)
+            {
+                const auto tick = static_cast<int32_t>(enemy.burnDamageAccum);
+                damageEnemy(game, i, tick);
+                recordDamage(game, DamageSource::Elemental, tick);
+                enemy.burnDamageAccum -= static_cast<float>(tick);
+            }
+            if (!enemy.active)
+            {
+                continue;
+            }
+        }
+
         for (const auto& hazard : game.run.eliteHazards)
         {
             if (hazard.active && hazard.role == EliteHazardRole::Warlord)
@@ -3418,146 +4721,222 @@ void updateEnemies(Game& game, float deltaTime)
             }
         }
 
-        switch (kind.pattern)
+        if (enemy.debuffFreeze)
         {
-        case EnemyPattern::Chase:
+            speedMod *= freezeSlowMult;
+        }
+
+        if (enemy.debuffStatic)
         {
-            const Vector2 dir = Vector2Subtract(game.run.player.position, enemy.position);
-            if (Vector2Length(dir) > 0)
+            // No movement, no attacks, no state-machine progress at all.
+        }
+        else if (enemy.debuffConfuse)
+        {
+            enemy.confuseWanderTimer -= deltaTime;
+            if (enemy.confuseWanderTimer <= 0)
+            {
+                const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+                enemy.confuseWanderDir = Vector2{.x = std::cos(angle), .y = std::sin(angle)};
+                enemy.confuseWanderTimer = confuseWanderInterval;
+            }
+            if (kind.pattern != EnemyPattern::Stationary)
             {
                 enemy.position = Vector2Add(
-                    enemy.position, Vector2Scale(Vector2Normalize(dir),
+                    enemy.position, Vector2Scale(enemy.confuseWanderDir,
                                                  kind.speed * speedMod * deltaTime * frameScale));
             }
-            break;
-        }
-        case EnemyPattern::Zigzag:
-        {
-            Vector2 dir = Vector2Subtract(game.run.player.position, enemy.position);
-            if (Vector2Length(dir) > 0)
-            {
-                dir = Vector2Normalize(dir);
-                const Vector2 perp{.x = -dir.y, .y = dir.x};
-                const float wobble =
-                    std::sin(static_cast<float>(GetTime()) * 5 + static_cast<float>(i)) * 1.5F;
-                const Vector2 move = Vector2Add(Vector2Scale(dir, kind.speed * speedMod),
-                                                Vector2Scale(perp, wobble));
-                enemy.position =
-                    Vector2Add(enemy.position, Vector2Scale(move, deltaTime * frameScale));
-            }
-            break;
-        }
-        case EnemyPattern::Charge:
-            enemy.stateTimer -= deltaTime;
-            if (enemy.telegraphing)
-            {
 
-                if (enemy.stateTimer <= 0)
-                {
-                    enemy.telegraphing = false;
-                    enemy.charging = true;
-                    enemy.stateTimer = enemyChargeDashDuration;
-                }
-            }
-            else if (!enemy.charging)
+            if (kind.pattern == EnemyPattern::Turret)
             {
-                if (enemy.stateTimer <= 0)
+                enemy.stateTimer -= deltaTime;
+                if (enemy.stateTimer <= 0 &&
+                    Vector2Distance(game.run.player.position, enemy.position) < turretFireRange)
                 {
-                    enemy.telegraphing = true;
-                    enemy.stateTimer = chargeTelegraphDuration;
-                    const Vector2 dir =
-                        Vector2Normalize(Vector2Subtract(game.run.player.position, enemy.position));
-                    enemy.velocity = Vector2Scale(
-                        dir, kind.speed * speedMod * UpdateConstants::enemyChargeDashSpeedMult);
-                }
-            }
-            else
-            {
-                enemy.position = Vector2Add(enemy.position,
-                                            Vector2Scale(enemy.velocity, deltaTime * frameScale));
-                if (enemy.stateTimer <= 0)
-                {
-                    enemy.charging = false;
-                    enemy.stateTimer = 1.2F;
-                    enemy.velocity = Vector2{};
-                }
-            }
-            break;
-        case EnemyPattern::Orbit:
-            enemy.orbitAngle += 1.5F * speedMod * deltaTime;
-            if (enemy.orbitDist > kind.radius + 20)
-            {
+                    enemy.stateTimer = kind.fireInterval / speedMod;
 
-                enemy.orbitDist -= 9 * speedMod * deltaTime;
+                    std::vector<Vector2> otherTargets;
+                    for (const auto& other : game.run.enemies)
+                    {
+                        if (other.active && !other.phased && &other != &enemy)
+                        {
+                            otherTargets.push_back(other.position);
+                        }
+                    }
+
+                    // Confuse's friendly fire: retarget at another enemy instead of the player,
+                    // if one exists; otherwise this fire cycle is simply skipped.
+                    if (!otherTargets.empty())
+                    {
+                        const Vector2 targetPos = otherTargets.at(static_cast<size_t>(
+                            GetRandomValue(0, static_cast<int32_t>(otherTargets.size() - 1))));
+                        const Vector2 dir =
+                            Vector2Normalize(Vector2Subtract(targetPos, enemy.position));
+                        const auto turretProjectileHealth = static_cast<int32_t>(std::max(
+                            1.0F,
+                            static_cast<float>(baseProjectileHealth) *
+                                difficultyDefs
+                                    .at(static_cast<size_t>(game.resources.settings.difficulty))
+                                    .enemyHealthMult *
+                                waveEnemyScale(game)));
+                        game.run.bossProjectiles.push_back(
+                            BossProjectile{.position = enemy.position,
+                                           .velocity = Vector2Scale(dir, kind.projectileSpeed),
+                                           .radius = 6,
+                                           .homing = false,
+                                           .active = true,
+                                           .fromPlayer = false,
+                                           .damage = crossfireProjectileDamage(game),
+                                           .health = turretProjectileHealth});
+                    }
+                }
             }
-            enemy.position = Vector2Add(game.run.player.position,
-                                        Vector2{.x = std::cos(enemy.orbitAngle) * enemy.orbitDist,
-                                                .y = std::sin(enemy.orbitAngle) * enemy.orbitDist});
-            break;
-        case EnemyPattern::Turret:
+        }
+        else
         {
-            const Vector2 toPlayer = Vector2Subtract(game.run.player.position, enemy.position);
-            const float playerDist = Vector2Length(toPlayer);
-            constexpr float kiteDistance = turretFireRange * 0.55F;
-            if (playerDist > 1.0F)
+            switch (kind.pattern)
             {
-                const Vector2 dirToPlayer = Vector2Scale(toPlayer, 1.0F / playerDist);
-                const Vector2 perp{.x = -dirToPlayer.y, .y = dirToPlayer.x};
-                const float strafe =
-                    std::sin(static_cast<float>(GetTime()) * 0.8F + static_cast<float>(i)) * 0.6F;
-                const float radial = playerDist < kiteDistance
-                                         ? -1.0F
-                                         : (playerDist > turretFireRange ? 1.0F : 0.0F);
-                Vector2 move =
-                    Vector2Add(Vector2Scale(dirToPlayer, radial), Vector2Scale(perp, strafe));
-                if (Vector2Length(move) > 0)
+            case EnemyPattern::Chase:
+            {
+                const Vector2 dir = Vector2Subtract(game.run.player.position, enemy.position);
+                if (Vector2Length(dir) > 0)
                 {
-                    move = Vector2Scale(Vector2Normalize(move), kind.speed * speedMod);
+                    enemy.position =
+                        Vector2Add(enemy.position,
+                                   Vector2Scale(Vector2Normalize(dir),
+                                                kind.speed * speedMod * deltaTime * frameScale));
+                }
+                break;
+            }
+            case EnemyPattern::Zigzag:
+            {
+                Vector2 dir = Vector2Subtract(game.run.player.position, enemy.position);
+                if (Vector2Length(dir) > 0)
+                {
+                    dir = Vector2Normalize(dir);
+                    const Vector2 perp{.x = -dir.y, .y = dir.x};
+                    const float wobble =
+                        std::sin(static_cast<float>(GetTime()) * 5 + static_cast<float>(i)) * 1.5F;
+                    const Vector2 move = Vector2Add(Vector2Scale(dir, kind.speed * speedMod),
+                                                    Vector2Scale(perp, wobble));
                     enemy.position =
                         Vector2Add(enemy.position, Vector2Scale(move, deltaTime * frameScale));
                 }
+                break;
             }
-
-            enemy.stateTimer -= deltaTime;
-            if (enemy.stateTimer <= 0 && playerDist < turretFireRange)
-            {
-                enemy.stateTimer = kind.fireInterval / speedMod;
-                const Vector2 dir =
-                    Vector2Normalize(Vector2Subtract(game.run.player.position, enemy.position));
-                const auto turretProjectileHealth = static_cast<int32_t>(std::max(
-                    1.0F,
-                    static_cast<float>(baseProjectileHealth) *
-                        difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty))
-                            .enemyHealthMult *
-                        waveEnemyScale(game)));
-                game.run.bossProjectiles.push_back(
-                    BossProjectile{.position = enemy.position,
-                                   .velocity = Vector2Scale(dir, kind.projectileSpeed),
-                                   .radius = 6,
-                                   .homing = false,
-                                   .active = true,
-                                   .fromPlayer = false,
-                                   .damage = crossfireProjectileDamage(game),
-                                   .health = turretProjectileHealth});
-            }
-            break;
-        }
-        case EnemyPattern::Spawner:
-            enemy.stateTimer -= deltaTime;
-            if (enemy.stateTimer <= 0)
-            {
-                enemy.stateTimer = kind.spawnInterval / speedMod;
-                for (int s = 0; s < kind.spawnCount; s++)
+            case EnemyPattern::Charge:
+                enemy.stateTimer -= deltaTime;
+                if (enemy.telegraphing)
                 {
-                    const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-                    const Vector2 offset{.x = std::cos(angle) * 30, .y = std::sin(angle) * 30};
-                    spawnEnemyAt(game, kind.spawnKind, Vector2Add(enemy.position, offset));
-                }
-            }
-            break;
-        case EnemyPattern::Stationary:
 
-            break;
+                    if (enemy.stateTimer <= 0)
+                    {
+                        enemy.telegraphing = false;
+                        enemy.charging = true;
+                        enemy.stateTimer = enemyChargeDashDuration;
+                    }
+                }
+                else if (!enemy.charging)
+                {
+                    if (enemy.stateTimer <= 0)
+                    {
+                        enemy.telegraphing = true;
+                        enemy.stateTimer = chargeTelegraphDuration;
+                        const Vector2 dir = Vector2Normalize(
+                            Vector2Subtract(game.run.player.position, enemy.position));
+                        enemy.velocity = Vector2Scale(
+                            dir, kind.speed * speedMod * UpdateConstants::enemyChargeDashSpeedMult);
+                    }
+                }
+                else
+                {
+                    enemy.position = Vector2Add(
+                        enemy.position, Vector2Scale(enemy.velocity, deltaTime * frameScale));
+                    if (enemy.stateTimer <= 0)
+                    {
+                        enemy.charging = false;
+                        enemy.stateTimer = 1.2F;
+                        enemy.velocity = Vector2{};
+                    }
+                }
+                break;
+            case EnemyPattern::Orbit:
+                enemy.orbitAngle += 1.5F * speedMod * deltaTime;
+                if (enemy.orbitDist > kind.radius + 20)
+                {
+
+                    enemy.orbitDist -= 9 * speedMod * deltaTime;
+                }
+                enemy.position =
+                    Vector2Add(game.run.player.position,
+                               Vector2{.x = std::cos(enemy.orbitAngle) * enemy.orbitDist,
+                                       .y = std::sin(enemy.orbitAngle) * enemy.orbitDist});
+                break;
+            case EnemyPattern::Turret:
+            {
+                const Vector2 toPlayer = Vector2Subtract(game.run.player.position, enemy.position);
+                const float playerDist = Vector2Length(toPlayer);
+                constexpr float kiteDistance = turretFireRange * 0.55F;
+                if (playerDist > 1.0F)
+                {
+                    const Vector2 dirToPlayer = Vector2Scale(toPlayer, 1.0F / playerDist);
+                    const Vector2 perp{.x = -dirToPlayer.y, .y = dirToPlayer.x};
+                    const float strafe =
+                        std::sin(static_cast<float>(GetTime()) * 0.8F + static_cast<float>(i)) *
+                        0.6F;
+                    const float radial = playerDist < kiteDistance
+                                             ? -1.0F
+                                             : (playerDist > turretFireRange ? 1.0F : 0.0F);
+                    Vector2 move =
+                        Vector2Add(Vector2Scale(dirToPlayer, radial), Vector2Scale(perp, strafe));
+                    if (Vector2Length(move) > 0)
+                    {
+                        move = Vector2Scale(Vector2Normalize(move), kind.speed * speedMod);
+                        enemy.position =
+                            Vector2Add(enemy.position, Vector2Scale(move, deltaTime * frameScale));
+                    }
+                }
+
+                enemy.stateTimer -= deltaTime;
+                if (enemy.stateTimer <= 0 && playerDist < turretFireRange)
+                {
+                    enemy.stateTimer = kind.fireInterval / speedMod;
+                    const Vector2 dir =
+                        Vector2Normalize(Vector2Subtract(game.run.player.position, enemy.position));
+                    const auto turretProjectileHealth = static_cast<int32_t>(std::max(
+                        1.0F, static_cast<float>(baseProjectileHealth) *
+                                  difficultyDefs
+                                      .at(static_cast<size_t>(game.resources.settings.difficulty))
+                                      .enemyHealthMult *
+                                  waveEnemyScale(game)));
+                    game.run.bossProjectiles.push_back(
+                        BossProjectile{.position = enemy.position,
+                                       .velocity = Vector2Scale(dir, kind.projectileSpeed),
+                                       .radius = 6,
+                                       .homing = false,
+                                       .active = true,
+                                       .fromPlayer = false,
+                                       .damage = crossfireProjectileDamage(game),
+                                       .health = turretProjectileHealth});
+                }
+                break;
+            }
+            case EnemyPattern::Spawner:
+                enemy.stateTimer -= deltaTime;
+                if (enemy.stateTimer <= 0)
+                {
+                    enemy.stateTimer = kind.spawnInterval / speedMod;
+                    for (int s = 0; s < kind.spawnCount; s++)
+                    {
+                        const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+                        const Vector2 offset{.x = std::cos(angle) * 30, .y = std::sin(angle) * 30};
+                        spawnEnemyAt(game, kind.spawnKind, Vector2Add(enemy.position, offset));
+                    }
+                }
+                break;
+            case EnemyPattern::Stationary:
+
+                break;
+            }
         }
 
         if (kind.pattern != EnemyPattern::Stationary)
@@ -3624,11 +5003,14 @@ void updateEnemies(Game& game, float deltaTime)
             {
                 game.run.player.chargeRegenTimer =
                     std::max(0.0F, game.run.player.chargeRegenTimer - dashKillChargeRefund);
+                recordDashKill(game, enemy.kind);
+                recordDashOrNerveKill(game);
             }
             continue;
         }
 
-        if (collides && !game.run.player.dashing && game.run.player.immunityTimer <= 0)
+        if (collides && !game.run.player.dashing && game.run.player.immunityTimer <= 0 &&
+            !enemy.debuffStatic)
         {
             if (kind.isLeech)
             {
@@ -3669,8 +5051,22 @@ void updateProjectiles(Game& game, float deltaTime)
         {
             if (projectile.fromPlayer)
             {
-
-                if (const auto target = nearestEnemy(game, projectile.position); target.has_value())
+                if (projectile.huntingNewTarget)
+                {
+                    // Seeker Swarm: keep flying straight until an untargeted enemy is close
+                    // enough to lock onto (mineSeekRadius reused as a reasonable acquire range).
+                    if (const auto target =
+                            nearestEnemyWithin(game, projectile.position, mineSeekRadius);
+                        target.has_value())
+                    {
+                        const Vector2 direction =
+                            Vector2Normalize(Vector2Subtract(*target, projectile.position));
+                        projectile.velocity = Vector2Scale(direction, homingProjSpeed * 1.5F);
+                        projectile.huntingNewTarget = false;
+                    }
+                }
+                else if (const auto target = nearestEnemy(game, projectile.position);
+                         target.has_value())
                 {
                     const Vector2 direction =
                         Vector2Normalize(Vector2Subtract(*target, projectile.position));
@@ -3725,9 +5121,33 @@ void updateProjectiles(Game& game, float deltaTime)
 
             if (projectile.fromPlayer)
             {
-                projectile.active = false;
                 damageEnemy(game, j, projectile.damage);
                 recordDamage(game, DamageSource::Homing, projectile.damage);
+                if (!enemy.active)
+                {
+                    recordWeaponKill(game, WeaponType::Homing);
+                }
+                if (projectile.ricochetRemaining > 0)
+                {
+                    // M15 Ricochet: retarget to another enemy instead of deactivating.
+                    if (const auto next =
+                            nearestEnemyExcluding(game, projectile.position, enemy.position);
+                        next.has_value())
+                    {
+                        projectile.velocity = Vector2Scale(
+                            Vector2Normalize(Vector2Subtract(*next, projectile.position)),
+                            homingProjSpeed * 1.5F);
+                        projectile.ricochetRemaining--;
+                    }
+                    else
+                    {
+                        projectile.active = false;
+                    }
+                }
+                else
+                {
+                    projectile.active = false;
+                }
                 break;
             }
 
@@ -3808,6 +5228,8 @@ void damageEliteHazard(Game& game, size_t index, int32_t amount)
 {
     auto& hazard = game.run.eliteHazards.at(index);
     hazard.health -= amount;
+    spawnDamageNumber(game, hazard.position, amount);
+    triggerShake(game, damageShakeIntensity(amount), damageShakeDuration);
     if (hazard.health > 0)
     {
         return;
@@ -3815,12 +5237,15 @@ void damageEliteHazard(Game& game, size_t index, int32_t amount)
 
     hazard.active = false;
     game.run.score += eliteHazardScore;
+    spawnKillExplosion(game, hazard.position, Palette::Crit, 18, 1.6F);
     playSFX(game, game.resources.sounds.explosion);
     gainNerve(game);
 
     spawnPickup(game, hazard.position, 0,
                 GetRandomValue(0, 1) == 0 ? PickupType::Shield : PickupType::LifeOrb);
     spawnPickup(game, hazard.position, eliteHazardXpBonus, PickupType::XP);
+    spawnRareBonusPickup(game, hazard.position);
+    spawnRareDangerPickup(game, hazard.position);
 }
 
 void spawnEliteHazard(Game& game, EliteHazardRole role)
@@ -3995,21 +5420,78 @@ auto applyWormholeTransit(const Game& game, Vector2& position, Vector2& velocity
     const WormholeFacing exitFacing = atA ? game.run.wormhole.facingB : game.run.wormhole.facingA;
     const Vector2 exitPoint = atA ? game.run.wormhole.positionB : game.run.wormhole.positionA;
 
+    // Exit angle = entry angle + 180 (a portal reverses the direction of travel through it) +
+    // the twist between the two mouths' facings. Deliberately unconditional: no "snap outward"
+    // correction, since that would override the entry angle rather than just redirecting it.
     const float deltaDegrees =
-        (static_cast<float>(exitFacing) - static_cast<float>(entryFacing)) * 90.0F;
+        (static_cast<float>(exitFacing) - static_cast<float>(entryFacing)) * 90.0F + 180.0F;
     velocity = Vector2Rotate(velocity, deltaDegrees * DEG2RAD);
 
     const Vector2 exitDir = wormholeFacingVector(exitFacing);
-
-    if (const float outward = Vector2DotProduct(velocity, exitDir); outward < 0)
-    {
-        velocity = Vector2Subtract(velocity, Vector2Scale(exitDir, 2 * outward));
-    }
 
     position =
         Vector2Add(exitPoint, Vector2Scale(exitDir, game.run.wormhole.radius + entityRadius + 4));
 
     return true;
+}
+
+// Splits a straight instant-hit beam (boss Beam/WormholeBeam attacks) into 1 or 2 segments if it
+// passes through an active wormhole mouth, applying the same entry+180+twist redirect as
+// applyWormholeTransit. Only ever bends once per cast (no multi-bounce) to keep this bounded.
+auto wormholeBentBeamSegments(const Game& game, Vector2 start,
+                              Vector2 end) -> std::vector<std::pair<Vector2, Vector2>>
+{
+    if (!game.run.wormhole.active)
+    {
+        return {{start, end}};
+    }
+
+    const auto closestOnSegment = [&](Vector2 point) -> Vector2
+    {
+        const Vector2 seg = Vector2Subtract(end, start);
+        const float lenSq = Vector2LengthSqr(seg);
+        if (lenSq <= 0.0F)
+        {
+            return start;
+        }
+        const float t =
+            std::clamp(Vector2DotProduct(Vector2Subtract(point, start), seg) / lenSq, 0.0F, 1.0F);
+        return Vector2Add(start, Vector2Scale(seg, t));
+    };
+
+    const Vector2 closestA = closestOnSegment(game.run.wormhole.positionA);
+    const Vector2 closestB = closestOnSegment(game.run.wormhole.positionB);
+    const bool hitsA =
+        Vector2Distance(closestA, game.run.wormhole.positionA) <= game.run.wormhole.radius;
+    const bool hitsB =
+        Vector2Distance(closestB, game.run.wormhole.positionB) <= game.run.wormhole.radius;
+
+    if (!hitsA && !hitsB)
+    {
+        return {{start, end}};
+    }
+
+    const bool useA =
+        hitsA && (!hitsB || Vector2Distance(start, closestA) <= Vector2Distance(start, closestB));
+    const Vector2 entryPoint = useA ? closestA : closestB;
+    const WormholeFacing entryFacing = useA ? game.run.wormhole.facingA : game.run.wormhole.facingB;
+    const WormholeFacing exitFacing = useA ? game.run.wormhole.facingB : game.run.wormhole.facingA;
+    const Vector2 exitCenter = useA ? game.run.wormhole.positionB : game.run.wormhole.positionA;
+
+    const float deltaDegrees =
+        (static_cast<float>(exitFacing) - static_cast<float>(entryFacing)) * 90.0F + 180.0F;
+    const Vector2 entryDir = Vector2Normalize(Vector2Subtract(end, start));
+    const Vector2 exitVelDir = Vector2Rotate(entryDir, deltaDegrees * DEG2RAD);
+
+    const Vector2 exitFacingDir = wormholeFacingVector(exitFacing);
+    const Vector2 exitPoint =
+        Vector2Add(exitCenter, Vector2Scale(exitFacingDir, game.run.wormhole.radius + 4));
+
+    const float remainingLen =
+        std::max(0.0F, Vector2Distance(start, end) - Vector2Distance(start, entryPoint));
+    const Vector2 newEnd = Vector2Add(exitPoint, Vector2Scale(exitVelDir, remainingLen));
+
+    return {{start, entryPoint}, {exitPoint, newEnd}};
 }
 
 void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
@@ -4037,7 +5519,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             {
             case BossAttack::Spread:
                 boss.color = Palette::BossSpread;
-                game.run.spreadWindupShots = 0;
+                boss.spreadWindupShots = 0;
                 break;
             case BossAttack::Slam:
                 boss.color = Palette::Accent;
@@ -4068,6 +5550,8 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 break;
             case BossAttack::HomingBarrage:
                 boss.color = Palette::BossHoming;
+                break;
+            case BossAttack::Count:
                 break;
             }
 
@@ -4132,10 +5616,10 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             boss.barrageTimer -= deltaTime;
             const int targetRounds = spreadRoundsByDifficulty.at(
                 static_cast<size_t>(game.resources.settings.difficulty));
-            if (boss.barrageTimer <= 0 && game.run.spreadWindupShots < targetRounds)
+            if (boss.barrageTimer <= 0 && boss.spreadWindupShots < targetRounds)
             {
                 boss.barrageTimer = spreadRoundInterval;
-                game.run.spreadWindupShots++;
+                boss.spreadWindupShots++;
                 playSFX(game, game.resources.sounds.spreadBurst);
                 triggerShake(game, 5, 0.2F);
 
@@ -4173,7 +5657,11 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             const Vector2 direction =
                 Vector2Normalize(Vector2Subtract(boss.targetPosition, bossCenter));
             const Vector2 beamEnd = Vector2Add(bossCenter, Vector2Scale(direction, 2000));
-            processBeamAttack(game, boss, bossCenter, beamEnd);
+            for (const auto& [segStart, segEnd] :
+                 wormholeBentBeamSegments(game, bossCenter, beamEnd))
+            {
+                processBeamAttack(game, boss, segStart, segEnd);
+            }
         }
 
         if (boss.attack == BossAttack::WormholeBeam)
@@ -4182,7 +5670,11 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 Vector2Normalize(Vector2Subtract(boss.targetPosition, boss.wormholeBeamOrigin));
             const Vector2 beamEnd =
                 Vector2Add(boss.wormholeBeamOrigin, Vector2Scale(direction, 2000));
-            processBeamAttack(game, boss, boss.wormholeBeamOrigin, beamEnd);
+            for (const auto& [segStart, segEnd] :
+                 wormholeBentBeamSegments(game, boss.wormholeBeamOrigin, beamEnd))
+            {
+                processBeamAttack(game, boss, segStart, segEnd);
+            }
         }
 
         if (boss.attack == BossAttack::ChargeDash)
@@ -4334,7 +5826,7 @@ void forceBossAttack(Game& game, Boss& boss, BossAttack attack)
     {
     case BossAttack::Spread:
         boss.color = Palette::BossSpread;
-        game.run.spreadWindupShots = 0;
+        boss.spreadWindupShots = 0;
         break;
     case BossAttack::Slam:
         boss.color = Palette::Accent;
@@ -4366,6 +5858,8 @@ void forceBossAttack(Game& game, Boss& boss, BossAttack attack)
     case BossAttack::HomingBarrage:
         boss.color = Palette::BossHoming;
         break;
+    case BossAttack::Count:
+        break;
     }
 
     playSFX(game, game.resources.sounds.bossWindUp);
@@ -4374,7 +5868,6 @@ void forceBossAttack(Game& game, Boss& boss, BossAttack attack)
 void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
 {
     const Vector2 direction = Vector2Subtract(boss.targetPosition, bossCenter);
-    boss.beamRotation = std::atan2(direction.y, direction.x) * RAD2DEG;
     const Vector2 aimDirection = Vector2Normalize(direction);
 
     boss.state = BossState::SHOOTING;
@@ -4398,7 +5891,7 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
             spreadRoundsByDifficulty.at(static_cast<size_t>(game.resources.settings.difficulty));
         boss.stateTimer = static_cast<float>(rounds) * spreadRoundInterval + 0.2F;
         boss.barrageTimer = 0;
-        game.run.spreadWindupShots = 0;
+        boss.spreadWindupShots = 0;
         break;
     }
     case BossAttack::Slam:
@@ -4509,6 +6002,8 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         boss.barrageTimer = 0;
         playSFX(game, game.resources.sounds.homingLaunch);
         break;
+    case BossAttack::Count:
+        break;
     }
 }
 auto UpdateGame(Game& game, float deltaTime) -> bool
@@ -4521,6 +6016,8 @@ auto UpdateGame(Game& game, float deltaTime) -> bool
 
     updateBgParticles(game);
     updateDeathParticles(game, deltaTime);
+    updateDamageNumbers(game, deltaTime);
+    updateWeaponDowngrade(game, deltaTime);
     updateBgmLayers(game, deltaTime);
     UpdateMusicStream(game.resources.bgm.base);
     UpdateMusicStream(game.resources.bgm.intensity);
@@ -4544,6 +6041,11 @@ auto UpdateGame(Game& game, float deltaTime) -> bool
         return false;
     }
 
+    if (game.run.achievementToastTimer > 0)
+    {
+        game.run.achievementToastTimer -= deltaTime;
+    }
+
     switch (game.state)
     {
     case GameState::TITLE:
@@ -4561,6 +6063,8 @@ auto UpdateGame(Game& game, float deltaTime) -> bool
         return updateGameOver(game);
     case GameState::SETTINGS:
         return updateSettings(game);
+    case GameState::ACHIEVEMENTS:
+        return updateAchievements(game);
     }
 
     return false;
