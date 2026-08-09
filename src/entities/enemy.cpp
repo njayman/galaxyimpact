@@ -10,7 +10,9 @@
 
 auto waveEnemyScale(const Game& game) -> float
 {
-    return 1 + static_cast<float>(game.run.waveNumber - 1) * UpdateConstants::waveEnemyScalePerWave;
+    return 1 +
+           static_cast<float>(game.run.waveNumber - 1) * UpdateConstants::waveEnemyScalePerWave +
+           static_cast<float>(game.run.level - 1) * UpdateConstants::waveEnemyScalePerLevel;
 }
 
 auto enemyDamage(const Game& game, int32_t base) -> int32_t
@@ -142,6 +144,19 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
     }
 
     game.run.enemies.at(index).active = false;
+
+    // Rustbloom's locked design: dead Hive Nodes leave exploitable cover/sightline breaks -
+    // reuses the Asteroid entity wholesale (blocks bullets/beams, same debris trick as the
+    // Wreckworm's Molt and Shattered Belt's rock clusters), no new hazard type needed.
+    if (game.run.enemies.at(index).kind == enemyKindHiveNode)
+    {
+        game.run.asteroids.push_back(Asteroid{.position = game.run.enemies.at(index).position,
+                                              .velocity = Vector2{},
+                                              .radius = asteroidRadius(AsteroidTier::Medium),
+                                              .tier = AsteroidTier::Medium,
+                                              .active = true});
+    }
+
     int32_t score = kind.score;
     if (game.run.enemies.at(index).isElite)
     {

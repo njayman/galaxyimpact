@@ -30,6 +30,16 @@ enum class BossState : std::uint8_t
     SHOOTING
 };
 
+// Heat-meter phases for the Slagmaw (Solar Forge) - drives which reflavored generic BossAttack
+// is in the moveset, in fixed order, instead of the usual random-from-moveset pick every other
+// boss uses. See updateSlagmawHeat.
+enum class SlagmawPhase : std::uint8_t
+{
+    Ember,
+    Flare,
+    Vent
+};
+
 enum class BossAttack : std::uint8_t
 {
     Beam,
@@ -136,6 +146,14 @@ class Boss
     int32_t segmentIndex = 0;
 
     bool isArmorSegment = false;
+    float segmentVolleyTimer = 0;
+
+    bool isSlagmaw = false;
+    float heatMeter = 0;
+    float heatFillRate = 0;
+    SlagmawPhase slagmawPhase = SlagmawPhase::Ember;
+    bool slagmawHotRoundUnlocked = false;
+    bool slagmawVentPending = false;
 
     bool debuffStatic = false;
     bool debuffFreeze = false;

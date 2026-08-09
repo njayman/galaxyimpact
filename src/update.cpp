@@ -698,10 +698,14 @@ void updateGameplay(Game& game, float deltaTime)
         updateBoss(game, deltaTime, boss, bossCenter);
         updateBeltbreakerCore(game, boss, deltaTime);
         updateWreckwormChain(game, boss, deltaTime);
+        updateWreckwormSegmentVolley(game, boss, deltaTime);
+        updateSlagmawHeat(game, boss, deltaTime);
     }
 
     updateBullets(game, deltaTime);
     updateAsteroids(game, deltaTime);
+    updateShadowPockets(game, deltaTime);
+    updateSolarForgeHeat(game, deltaTime);
     updateEnemies(game, deltaTime);
     updateProjectiles(game, deltaTime);
     updateMines(game, deltaTime);
@@ -1045,6 +1049,7 @@ auto weaponDamage(const Game& game, int32_t level) -> int32_t
     dmg *= 1 + 0.15F * static_cast<float>(
                            game.run.skillLevels.at(static_cast<size_t>(SkillType::Damage)));
     dmg *= 1 + postCapDamageBonusPerLevel * static_cast<float>(game.run.postCapDamageLevels);
+    dmg *= playerConstant(game);
     dmg *= currentShip(game).damageMult;
     if (game.run.player.overchargeTimer > 0)
     {
@@ -2314,9 +2319,65 @@ void spawnRockCluster(Game& game, Vector2 center)
     }
 }
 
+void updateShadowPockets(Game& game, float deltaTime)
+{
+    for (auto& pocket : game.run.shadowPockets)
+    {
+        if (Vector2Distance(pocket.position, game.run.player.position) > asteroidDespawnRadius)
+        {
+            pocket.active = false;
+        }
+    }
+    std::erase_if(game.run.shadowPockets, [](const ShadowPocket& p) { return !p.active; });
+
+    if (currentBiome(game.run.waveNumber) != Biome::SolarForge)
+    {
+        return;
+    }
+
+    game.run.shadowPocketSpawnTimer -= deltaTime;
+    if (game.run.shadowPocketSpawnTimer <= 0 &&
+        static_cast<int32_t>(game.run.shadowPockets.size()) < maxShadowPockets)
+    {
+        game.run.shadowPocketSpawnTimer = static_cast<float>(GetRandomValue(
+                                              static_cast<int32_t>(shadowPocketSpawnIntervalMin * 10),
+                                              static_cast<int32_t>(shadowPocketSpawnIntervalMax * 10))) /
+                                          10.0F;
+        const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+        const Vector2 pos = Vector2Add(
+            game.run.player.position,
+            Vector2{.x = std::cos(angle) * 500, .y = std::sin(angle) * 500});
+        game.run.shadowPockets.push_back(
+            ShadowPocket{.position = pos, .radius = shadowPocketRadius, .active = true});
+    }
+}
+
+void updateSolarForgeHeat(Game& game, float deltaTime)
+{
+    if (currentBiome(game.run.waveNumber) != Biome::SolarForge || game.run.player.health <= 0)
+    {
+        return;
+    }
+
+    for (const auto& pocket : game.run.shadowPockets)
+    {
+        if (Vector2Distance(pocket.position, game.run.player.position) <= pocket.radius)
+        {
+            return;
+        }
+    }
+
+    game.run.solarForgeHeatTickTimer -= deltaTime;
+    if (game.run.solarForgeHeatTickTimer <= 0)
+    {
+        game.run.solarForgeHeatTickTimer = solarForgeHeatTickInterval;
+        damagePlayer(game, enemyDamage(game, solarForgeHeatDamage));
+    }
+}
+
 void updateWaveSpawner(Game& game, float deltaTime)
 {
-    if (game.sandbox)
+    if (game.sandbox && !game.sandboxNaturalSpawnEnabled)
     {
         return;
     }
@@ -2345,6 +2406,12 @@ void updateWaveSpawner(Game& game, float deltaTime)
                       game.run.waveNumber == 50))
             {
                 spawnWreckworm(game, game.run.waveNumber);
+            }
+            else if (currentBiome(game.run.waveNumber) == Biome::SolarForge &&
+                     (game.run.waveNumber == 60 || game.run.waveNumber == 70 ||
+                      game.run.waveNumber == 75))
+            {
+                spawnSlagmaw(game, game.run.waveNumber);
             }
             else if (game.run.waveNumber % megaBossWaveInterval == 0)
             {
@@ -2414,10 +2481,8 @@ void updateWaveSpawner(Game& game, float deltaTime)
         const Vector2 spawnPos =
             Vector2Add(game.run.player.position,
                        Vector2{.x = std::cos(angle) * 500, .y = std::sin(angle) * 500});
-        const Vector2 aimPoint = Vector2Add(
-            game.run.player.position, Vector2{.x = static_cast<float>(GetRandomValue(-180, 180)),
-                                              .y = static_cast<float>(GetRandomValue(-180, 180))});
-        const Vector2 direction = Vector2Normalize(Vector2Subtract(aimPoint, spawnPos));
+        const float driftAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+        const Vector2 direction{.x = std::cos(driftAngle), .y = std::sin(driftAngle)};
         const float speed = static_cast<float>(GetRandomValue(25, 45)) / 10.0F;
 
         game.run.asteroids.push_back(Asteroid{.position = spawnPos,
@@ -4123,6 +4188,9 @@ auto UpdateGame(Game& game, float deltaTime) -> bool
         return updateSettings(game);
     case GameState::ACHIEVEMENTS:
         return updateAchievements(game);
+    case GameState::SANDBOX_MENU:
+        updateSandboxMenuInput(game);
+        break;
     }
 
     return false;

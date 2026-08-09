@@ -154,6 +154,7 @@ constexpr int enemyKindSwarmling = 1;
 
 constexpr int enemyKindRockDebris = 18;
 constexpr int enemyKindSporeSwarmling = 22;
+constexpr int enemyKindHiveNode = 24;
 
 constexpr std::array<EnemyKind, 33> enemyKinds{
     EnemyKind{.name = "Drifter",

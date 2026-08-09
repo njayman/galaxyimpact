@@ -101,7 +101,8 @@ void drawNerveBar(const Game& game, int32_t x, int32_t y);
 auto drawDamageMeter(const Game& game, int32_t x, int32_t y) -> int32_t;
 void drawChargePips(const Game& game, int32_t x, int32_t y);
 void drawDebuffIndicator(const Game& game, int32_t x, int32_t y);
-void drawSandboxHUD(const Game& game);
+void drawSandboxToggleIndicator(const Game& game);
+void drawSandboxMenu(const Game& game);
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius);
 
 void beginPixelZoom(const Game& game)
@@ -1083,6 +1084,12 @@ void drawGameplayWorld(const Game& game)
                           game.run.wormhole.radius);
         drawWormholeMouth(game.run.wormhole.positionB, game.run.wormhole.facingB,
                           game.run.wormhole.radius);
+    }
+
+    for (const auto& pocket : game.run.shadowPockets)
+    {
+        DrawCircleV(pocket.position, pocket.radius, Fade(Palette::ElementFreeze, 0.12F));
+        DrawCircleLinesV(pocket.position, pocket.radius, Fade(Palette::ElementFreeze, 0.45F));
     }
 
     for (const auto& a : game.run.asteroids)
@@ -2255,10 +2262,6 @@ void drawHUD(const Game& game)
                  24, Palette::Charge);
     }
 
-    if (game.sandbox)
-    {
-        drawSandboxHUD(game);
-    }
 }
 
 void drawDownwardTriangleIcon(float cx, int32_t y, float size, Color fillColor, bool filled)
@@ -2507,34 +2510,39 @@ void drawActiveBuffs(const Game& game, int32_t x, int32_t y)
     }
 }
 
-void drawSandboxHUD(const Game& game)
+void drawSandboxToggleIndicator(const Game& game)
 {
-    const std::string kindName(enemyKinds.at(static_cast<size_t>(game.sandboxKindIndex)).name);
-    const std::string attackName(
-        bossAttackNames.at(static_cast<size_t>(game.sandboxBossAttackIndex)));
-    const std::string pickupName(sandboxPickupName(game.sandboxPickupIndex));
-    const std::string shipName(currentShip(game).name);
-    const std::array<std::string, 8> lines{
-        "SANDBOX",
-        std::format("[ / ]: cycle enemy ({})   E: spawn enemy   B: spawn boss", kindName),
-        "K: clear board   L: level-up picker   H: full heal   R: reset abilities",
-        std::format("G: death {}   , / . : cycle boss attack ({})   O: command nearest boss",
-                    game.sandboxDeathEnabled ? "ON" : "OFF", attackName),
-        std::format("- / + : wave ({}, {})   I / Shift+I: cycle ship ({})", game.run.waveNumber,
-                    biomeName(currentBiome(game.run.waveNumber)), shipName),
-        "N: spawn black hole   M: spawn wormhole   U: spawn hazard (+Shift: debuff)",
-        std::format("; / ': cycle pickup ({})   P: drop selected pickup", pickupName),
-        "V: spawn signature boss for current biome/wave (Beltbreaker/Wreckworm only so far)",
-    };
+    const Rectangle rect = sandboxToggleIndicatorRect(game);
+    GuiButton(rect, "Instructions [TAB]");
+}
 
-    int32_t y =
-        static_cast<int32_t>(static_cast<float>(game.resources.screenHeight) / hudScale(game)) -
-        180;
-    for (const auto& line : lines)
+void drawSandboxMenu(const Game& game)
+{
+    applyGuiScale(game);
+    windowText(game, "SANDBOX", game.resources.windowWidth / 2, 80, 34, Palette::Accent);
+
+    const auto& steppers = sandboxMenuSteppers();
+    for (int32_t i = 0; i < static_cast<int32_t>(steppers.size()); i++)
     {
-        drawText(game, line.c_str(), 10, y, 18, Palette::Crit);
-        y += 22;
+        const auto& stepper = steppers.at(static_cast<size_t>(i));
+        const Rectangle row = sandboxStepperRowRect(game, i);
+        windowText(game, std::string(stepper.label).c_str(), static_cast<int32_t>(row.x),
+                   static_cast<int32_t>(row.y) - 18, 14, Palette::StructLight);
+
+        GuiButton(sandboxStepperMinusRect(game, i), "-");
+        std::string value = stepper.valueText(game);
+        GuiTextBox(sandboxStepperValueRect(game, i), value.data(),
+                  static_cast<int32_t>(value.size()) + 1, false);
+        GuiButton(sandboxStepperPlusRect(game, i), "+");
     }
+
+    const auto& buttons = sandboxMenuButtons();
+    for (int32_t i = 0; i < static_cast<int32_t>(buttons.size()); i++)
+    {
+        GuiButton(sandboxMenuButtonRect(game, i), buttons.at(static_cast<size_t>(i)).label(game).c_str());
+    }
+
+    GuiButton(sandboxMenuCloseButtonRect(game), "Close [Esc]");
 }
 
 }
@@ -2555,6 +2563,7 @@ auto drawGame(Game& game) -> void
     case GameState::PAUSED:
     case GameState::LEVEL_UP:
     case GameState::GAME_OVER:
+    case GameState::SANDBOX_MENU:
         beginWorldCamera(game);
         drawGameplayWorld(game);
         EndMode2D();
@@ -2630,6 +2639,7 @@ auto drawGame(Game& game) -> void
     case GameState::GAMEPLAY:
     case GameState::PAUSED:
     case GameState::LEVEL_UP:
+    case GameState::SANDBOX_MENU:
         drawHUD(game);
         break;
     case GameState::SHIP_SELECT:
@@ -2660,6 +2670,14 @@ auto drawGame(Game& game) -> void
         drawShipSelect(game);
         break;
     case GameState::GAMEPLAY:
+        if (game.sandbox)
+        {
+            drawSandboxToggleIndicator(game);
+        }
+        break;
+    case GameState::SANDBOX_MENU:
+        drawOverlay(game);
+        drawSandboxMenu(game);
         break;
     case GameState::PAUSED:
         drawOverlay(game);

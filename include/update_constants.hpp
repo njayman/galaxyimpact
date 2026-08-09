@@ -166,6 +166,32 @@ constexpr float wreckwormArmorDamageMult = 0.35F;
 constexpr float wreckwormSegmentHealthPerTier = 90.0F;
 constexpr float wreckwormArmorHealthMult = 2.0F;
 
+// Infected segments each fire their own weak spore volley on a stagger - the fight was reading
+// as "shoot the drifting worm" with only the head as a threat source. Weaker than the head's own
+// Barrage (see wreckwormSegmentVolleyDamageMult) since there can be up to 5 of these firing.
+constexpr float wreckwormSegmentVolleyIntervalMin = 3.0F;
+constexpr float wreckwormSegmentVolleyIntervalMax = 5.0F;
+constexpr float wreckwormSegmentVolleyDamageMult = 0.4F;
+constexpr float wreckwormSegmentVolleyProjSpeed = 7.0F;
+
+// The Slagmaw (Solar Forge boss) - heat meter (0-1) fills passively, phase boundaries pick which
+// reflavored generic attack is live: Ember (< emberEnd) = ChargeDash, Flare (< flareEnd) =
+// Barrage/Beam(+HomingBarrage once slagmawHotRoundUnlocked), Vent (>= flareEnd) = one forced Slam
+// eruption, then a held crit window before heat resets. Fill rate itself is picked per-wave in
+// spawnSlagmaw (60/70/75), same literal-per-tier pattern as spawnWreckworm's segmentCount.
+constexpr float slagmawHeatEmberEnd = 0.4F;
+constexpr float slagmawHeatFlareEnd = 0.85F;
+constexpr float slagmawCritWindowDuration = 2.0F;
+
+// Solar Forge's ambient heat DoT - "open areas" are the default, shadow pockets are the
+// exception, matching the locked biome design ("rising ambient heat DoT... with safe shadow
+// pockets"). Ticks damagePlayer whenever the player is outside every live pocket's radius.
+constexpr float shadowPocketRadius = 130.0F;
+constexpr float shadowPocketSpawnIntervalMin = 6.0F;
+constexpr float shadowPocketSpawnIntervalMax = 10.0F;
+constexpr float solarForgeHeatTickInterval = 1.0F;
+constexpr int32_t solarForgeHeatDamage = 1;
+
 constexpr float wormholeRadius = 26;
 constexpr float wormholeLifetime = 20.0F;
 constexpr float wormholeSpawnCooldownMin = 40.0F;

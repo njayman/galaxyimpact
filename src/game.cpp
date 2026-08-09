@@ -275,6 +275,9 @@ void resetRun(Game& game)
     game.run.wormhole.timer = static_cast<float>(GetRandomValue(400, 700)) / 10.0F;
     game.run.asteroidSpawnTimer = 1.0F;
     game.run.enemySpawnTimer = 1.0F;
+    game.run.shadowPockets.clear();
+    game.run.shadowPocketSpawnTimer = 1.0F;
+    game.run.solarForgeHeatTickTimer = 0;
 
     game.run.xp = 0;
     game.run.level = 1;

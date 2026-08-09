@@ -9,6 +9,11 @@
 #include <cstddef>
 #include <vector>
 
+auto playerConstant(const Game& game) -> float
+{
+    return 1 + static_cast<float>(game.run.level - 1) * UpdateConstants::playerConstantPerLevel;
+}
+
 auto nerveFrac(const Game& game) -> float
 {
     return game.run.player.nerve / UpdateConstants::nerveMax;

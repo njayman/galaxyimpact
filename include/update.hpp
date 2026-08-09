@@ -18,6 +18,16 @@ constexpr float slamDuration = 1.6F;
 constexpr float bossDeathShockwaveDuration = 3.0F;
 constexpr float shockFlashDuration = 0.4F;
 constexpr float waveEnemyScalePerWave = 0.035F;
+
+// M27 Player Constant, RoR2-style: a flat per-level multiplier on player damage, symmetric to
+// waveEnemyScale's per-level term on the enemy side. First-pass weight, same as
+// waveEnemyScalePerLevel - not re-converged against tools/balance_sim.
+constexpr float playerConstantPerLevel = 0.02F;
+// M27: waveEnemyScale also factors in player level (not just wave) - a player who out-levels
+// the wave pace (grinding, or just a strong build) pushes this the same coefficient up too, so
+// bosses/enemies don't fall behind actual player power. One coefficient, two inputs, not two
+// separate multipliers stacked on top of each other.
+constexpr float waveEnemyScalePerLevel = 0.03F;
 constexpr float pickupExpiryWarning = 2.5F;
 constexpr float shockwaveStompRadius = 220;
 constexpr float shockwaveStompDuration = 0.5F;
@@ -130,6 +140,11 @@ auto countAttachedAlivePlates(Game& game, const Boss& core) -> int32_t;
 auto beltbreakerPlateSlotPosition(const Boss& core, int32_t slotIndex) -> Vector2;
 auto findBeltbreakerById(Game& game, int32_t instanceId) -> Boss*;
 void updateWreckwormChain(Game& game, Boss& head, float deltaTime);
+void updateWreckwormSegmentVolley(Game& game, Boss& segment, float deltaTime);
+void spawnSlagmaw(Game& game, int32_t wave);
+void updateSlagmawHeat(Game& game, Boss& boss, float deltaTime);
+void updateShadowPockets(Game& game, float deltaTime);
+void updateSolarForgeHeat(Game& game, float deltaTime);
 auto findWreckwormSegment(Game& game, int32_t headId, int32_t segmentIndex) -> Boss*;
 void triggerWreckwormMolt(Game& game, Boss& head);
 void updatePickups(Game& game, float deltaTime);
@@ -181,6 +196,7 @@ auto flamethrowerHalfAngleRad() -> float;
 auto flamethrowerActive(int32_t level) -> bool;
 auto confusePulseActive(float activeDuration) -> bool;
 auto waveEnemyScale(const Game& game) -> float;
+auto playerConstant(const Game& game) -> float;
 auto isFusedPassive(const Game& game, SkillType id) -> bool;
 auto hasWeapon(const Game& game, WeaponType kind) -> bool;
 auto weaponForGrantSkill(SkillType id) -> std::optional<WeaponType>;

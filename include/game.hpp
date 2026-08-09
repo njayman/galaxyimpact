@@ -41,7 +41,8 @@ enum class GameState : std::uint8_t
     GAME_OVER,
     LEVEL_UP,
     SETTINGS,
-    ACHIEVEMENTS
+    ACHIEVEMENTS,
+    SANDBOX_MENU
 };
 
 struct GameResources
@@ -102,6 +103,9 @@ struct GameplayState
     std::vector<ChainLightningBolt> chainLightningBolts;
     float asteroidSpawnTimer;
     float enemySpawnTimer;
+    std::vector<ShadowPocket> shadowPockets;
+    float shadowPocketSpawnTimer;
+    float solarForgeHeatTickTimer;
     int xp;
     int level;
     int xpToNext;
@@ -138,6 +142,7 @@ struct Game
     bool sandboxDeathEnabled;
     int sandboxBossAttackIndex;
     int sandboxPickupIndex;
+    bool sandboxNaturalSpawnEnabled;
 
     GameResources resources;
     GameplayState run;
