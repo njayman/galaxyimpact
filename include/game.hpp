@@ -44,8 +44,6 @@ enum class GameState : std::uint8_t
     ACHIEVEMENTS
 };
 
-// Engine/asset-level resources: window & render setup, loaded audio/fonts, persisted settings
-// and high scores. Not touched by resetRun() — these outlive any single run.
 struct GameResources
 {
     int screenWidth{};
@@ -64,8 +62,6 @@ struct GameResources
     Achievements achievements;
 };
 
-// Per-run gameplay state: entities, timers, and score. Fully reinitialized by resetRun() at the
-// start of every run.
 struct GameplayState
 {
     Player player;
@@ -81,7 +77,6 @@ struct GameplayState
     std::vector<OrbitBladeProjectile> orbitBladeProjectiles;
     std::vector<OrbitBladeProjectile> nerveBallProjectiles;
     std::vector<NerveSpiralProjectile> nerveSpiralProjectiles;
-    std::vector<ElementalField> elementalFields;
     std::vector<Weapon> weapons;
     std::array<int, static_cast<size_t>(SkillType::Count)> skillLevels;
     std::vector<LevelUpChoice> pendingChoices;
@@ -98,6 +93,7 @@ struct GameplayState
     std::vector<GasCloud> gasClouds;
     std::vector<Particle> deathParticles;
     std::vector<Particle> dashTrailParticles;
+    std::vector<Particle> flameParticles;
     std::vector<DamageNumber> damageNumbers;
     std::optional<WeaponDowngrade> weaponDowngrade;
     std::vector<FollowerDrone> followerDrones;
@@ -125,12 +121,6 @@ struct GameplayState
     float achievementToastTimer;
 };
 
-// Move-only: copy would double-free the raylib GPU/audio handles held in `resources`
-// (RenderTexture2D, Font, Music, Sound). Move stays defaulted (bitwise) rather than deleted because
-// InitGame() relies on NRVO to return Game by value; the move is never actually invoked at runtime.
-// Every field is still value-initialized via `Game game{};` (this ctor is defaulted, not
-// user-provided, so zero-init still runs first) — the missing-member-init check below is a false
-// positive. NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
 struct Game
 {
     Game() = default;

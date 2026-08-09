@@ -353,23 +353,107 @@ void drawSettings(const Game& game)
                game.resources.windowWidth / 2, hintY, 16, Palette::StructMid);
 }
 
+auto findEnemyKindIndex(std::string_view name) -> int32_t
+{
+    for (size_t i = 0; i < enemyKinds.size(); i++)
+    {
+        if (enemyKinds.at(i).name == name)
+        {
+            return static_cast<int32_t>(i);
+        }
+    }
+    return -1;
+}
+
+struct UnlockHint
+{
+    std::string condition;
+    std::string progress;
+};
+
+// Mirrors the actual unlock logic in achievements.cpp - kept as display-only text/progress here
+// so the player can see exactly what they're chasing, not just a locked/unlocked flag.
+auto weaponUnlockHint(const Game& game, WeaponType weapon) -> UnlockHint
+{
+    const auto& ach = game.resources.achievements;
+
+    auto dashKillsFor = [&](std::string_view kindName) -> int32_t
+    {
+        const int32_t idx = findEnemyKindIndex(kindName);
+        return idx >= 0 ? ach.dashKillsByEnemyKind.at(static_cast<size_t>(idx)) : 0;
+    };
+    auto skillProgress = [&](SkillType id) -> std::string
+    {
+        return std::format("Lv {}/{}", game.run.skillLevels.at(static_cast<size_t>(id)),
+                           Skills.at(static_cast<size_t>(id)).maxLevel);
+    };
+
+    switch (weapon)
+    {
+    case WeaponType::Forward:
+        return {"Ranger's default weapon", ""};
+    case WeaponType::Orbit:
+        return {"Bastion's default weapon", ""};
+    case WeaponType::Beam:
+        return {"Interceptor's default weapon", ""};
+    case WeaponType::Homing:
+        return {"Reach wave 3", std::format("Best: wave {}", ach.highestWaveReached)};
+    case WeaponType::Mine:
+        return {"Reach wave 7", std::format("Best: wave {}", ach.highestWaveReached)};
+    case WeaponType::Shock:
+        return {"Reach wave 12", std::format("Best: wave {}", ach.highestWaveReached)};
+    case WeaponType::Ricochet:
+        return {"Dash-kill a Turret enemy",
+                std::format("{} dash kills so far", dashKillsFor("Turret"))};
+    case WeaponType::FollowerDrone:
+        return {"Dash-kill an Orbiter enemy",
+                std::format("{} dash kills so far", dashKillsFor("Orbiter"))};
+    case WeaponType::LaserDrone:
+        return {"Dash-kill a Laser Fence enemy",
+                std::format("{} dash kills so far", dashKillsFor("Laser Fence"))};
+    case WeaponType::FlakCannon:
+        return {"200 dash/nerve-burst kills total",
+                std::format("{}/{}", ach.dashOrNerveKills, flakCannonUnlockKillCount)};
+    case WeaponType::Railgun:
+        return {"Max the Forward Shot skill", skillProgress(SkillType::ForwardShot)};
+    case WeaponType::ChainLightning:
+        return {"Max the Orbit Blades skill", skillProgress(SkillType::OrbitBlades)};
+    case WeaponType::TurretDeploy:
+        return {"Max the Beam Sweep skill", skillProgress(SkillType::BeamSweep)};
+    case WeaponType::Flamethrower:
+        return {"Max the Homing Missiles skill", skillProgress(SkillType::HomingMissiles)};
+    case WeaponType::Count:
+        break;
+    }
+    return {"", ""};
+}
+
 void drawAchievements(const Game& game)
 {
     applyGuiScale(game);
     const auto& ach = game.resources.achievements;
+    const float scale = guiUiScale(game);
     windowText(game, "ACHIEVEMENTS", game.resources.windowWidth / 2, 60, 34, Palette::Accent);
 
     const std::string summary =
-        std::format("Weapon slots: {}/6   Highest wave: {}   Infinite mode: {}", ach.slotCap,
+        std::format("Weapon Slots: {} / 6   Highest Wave: {}   Infinite Mode: {}", ach.slotCap,
                     ach.highestWaveReached, ach.infiniteModeUnlocked ? "Unlocked" : "Locked");
     windowText(game, summary.c_str(), game.resources.windowWidth / 2, 110, 18,
                Palette::StructLight);
 
     constexpr int32_t rowsPerColumn = 7;
-    constexpr int32_t rowHeight = 32;
+    constexpr int32_t rowHeight = 46;
     constexpr int32_t columnWidth = 520;
-    const int32_t leftX = game.resources.windowWidth / 2 - columnWidth;
+    constexpr int32_t iconBoxSize = 30;
+    constexpr size_t evolvableWeaponCount = 6;
+    const int32_t leftX =
+        game.resources.windowWidth / 2 - static_cast<int32_t>(static_cast<float>(columnWidth) *
+                                                              scale);
     const int32_t topY = 170;
+
+    const Vector2 mouse = GetMousePosition();
+    std::optional<WeaponType> hovered;
+    Rectangle hoveredRect{};
 
     for (size_t i = 0; i < static_cast<size_t>(WeaponType::Count); i++)
     {
@@ -377,24 +461,99 @@ void drawAchievements(const Game& game)
         const bool unlocked = isWeaponTypeUnlocked(game, weapon);
         const int32_t column = static_cast<int32_t>(i) / rowsPerColumn;
         const int32_t row = static_cast<int32_t>(i) % rowsPerColumn;
-        const int32_t x = leftX + column * columnWidth;
-        const int32_t y = topY + row * rowHeight;
+        const auto x = static_cast<float>(leftX) +
+                      static_cast<float>(column) * static_cast<float>(columnWidth) * scale;
+        const auto y =
+            static_cast<float>(topY) + static_cast<float>(row) * static_cast<float>(rowHeight) * scale;
+        const Color color = unlocked ? Palette::StructLight : Palette::StructMid;
+
+        const Rectangle rowRect{.x = x,
+                                .y = y,
+                                .width = static_cast<float>(columnWidth) * scale,
+                                .height = static_cast<float>(rowHeight) * scale};
+        if (CheckCollisionPointRec(mouse, rowRect))
+        {
+            hovered = weapon;
+            hoveredRect = rowRect;
+        }
+
+        const Vector2 iconCenter{.x = x + static_cast<float>(iconBoxSize) * scale / 2,
+                                 .y = y + static_cast<float>(iconBoxSize) * scale / 2};
+        DrawRectangleLines(static_cast<int32_t>(x), static_cast<int32_t>(y),
+                           static_cast<int32_t>(static_cast<float>(iconBoxSize) * scale),
+                           static_cast<int32_t>(static_cast<float>(iconBoxSize) * scale),
+                           Fade(Palette::StructMid, 0.6F));
+        drawWeaponIcon(weapon, iconCenter, static_cast<float>(iconBoxSize) * scale * 0.32F, color);
 
         std::string line = std::string(weaponDisplayName(weapon)) + ": " +
                            (unlocked ? "Unlocked" : "Locked") +
                            std::format(" ({} kills)", ach.killsByWeapon.at(i));
-        constexpr size_t evolvableWeaponCount = 6;
         if (i < evolvableWeaponCount)
         {
-            line += ach.evolutionUnlocked.at(i) ? "  [Evolution unlocked]" : "  [Evolution locked]";
+            line += ach.evolutionUnlocked.at(i) ? "  [Evo unlocked]" : "  [Evo locked]";
         }
-
-        drawText(game, line.c_str(), x, y, 18,
-                 unlocked ? Palette::StructLight : Palette::StructMid);
+        drawText(game, line.c_str(),
+                 static_cast<int32_t>(x + static_cast<float>(iconBoxSize) * scale + 8 * scale),
+                 static_cast<int32_t>(y + static_cast<float>(iconBoxSize) * scale / 2 - 9 * scale),
+                 18, color);
     }
 
-    windowText(game, "Click / Enter / Esc: back", game.resources.windowWidth / 2,
-               topY + rowsPerColumn * rowHeight + 30, 16, Palette::StructMid);
+    if (hovered.has_value())
+    {
+        const bool unlocked = isWeaponTypeUnlocked(game, *hovered);
+        const auto hint = weaponUnlockHint(game, *hovered);
+        const size_t idx = static_cast<size_t>(*hovered);
+
+        std::vector<std::string> lines;
+        lines.push_back(std::string(weaponDisplayName(*hovered)) +
+                        (unlocked ? "  (Unlocked)" : "  (Locked)"));
+        if (!unlocked && !hint.condition.empty())
+        {
+            lines.push_back("Unlocks by: " + hint.condition);
+            if (!hint.progress.empty())
+            {
+                lines.push_back(hint.progress);
+            }
+        }
+        if (idx < evolvableWeaponCount)
+        {
+            lines.push_back(ach.evolutionUnlocked.at(idx)
+                                ? "Evolution: unlocked"
+                                : std::format("Evolution: {}/{} kills with this weapon",
+                                              ach.killsByWeapon.at(idx), evolutionKillThreshold));
+        }
+
+        constexpr int32_t lineFontSize = 15;
+        constexpr int32_t lineHeight = 20;
+        int32_t boxWidth = 0;
+        for (const auto& l : lines)
+        {
+            boxWidth = std::max(boxWidth, measureText(game, l.c_str(), lineFontSize));
+        }
+        boxWidth += 16;
+        const int32_t boxHeight = static_cast<int32_t>(lines.size()) * lineHeight + 12;
+
+        auto tipX = static_cast<int32_t>(hoveredRect.x);
+        if (tipX + boxWidth > game.resources.windowWidth)
+        {
+            tipX = game.resources.windowWidth - boxWidth;
+        }
+        const auto tipY = static_cast<int32_t>(hoveredRect.y + hoveredRect.height);
+
+        DrawRectangle(tipX, tipY, boxWidth, boxHeight, Fade(Palette::Void, 0.92F));
+        DrawRectangleLines(tipX, tipY, boxWidth, boxHeight, Palette::StructMid);
+        for (size_t li = 0; li < lines.size(); li++)
+        {
+            drawText(game, lines.at(li).c_str(), tipX + 8, tipY + 6 + static_cast<int32_t>(li) * lineHeight,
+                     lineFontSize, li == 0 ? Palette::Accent : Palette::StructLight);
+        }
+    }
+
+    windowText(game, "Hover a weapon for unlock details   |   Click / Enter / Esc: back",
+               game.resources.windowWidth / 2,
+               topY + static_cast<int32_t>(static_cast<float>(rowsPerColumn * rowHeight) * scale) +
+                   30,
+               16, Palette::StructMid);
 }
 
 void drawSkillIcon(SkillType id, Vector2 c, float s, Color color)
@@ -518,10 +677,6 @@ void drawPassiveIcon(SkillType id, Vector2 c, float s, Color color)
     }
 }
 
-// The level-up screen's "Pickup" choice used to describe every single pickup with the same
-// generic "skip the skill picks" boilerplate, telling the player nothing about what they'd
-// actually be taking. This maps each PickupType (and, for Elemental, its element+mechanism combo)
-// to a real one-line effect description instead.
 auto elementEffectSummary(ElementType element) -> std::string_view
 {
     switch (element)
@@ -572,9 +727,6 @@ auto pickupChoiceDescription(PickupType type, ElementType element, ElementMechan
         case ElementMechanism::Nova:
             return std::format("Instantly applies {} to every enemy on screen ({}).",
                                elementNames.at(static_cast<size_t>(element)), effect);
-        case ElementMechanism::Field:
-            return std::format("Drops a zone that applies {} to anything that touches it ({}).",
-                               elementNames.at(static_cast<size_t>(element)), effect);
         case ElementMechanism::Count:
             break;
         }
@@ -590,8 +742,7 @@ auto pickupChoiceDescription(PickupType type, ElementType element, ElementMechan
 
 auto evolutionHint(const Game& game, SkillType id) -> std::string
 {
-    // Only the original 6 weapons ever evolve — the 8 M15 additions carry an inert placeholder
-    // skillLinkedPassive (always SkillType::Damage) and must never surface an evolution hint.
+
     constexpr size_t evolvableWeaponCount = 6;
     for (size_t i = 0; i < evolvableWeaponCount; i++)
     {
@@ -610,18 +761,32 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
     constexpr float gap = 34;
     constexpr float iconScale = 0.32F;
 
+    constexpr size_t evolvableWeaponCount = 6;
+
     struct Slot
     {
         SkillType id;
         Color color;
+        int32_t level = 0;
+        bool stolen = false;
+        bool evolutionReady = false;
     };
     std::vector<Slot> slots;
 
     for (const auto& w : game.run.weapons)
     {
         const Color color = w.evolved ? Palette::Crit : Palette::Shield;
-        slots.push_back(
-            Slot{.id = weaponGrantSkill.at(static_cast<size_t>(w.type)), .color = color});
+        const auto typeIndex = static_cast<size_t>(w.type);
+        const bool evolutionReady =
+            typeIndex < evolvableWeaponCount && !w.evolved &&
+            game.resources.achievements.evolutionUnlocked.at(typeIndex);
+        const bool stolen =
+            game.run.weaponDowngrade.has_value() && game.run.weaponDowngrade->type == w.type;
+        slots.push_back(Slot{.id = weaponGrantSkill.at(typeIndex),
+                             .color = color,
+                             .level = w.level,
+                             .stolen = stolen,
+                             .evolutionReady = evolutionReady});
     }
 
     for (size_t i = 0; i < static_cast<size_t>(SkillType::Count); i++)
@@ -635,7 +800,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
         {
             continue;
         }
-        slots.push_back(Slot{.id = id, .color = Palette::Shield});
+        slots.push_back(Slot{.id = id, .color = Palette::Shield, .level = game.run.skillLevels.at(i)});
     }
 
     const Vector2 mouse = mouseUIPos(game);
@@ -652,14 +817,42 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
 
         if (static_cast<size_t>(i) < slots.size())
         {
+            const Slot& slot = slots.at(static_cast<size_t>(i));
             const Vector2 center{.x = bx + boxSize / 2, .y = by + boxSize / 2};
-            drawSkillIcon(slots.at(static_cast<size_t>(i)).id, center, boxSize * iconScale,
-                          slots.at(static_cast<size_t>(i)).color);
+            drawSkillIcon(slot.id, center, boxSize * iconScale, slot.color);
+
+            if (slot.level > 0)
+            {
+                const std::string levelText = std::to_string(slot.level);
+                constexpr int32_t levelFontSize = 10;
+                const auto badgeX = static_cast<int32_t>(bx + boxSize) - 11;
+                const auto badgeY = static_cast<int32_t>(by + boxSize) - 11;
+                DrawRectangle(badgeX, badgeY, 11, 11, Fade(Palette::Void, 0.85F));
+                drawText(game, levelText.c_str(), badgeX + 2, badgeY, levelFontSize, WHITE);
+            }
+
+            if (slot.stolen)
+            {
+                const auto tx = static_cast<int32_t>(bx);
+                const auto ty = static_cast<int32_t>(by);
+                DrawTriangle(Vector2{.x = static_cast<float>(tx), .y = static_cast<float>(ty)},
+                            Vector2{.x = static_cast<float>(tx) + 9, .y = static_cast<float>(ty)},
+                            Vector2{.x = static_cast<float>(tx), .y = static_cast<float>(ty) + 9},
+                            Palette::Accent);
+            }
+
+            if (slot.evolutionReady)
+            {
+                const auto ax = bx + boxSize - 8;
+                const auto ay = by + 1;
+                DrawTriangle(Vector2{.x = ax, .y = ay + 7}, Vector2{.x = ax + 4, .y = ay},
+                            Vector2{.x = ax + 8, .y = ay + 7}, Palette::Heal);
+            }
 
             if (CheckCollisionPointRec(
                     mouse, Rectangle{.x = bx, .y = by, .width = boxSize, .height = boxSize}))
             {
-                hovered = slots.at(static_cast<size_t>(i)).id;
+                hovered = slot.id;
                 hoveredBoxPos = Vector2{.x = bx, .y = by};
             }
         }
@@ -733,8 +926,7 @@ void drawLevelUp(const Game& game)
             break;
         case ChoiceType::Pickup:
         {
-            // libstdc++'s array iterator is a raw pointer, but libc++ (Emscripten) wraps it, so
-            // "auto*" fails there. NOLINTNEXTLINE(readability-qualified-auto)
+
             const auto found = std::ranges::find_if(pickupCatalog,
                                                     [&](const PickupCatalogEntry& e)
                                                     {
@@ -858,9 +1050,6 @@ void drawGameplayWorld(const Game& game)
 {
     drawBackgroundStars(game, game.run.player.position);
 
-    // M22: arena boundary indicator — a glowing ring at the actual out-of-bounds radius, only
-    // drawn once the player gets close enough that it could plausibly be on screen (the arena is
-    // huge, so testing this avoids drawing a 20000-radius circle every frame for nothing).
     constexpr float arenaBoundaryVisibleMargin = 2000.0F;
     if (const float distFromCenter = Vector2Length(game.run.player.position);
         distFromCenter > GameConstants::arenaHalf - arenaBoundaryVisibleMargin)
@@ -965,9 +1154,7 @@ void drawGameplayWorld(const Game& game)
             break;
         case PickupType::Danger:
         {
-            // M23: deliberately unfriendly compared to every other pickup here — a jagged dark
-            // shape with a pulsing red outline, echoing elite-hazard visual language, so it reads
-            // as "don't touch this" rather than a normal reward.
+
             const float pulse = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 10.0F);
             DrawPoly(p.position, 5, 9, static_cast<float>(GetTime()) * -140.0F,
                      Fade(Palette::Void, alpha));
@@ -976,22 +1163,10 @@ void drawGameplayWorld(const Game& game)
             break;
         }
         default:
-            DrawCircleV(p.position, 4, Fade(Palette::Charge, alpha));
-            DrawCircleLinesV(p.position, 5, Fade(Palette::Crit, 0.6F * alpha));
+            DrawCircleV(p.position, 2.5F, Fade(Palette::Charge, alpha));
+            DrawCircleLinesV(p.position, 3.5F, Fade(Palette::Crit, 0.6F * alpha));
             break;
         }
-    }
-
-    for (const auto& field : game.run.elementalFields)
-    {
-        if (!field.active)
-        {
-            continue;
-        }
-        const Color color = elementColors.at(static_cast<size_t>(field.element));
-        DrawCircleV(field.position, field.radius, Fade(color, 0.12F));
-        DrawCircleLines(static_cast<int32_t>(field.position.x),
-                        static_cast<int32_t>(field.position.y), field.radius, Fade(color, 0.5F));
     }
 
     for (const auto& boss : game.run.bosses)
@@ -1005,9 +1180,10 @@ void drawGameplayWorld(const Game& game)
         {
             continue;
         }
-        DrawCircleV(m.position, 6, Palette::Crit);
+        const Color mineColor{.r = 190, .g = 225, .b = 245, .a = 255};
+        DrawCircleV(m.position, 6, mineColor);
         DrawCircleLines(static_cast<int32_t>(m.position.x), static_cast<int32_t>(m.position.y),
-                        m.radius, Fade(Palette::Crit, 0.2F));
+                        m.radius, Fade(mineColor, 0.2F));
     }
 
     for (const auto& turret : game.run.turrets)
@@ -1125,6 +1301,16 @@ void drawGameplayWorld(const Game& game)
         DrawCircleLines(static_cast<int32_t>(p.position.x), static_cast<int32_t>(p.position.y),
                         p.radius * fade * 0.65F, Fade(Palette::Crit, 0.5F * fade));
         DrawCircleV(p.position, p.radius * fade * 0.22F, Fade(WHITE, 0.6F * fade * flicker));
+    }
+
+    for (const auto& p : game.run.flameParticles)
+    {
+        const float fade = p.life / p.maxLife;
+        const float flicker = 0.75F + 0.25F * std::sin(static_cast<float>(GetTime()) * 24.0F +
+                                                       p.position.x * 0.1F + p.position.y * 0.1F);
+
+        DrawCircleV(p.position, p.radius * fade, Fade(p.color, 0.22F * fade * flicker));
+        DrawCircleV(p.position, p.radius * fade * 0.5F, Fade(Palette::Accent, 0.35F * fade));
     }
 
     constexpr int32_t bigDamageThreshold = 15;
@@ -1266,9 +1452,6 @@ void drawShip(const Game& game)
     }
 }
 
-// Only the Interceptor's nerve burst is an instant hit (a beam); the Bastion spiral and Ranger
-// ball are travelling projectiles drawn every frame by drawNerveSpiralProjectiles()/
-// drawNerveBallProjectiles() instead, so this only ever fires for Interceptor.
 void drawNerveBurstFlash(const Game& game)
 {
     const float flashFrac = game.run.nerveBurstFlashTimer / 0.15F;
@@ -1367,6 +1550,75 @@ void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float rotati
     }
 }
 
+// Deterministic pseudo-random in [0,1) from a float seed - draw code must never call
+// GetRandomValue/SetRandomSeed itself, that would desync the shared gameplay RNG (drop rolls,
+// spawn patterns, etc. all draw from the same stream).
+auto hashNoise(float seed) -> float
+{
+    const float v = std::sin(seed) * 43758.5453F;
+    return v - std::floor(v);
+}
+
+// Per-debuff status VFX drawn on top of an already-rendered enemy/boss body - burn gets small
+// flickering flame licks (echoes the flamethrower weapon's own particle look), static gets
+// crackling zigzag bolts around the target, freeze gets a semi-transparent icy ring hugging the
+// border. Purely procedural (position/time-seeded), no persistent particle state needed.
+void drawElementalDebuffEffects(Vector2 pos, float radius, bool burning, bool shocked, bool frozen)
+{
+    const auto t = static_cast<float>(GetTime());
+
+    if (burning)
+    {
+        constexpr int32_t flameCount = 4;
+        for (int32_t i = 0; i < flameCount; i++)
+        {
+            const float seed = pos.x * 0.13F + pos.y * 0.29F + static_cast<float>(i) * 17.0F;
+            const float angle = std::fmod(seed + t * 1.5F, 2.0F * std::numbers::pi_v<float>);
+            const float bob = 0.5F + 0.5F * std::sin(t * 9.0F + seed);
+            const Vector2 base{.x = pos.x + std::cos(angle) * radius * 0.6F,
+                               .y = pos.y + std::sin(angle) * radius * 0.6F - radius * 0.2F};
+            const Vector2 tip{.x = base.x + std::sin(t * 14.0F + seed) * 3.0F,
+                              .y = base.y - (6.0F + bob * 7.0F)};
+            const Color flameColor =
+                bob > 0.6F ? Palette::ElementBurn : ColorLerp(Palette::ElementBurn, YELLOW, 0.5F);
+            DrawTriangle(Vector2{.x = base.x - 3, .y = base.y}, tip,
+                        Vector2{.x = base.x + 3, .y = base.y}, Fade(flameColor, 0.65F));
+        }
+    }
+
+    if (shocked)
+    {
+        constexpr int32_t boltCount = 2;
+        constexpr int32_t segments = 3;
+        const auto crackleStep = static_cast<float>(static_cast<int32_t>(t * 10.0F));
+        for (int32_t i = 0; i < boltCount; i++)
+        {
+            float boltSeed = pos.x * 0.7F + pos.y * 0.31F + crackleStep * 3.1F +
+                             static_cast<float>(i) * 91.0F;
+            const float startAngle = hashNoise(boltSeed) * 2.0F * std::numbers::pi_v<float>;
+            Vector2 point{.x = pos.x + std::cos(startAngle) * radius,
+                         .y = pos.y + std::sin(startAngle) * radius};
+            for (int32_t s = 0; s < segments; s++)
+            {
+                boltSeed += 7.7F;
+                const Vector2 next{
+                    .x = pos.x + (hashNoise(boltSeed) - 0.5F) * 2.0F * radius,
+                    .y = pos.y + (hashNoise(boltSeed + 3.3F) - 0.5F) * 2.0F * radius};
+                DrawLineEx(point, next, 1.5F, Fade(Palette::ElementStatic, 0.8F));
+                point = next;
+            }
+        }
+    }
+
+    if (frozen)
+    {
+        DrawCircleLines(static_cast<int32_t>(pos.x), static_cast<int32_t>(pos.y), radius + 3,
+                        Fade(Palette::ElementFreeze, 0.55F));
+        DrawCircleLines(static_cast<int32_t>(pos.x), static_cast<int32_t>(pos.y), radius + 5,
+                        Fade(Palette::ElementFreeze, 0.3F));
+    }
+}
+
 void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
 {
     const auto& kind = enemyKinds.at(static_cast<size_t>(enemy.kind));
@@ -1381,8 +1633,7 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     }
     if (enemy.burnDps > 0)
     {
-        // Also doubles as the tell for Forgeborn's Burn immunity (Solar Forge): its burnDps
-        // never gets set in applyElementDebuff, so it's the only enemy that never shows this.
+
         const float flicker = 0.6F + 0.4F * std::sin(static_cast<float>(GetTime()) * 10.0F);
         color = ColorLerp(color, Palette::ElementBurn, 0.5F * flicker);
     }
@@ -1437,6 +1688,8 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
                                      (enemy.position.x + enemy.position.y) * 0.15F,
                                  360.0F);
     drawEnemyShape(kind.shape, enemy.position, kind.radius, spin, color);
+    drawElementalDebuffEffects(enemy.position, kind.radius, enemy.burnDps > 0, enemy.debuffStatic,
+                               enemy.debuffFreeze);
 
     constexpr float enemyHealthMult = 1.2F;
     auto maxHealth = static_cast<int32_t>(static_cast<float>(kind.health) * enemyHealthMult *
@@ -1540,8 +1793,7 @@ void drawBossHull(BossShape shape, Vector2 center, Vector2 size, Color color)
         DrawPolyLines(center, 6, size.x / 2 * 0.65F, 0, Fade(Palette::StructDark, 0.6F));
         break;
     case BossShape::Segment:
-        // Organic hull - a soft-edged blob rather than a hard geometric plate, shared by the
-        // Wreckworm head and every chain segment alike (see BossShape::Segment in boss.hpp).
+
         DrawCircle(cx, cy, size.x / 2, color);
         DrawCircle(cx, cy, size.x / 2 * 0.55F, Fade(Palette::StructLight, 0.3F));
         DrawCircleLines(cx, cy, size.x / 2, Fade(Palette::StructDark, 0.6F));
@@ -1575,10 +1827,9 @@ void drawBoss(const Game& game, const Boss& boss)
     }
 
     drawBossHull(boss.shape, bossCenter, boss.size, ufoColor);
+    drawElementalDebuffEffects(bossCenter, std::max(boss.size.x, boss.size.y) / 2, boss.burnDps > 0,
+                               boss.debuffStatic, boss.debuffFreeze);
 
-    // Plates are real Boss entries (see boss.hpp) drawn through this same function via the
-    // generic per-boss loop, so a thin ring marks one out as "attached and protecting" vs. an
-    // independent attacker (no ring - reads the same as any other boss once it's cut loose).
     if (boss.isBeltbreakerPlate && boss.plateAttached)
     {
         DrawCircleLinesV(bossCenter, boss.size.x * 0.75F, ColorAlpha(Palette::Shield, 0.6F));
@@ -1586,8 +1837,7 @@ void drawBoss(const Game& game, const Boss& boss)
 
     if (boss.isBeltbreaker && !boss.beltbreakerShielded)
     {
-        // Fills up clockwise from empty to full as the core's shield charges - killing plates
-        // (see updateBeltbreakerCore) directly slows how fast this ring fills.
+
         const float ringRadius = boss.size.x * 0.65F;
         DrawRing(bossCenter, ringRadius - 3, ringRadius + 3, -90.0F,
                 -90.0F + 360.0F * std::clamp(boss.shieldGenProgress, 0.0F, 1.0F), 48, Palette::Shield);
@@ -1595,9 +1845,7 @@ void drawBoss(const Game& game, const Boss& boss)
 
     if (boss.isBeltbreaker && boss.beltbreakerShielded)
     {
-        // The core is untouchable right now - its plates are out attacking independently (drawn
-        // through this same function). The ring drains clockwise as the shield runs down, so you
-        // can see exactly how long until the plates come home and it drops.
+
         const float total = UpdateConstants::beltbreakerShieldedDuration(boss.plateCount);
         const float frac = std::clamp(boss.beltbreakerShieldTimer / total, 0.0F, 1.0F);
         const float alpha = 0.35F + 0.25F * (std::sin(static_cast<float>(GetTime()) * 3.0F) + 1.0F) * 0.5F;
@@ -1626,10 +1874,6 @@ void drawBoss(const Game& game, const Boss& boss)
         }
     }
 
-    // Plates (and Wreckworm chain segments, same reasoning) are small and can be several-at-once,
-    // so they keep a compact floating bar for quick in-combat reads. Real bosses get the "boss
-    // feel" treatment instead - see drawBossHealthBars, a fixed bar anchored to the bottom of the
-    // screen rather than a label that moves and shrinks with the boss's own hull.
     if ((boss.isBeltbreakerPlate || boss.isWreckwormSegment) && boss.health > 0)
     {
         const float healthPercentage =
@@ -1772,8 +2016,7 @@ void drawOrbitBlades(const Game& game)
 
             if (w.flashTimer > 0)
             {
-                // Matches the shot count in updateOrbitBladeLaunch() so every launched slot
-                // regrows, not just one.
+
                 const int32_t shots = std::max(1, count / 2);
                 constexpr float regrowDuration = 0.35F;
                 const float progress = 1 - w.flashTimer / regrowDuration;
@@ -1800,39 +2043,10 @@ void drawOrbitBlades(const Game& game)
             break;
         }
         case WeaponType::Flamethrower:
-        {
-            // Was entirely unrendered before — updateFlamethrower() dealt real damage but had no
-            // visual counterpart at all, so the weapon looked completely non-functional in play.
-            if (!flamethrowerActive(w.level))
-            {
-                break;
-            }
-            const float range = flamethrowerRangeFor(w.level);
-            const float halfAngle = flamethrowerHalfAngleRad();
-            // Cheap flicker so it reads as fire rather than a static wedge.
-            const float flicker =
-                0.75F + 0.25F * std::sin(static_cast<float>(GetTime()) * 18.0F);
-            for (const auto& dir : flamethrowerConeDirs(game, w.level))
-            {
-                const float baseAngle = std::atan2(dir.y, dir.x);
-                const Vector2 left{
-                    .x = game.run.player.position.x + std::cos(baseAngle - halfAngle) * range,
-                    .y = game.run.player.position.y + std::sin(baseAngle - halfAngle) * range};
-                const Vector2 right{
-                    .x = game.run.player.position.x + std::cos(baseAngle + halfAngle) * range,
-                    .y = game.run.player.position.y + std::sin(baseAngle + halfAngle) * range};
-                const Vector2 mid{
-                    .x = game.run.player.position.x + std::cos(baseAngle) * range * 0.5F,
-                    .y = game.run.player.position.y + std::sin(baseAngle) * range * 0.5F};
-                DrawTriangle(game.run.player.position, left, right,
-                            Fade(Palette::AccentDim, 0.30F * flicker));
-                DrawTriangle(game.run.player.position, mid, right,
-                            Fade(Palette::Crit, 0.35F * flicker));
-                DrawTriangleLines(game.run.player.position, left, right,
-                                  Fade(Palette::Accent, 0.5F * flicker));
-            }
+            // Drawn as fading particle puffs (see game.run.flameParticles, spawned by
+            // updateFlamethrower) rather than a flat cone shape here - rendered alongside the
+            // dash trail particles below.
             break;
-        }
         case WeaponType::Shock:
         {
             const float maxRadius = shockwaveRadius(w.level, w.evolved);
@@ -1950,10 +2164,6 @@ void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius)
                  Vector2Subtract(base, Vector2Scale(perp, 6)), Palette::Crit);
 }
 
-// Anchored to the bottom of the screen, like a classic boss-fight HP bar, rather than a label
-// that shrinks and moves with the boss's own hull - Beltbreaker plates are excluded (they keep
-// their own small floating bar in drawBoss; several stacked full-width bars for up to 8 plates
-// would be noise, not a "boss feel").
 void drawBossHealthBars(const Game& game)
 {
     const auto scaledScreenWidth =
@@ -2278,6 +2488,22 @@ void drawActiveBuffs(const Game& game, int32_t x, int32_t y)
         const std::string label =
             std::format("Overdrive {:.0f}s", std::ceil(player.overdriveTimer));
         drawText(game, label.c_str(), cursorX + 18, y, 16, Palette::Crit);
+        cursorX += 18 + static_cast<int32_t>(label.size()) * 9 + 14;
+    }
+
+    if (game.run.weaponDowngrade.has_value())
+    {
+        const auto& downgrade = *game.run.weaponDowngrade;
+        const Vector2 iconCenter{.x = static_cast<float>(cursorX) + 9,
+                                 .y = static_cast<float>(y) + 9};
+        drawWeaponIcon(downgrade.type, iconCenter, 7, Palette::Accent);
+        DrawTriangle(Vector2{.x = iconCenter.x - 3, .y = iconCenter.y + 8},
+                    Vector2{.x = iconCenter.x + 3, .y = iconCenter.y + 8},
+                    Vector2{.x = iconCenter.x, .y = iconCenter.y + 13}, Palette::Accent);
+        const std::string label =
+            std::format("{} stolen {:.0f}s", weaponDisplayName(downgrade.type),
+                        std::ceil(downgrade.timer));
+        drawText(game, label.c_str(), cursorX + 24, y, 16, Palette::Accent);
     }
 }
 

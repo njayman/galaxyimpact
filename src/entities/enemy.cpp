@@ -20,9 +20,7 @@ auto enemyDamage(const Game& game, int32_t base) -> int32_t
 
 void spawnEnemy(Game& game)
 {
-    // Biome-exclusive kinds are outnumbered ~3:1 by the always-available generic roster, which
-    // buried them to a barely-noticeable ~20% of spawns and made biomes not feel distinct. Give
-    // exclusives extra weight (duplicate entries) so the current biome's roster dominates.
+
     constexpr int biomeExclusiveWeight = 4;
 
     std::vector<int> eligible;
@@ -135,8 +133,7 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
     game.run.enemies.at(index).health -= amount;
     game.run.enemies.at(index).hitFlashTimer = UpdateConstants::hitFlashDuration;
     applyActiveElementalDebuffs(game, game.run.enemies.at(index));
-    // Display the actual HP consumed rather than the raw amount, so an instakill (e.g. amount =
-    // 999) shows the enemy's real remaining health instead of a misleadingly huge number.
+
     spawnDamageNumber(game, game.run.enemies.at(index).position, std::min(amount, healthBefore));
 
     if (game.run.enemies.at(index).health > 0)
@@ -260,7 +257,7 @@ void updateEnemies(Game& game, float deltaTime)
 
         if (enemy.debuffStatic)
         {
-            // No movement, no attacks, no state-machine progress at all.
+
         }
         else if (enemy.debuffConfuse)
         {
@@ -295,8 +292,6 @@ void updateEnemies(Game& game, float deltaTime)
                         }
                     }
 
-                    // Confuse's friendly fire: retarget at another enemy instead of the player,
-                    // if one exists; otherwise this fire cycle is simply skipped.
                     if (!otherTargets.empty())
                     {
                         const Vector2 targetPos = otherTargets.at(static_cast<size_t>(
@@ -600,4 +595,3 @@ void updateEnemies(Game& game, float deltaTime)
         }
     }
 }
-

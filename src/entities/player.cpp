@@ -231,6 +231,8 @@ void updateBossDeathShockwave(Game& game, float deltaTime)
 
 void updatePlayerMovement(Game& game, float deltaTime)
 {
+    const Vector2 startPosition = game.run.player.position;
+
     const bool inBlackHole =
         game.run.blackhole.active &&
         Vector2Distance(game.run.player.position, game.run.blackhole.position) <=
@@ -323,6 +325,8 @@ void updatePlayerMovement(Game& game, float deltaTime)
         applyWormholeTransit(game, game.run.player.position, noVelocity, game.run.player.radius);
     }
 
+    game.run.player.velocity = Vector2Subtract(game.run.player.position, startPosition);
+
     if (const float dist = Vector2Length(game.run.player.position); dist > GameConstants::arenaHalf)
     {
         game.run.player.position =
@@ -352,10 +356,7 @@ void updatePlayerMovement(Game& game, float deltaTime)
             if (quirk != DashQuirk::Push)
             {
                 const float quirkMult = quirk == DashQuirk::Hybrid ? 0.5F : 1.0F;
-                // A shield-dash into the Beltbreaker core used to just get absorbed whenever it
-                // was actually vulnerable (no attached plates and shield not up yet) - the same
-                // window damageBoss itself checks. Reward landing it exactly then instead of it
-                // being functionally identical to hitting a normal boss.
+
                 const bool coreVulnerable = boss.isBeltbreaker && !boss.beltbreakerShielded &&
                                             countAttachedAlivePlates(game, boss) == 0;
                 const float coreBonusMult =
@@ -602,4 +603,3 @@ void collectLifeOrb(Game& game)
 {
     game.run.player.health = std::min(game.run.player.health + 0.5F, game.run.player.maxHealth);
 }
-

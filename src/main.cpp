@@ -33,18 +33,13 @@ auto main(int argc, char* argv[]) -> int
     SetTargetFPS(targetFPS);
 
     InitAudioDevice();
-    // Headroom margin: several BGM layers and SFX voices can play simultaneously and their
-    // linear samples just sum in raylib's mixer, so trim the master bus to keep worst-case
-    // overlap (rapid fire + explosion + boss music layers) from clipping.
+
     SetMasterVolume(0.85F);
 
     platformInitSaveData();
 
 #if defined(__EMSCRIPTEN__)
-    // IDBFS mounting/loading happens asynchronously; keep rendering frames (so the tab
-    // stays responsive and Asyncify keeps yielding to the browser) until it's ready,
-    // instead of blocking here before save data - and highscore loading in InitGame() -
-    // can safely happen.
+
     while (!platformSaveDataReady() && !WindowShouldClose())
     {
         BeginDrawing();

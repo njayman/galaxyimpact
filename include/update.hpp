@@ -29,7 +29,7 @@ constexpr float frameScale = 60.0F;
 constexpr float hitFlashDuration = 0.12F;
 constexpr float nerveBurstWindup = 0.35F;
 constexpr float beltbreakerPlateHealthPerTier = 220.0F;
-// 4/6/8 plates (wave 10/20/25 tiers) -> 12/16/20s shielded, matching updateBeltbreakerCore.
+
 constexpr auto beltbreakerShieldedDuration(int32_t plateCount) -> float
 {
     return 12.0F + static_cast<float>(plateCount - 4) * 2.0F;
@@ -112,7 +112,6 @@ void applyActiveElementalDebuffs(Game& game, Enemy& enemy);
 void applyElementDebuff(Boss& boss, ElementType element, float burnDps);
 void applyActiveElementalDebuffs(Game& game, Boss& boss);
 void collectElementalPickup(Game& game, ElementType element, ElementMechanism mechanism);
-void updateElementalFields(Game& game, float deltaTime);
 void updatePlayerBuffs(Game& game, float deltaTime);
 void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSource source,
               float knockback = 0);
@@ -163,7 +162,6 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter);
 void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter);
 void processBeamAttack(Game& game, Boss& boss, Vector2 beamStart, Vector2 beamEnd);
 void updateBgmLayers(Game& game, float deltaTime);
-
 
 auto nerveFrac(const Game& game) -> float;
 auto isNerveChargeFeeding(const Game& game) -> bool;

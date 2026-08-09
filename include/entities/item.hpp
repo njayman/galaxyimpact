@@ -24,18 +24,14 @@ enum class PickupType : std::uint8_t
     MagnetPulse,
     Overcharge,
     SecondWind,
-    // Temporary buff: dash and shield-block cost no ability charge for the duration (see
-    // Player::overdriveTimer, updateAbilityCharges).
+
     Overdrive,
-    // M23: risk-reward world pickup, visually distinct (bad colors/shapes, hazard-enemy visual
-    // language) — never offered as a level-up/reward choice, only spawns as a rare world drop.
+
     Danger,
 
     Count
 };
 
-// Static/Freeze/Burn/Confuse — permanent-until-death debuffs applied to regular enemies only
-// (bosses and elite hazards are immune). See ElementMechanism for how a pickup delivers one.
 enum class ElementType : std::uint8_t
 {
     Static,
@@ -46,12 +42,10 @@ enum class ElementType : std::uint8_t
     Count
 };
 
-// Three different ways an Elemental pickup can deliver its ElementType to enemies.
 enum class ElementMechanism : std::uint8_t
 {
-    Infusion, // Grants the player a timed buff: their hits apply the debuff while it's active.
-    Nova,     // Instantly applies the debuff to every enemy on the field, once.
-    Field,    // Drops a lingering zone that applies the debuff to anything that touches it.
+    Infusion,
+    Nova,
 
     Count
 };
@@ -69,17 +63,6 @@ class Pickup
     float maxLifetime;
 };
 
-// The Field mechanism's lingering zone: applies `element` once to any enemy that touches it.
-class ElementalField
-{
-  public:
-    Vector2 position;
-    float radius;
-    float timer;
-    ElementType element;
-    bool active;
-};
-
 constexpr std::array<std::string_view, static_cast<size_t>(ElementType::Count)> elementNames{
     "Static", "Freeze", "Burn", "Confuse"};
 
@@ -87,10 +70,8 @@ constexpr std::array<Color, static_cast<size_t>(ElementType::Count)> elementColo
     Palette::ElementStatic, Palette::ElementFreeze, Palette::ElementBurn, Palette::ElementConfuse};
 
 constexpr std::array<std::string_view, static_cast<size_t>(ElementMechanism::Count)>
-    elementMechanismNames{"Infusion", "Nova", "Field"};
+    elementMechanismNames{"Infusion", "Nova"};
 
-// One entry per selectable non-XP pickup variant — shared by the level-up "Pickup" choice, the
-// post-cap reward pool, and the sandbox pickup dropper, so there's a single list to maintain.
 struct PickupCatalogEntry
 {
     PickupType type;
@@ -99,7 +80,7 @@ struct PickupCatalogEntry
     std::string_view name;
 };
 
-constexpr std::array<PickupCatalogEntry, 20> pickupCatalog{
+constexpr std::array<PickupCatalogEntry, 16> pickupCatalog{
     PickupCatalogEntry{PickupType::LifeOrb, ElementType::Static, ElementMechanism::Infusion,
                        "Life Orb"},
     PickupCatalogEntry{PickupType::Shield, ElementType::Static, ElementMechanism::Infusion,
@@ -119,32 +100,20 @@ constexpr std::array<PickupCatalogEntry, 20> pickupCatalog{
                        "Static Infusion"},
     PickupCatalogEntry{PickupType::Elemental, ElementType::Static, ElementMechanism::Nova,
                        "Static Nova"},
-    PickupCatalogEntry{PickupType::Elemental, ElementType::Static, ElementMechanism::Field,
-                       "Static Field"},
     PickupCatalogEntry{PickupType::Elemental, ElementType::Freeze, ElementMechanism::Infusion,
                        "Freeze Infusion"},
     PickupCatalogEntry{PickupType::Elemental, ElementType::Freeze, ElementMechanism::Nova,
                        "Freeze Nova"},
-    PickupCatalogEntry{PickupType::Elemental, ElementType::Freeze, ElementMechanism::Field,
-                       "Freeze Field"},
     PickupCatalogEntry{PickupType::Elemental, ElementType::Burn, ElementMechanism::Infusion,
                        "Burn Infusion"},
     PickupCatalogEntry{PickupType::Elemental, ElementType::Burn, ElementMechanism::Nova,
                        "Burn Nova"},
-    PickupCatalogEntry{PickupType::Elemental, ElementType::Burn, ElementMechanism::Field,
-                       "Burn Field"},
     PickupCatalogEntry{PickupType::Elemental, ElementType::Confuse, ElementMechanism::Infusion,
                        "Confuse Infusion"},
     PickupCatalogEntry{PickupType::Elemental, ElementType::Confuse, ElementMechanism::Nova,
                        "Confuse Nova"},
-    PickupCatalogEntry{PickupType::Elemental, ElementType::Confuse, ElementMechanism::Field,
-                       "Confuse Field"},
 };
 
-// M15: Ricochet/FollowerDrone/LaserDrone are amplifier abilities rather than firing weapons, but
-// share the same slot/skill/level machinery as the 6 original weapons (see grantOrLevelWeapon) —
-// none of the 8 additions ever evolves, so their `skillLinkedPassive`/`evolvedWeaponName` entries
-// below are inert placeholders (evolutionUnlocked never gets set for them).
 enum class WeaponType : std::uint8_t
 {
     Forward,
@@ -173,16 +142,21 @@ class Weapon
     float timer;
     bool evolved;
     float flashTimer;
+    // Danger-pickup steal, level-1 case only (see WeaponDowngrade) - stops this weapon firing
+    // entirely without removing it from the loadout/slot count, so it can be cleanly restored.
+    bool disabled = false;
 };
 
-// M23: tracks the one active Danger-pickup weapon downgrade (if any). `amount` is the raw level
-// deduction applied, restored verbatim when `timer` runs out rather than snapshotting/restoring
-// an absolute level — simpler, and correct even if the weapon keeps leveling up mid-debuff.
+// M23 Danger pickup: steals one equipped weapon. Evolved -> un-evolve; otherwise level N ->
+// N-1; level 1 (never evolved) -> the weapon is disabled outright. Exactly one of
+// unevolved/disabled is ever true for a given instance (a plain level-down sets neither) -
+// restoration on timeout undoes whichever branch was taken.
 class WeaponDowngrade
 {
   public:
     WeaponType type;
-    int32_t amount;
+    bool unevolved = false;
+    bool disabled = false;
     float timer;
 };
 
@@ -274,8 +248,6 @@ constexpr std::array<SkillType, static_cast<size_t>(WeaponType::Count)> weaponGr
     SkillType::FlakCannon,   SkillType::Railgun,       SkillType::ChainLightning,
     SkillType::TurretDeploy, SkillType::Flamethrower};
 
-// Placeholder for the 8 M15 additions (indices 6-13) — never read since their `evolutionUnlocked`
-// flag never gets set, so the evolve-eligibility check in rollLevelUpChoices never passes for them.
 constexpr std::array<SkillType, static_cast<size_t>(WeaponType::Count)> skillLinkedPassive{
     SkillType::Damage,    SkillType::Barrier, SkillType::Cooldown, SkillType::PickupRadius,
     SkillType::MoveSpeed, SkillType::MaxHp,   SkillType::Damage,   SkillType::Damage,

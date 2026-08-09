@@ -8,13 +8,34 @@
 #include <cstddef>
 #include <vector>
 
+// Boss-specific attacks that only make sense on the boss they were built for - Beltbreaker/
+// Wreckworm build their own hand-picked movesets and never call this function, but nothing
+// previously stopped a *generic* boss from randomly rolling one of these and hitting code that
+// assumes fields (plateOwnerId, segmentCount, ...) a generic Boss never sets up. ShockwaveStomp
+// is excluded too: it's now a built-in anti-camping mechanic every boss has automatically (see
+// updateBossMovement), not a moveset pick.
+auto isGenericMovesetAttack(BossAttack attack) -> bool
+{
+    switch (attack)
+    {
+    case BossAttack::ShockwaveStomp:
+    case BossAttack::PlateHurl:
+    case BossAttack::BurrowCharge:
+    case BossAttack::CoilClamp:
+        return false;
+    default:
+        return true;
+    }
+}
+
 auto sampleBossMoveset(int count) -> std::vector<BossAttack>
 {
     std::vector<BossAttack> pool;
     pool.reserve(bossAttackCount);
     for (int i = 0; i < bossAttackCount; i++)
     {
-        if (const auto attack = static_cast<BossAttack>(i); DemoConfig::isBossAttackAllowed(attack))
+        if (const auto attack = static_cast<BossAttack>(i);
+            isGenericMovesetAttack(attack) && DemoConfig::isBossAttackAllowed(attack))
         {
             pool.push_back(attack);
         }
@@ -41,8 +62,6 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
         Vector2Add(game.run.player.position,
                    Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
 
-    // M11: the wave-100 placeholder final boss is a deliberately-picked, stat-boosted BossType
-    // rather than a random one — a bespoke final-boss shape/identity is a later pass.
     auto typeIndex =
         static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(bossTypes.size()) - 1));
     if constexpr (DemoConfig::isDemoBuild)
@@ -104,8 +123,6 @@ void spawnBossWave(Game& game, float healthMult, float sizeMult, bool isMega)
     playSFX(game, game.resources.sounds.bossWindUp);
 }
 
-// M11: wave 100 (and every 100th wave after, once infinite mode is unlocked) spawns this single
-// stat-boosted placeholder boss instead of a normal mega-boss.
 void spawnFinalBossWave(Game& game)
 {
     game.run.bossSpawnCount++;
@@ -113,9 +130,6 @@ void spawnFinalBossWave(Game& game)
     playSFX(game, game.resources.sounds.bossWindUp);
 }
 
-// The Beltbreaker: Shattered Belt's signature boss, replaces the generic random-BossType pick at
-// waves 10/20/25. Wave 25 (the biome's last wave) is the hardest appearance and a transition beat
-// into Rustbloom - see work/galaxy-impact/biomes/bosses.md in the brain.md vault for full design.
 void spawnBeltbreaker(Game& game, int32_t wave)
 {
     game.run.bossSpawnCount++;
@@ -135,9 +149,6 @@ void spawnBeltbreaker(Game& game, int32_t wave)
     }
     const bool overloadBeam = wave >= 20;
 
-    // Regular megabosses spawn far out (1200-1500) since they close the gap fast on their own.
-    // The Beltbreaker detaches plates that used to despawn if they ended up too far from the
-    // player, so it spawns closer to keep the whole fight on-screen from the start.
     const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
     const auto dist = static_cast<float>(GetRandomValue(500, 650));
     const Vector2 spawnPos =
@@ -147,11 +158,6 @@ void spawnBeltbreaker(Game& game, int32_t wave)
     const auto health = static_cast<int32_t>(static_cast<float>(500 + tier * bossHpPerTier) *
                                              megaBossHealthMult * enemyHealthMult);
 
-    // Barrage is the real damage every appearance has from wave 1 - GravityWell alone (its old
-    // sole wave-10 move) just drags the player in without ever threatening them, which read as
-    // "the boss doesn't attack." Beam joins at wave 20+ as the harder-to-dodge follow-up.
-    // PlateHurl is a deliberate attack on top of the "at whim" harassment excursions - the core
-    // can launch its whole ring at once, not just pick one plate off.
     std::vector<BossAttack> moveset{BossAttack::Barrage, BossAttack::GravityWell,
                                     BossAttack::PlateHurl};
     if (overloadBeam)
@@ -191,10 +197,6 @@ void spawnBeltbreaker(Game& game, int32_t wave)
               .plateRotationSpeed = beltbreakerRotationSpeed * rotationMult,
               .instanceId = game.run.bossSpawnCount};
 
-    // Plates are real Boss entries (see boss.hpp) so they get full weapon collision for free and
-    // an explicit owner id instead of a synthetic hit-test. Spawned attached, orbiting the core,
-    // from the moment the core exists - they detach on their own once the shield finishes
-    // charging (see updateBeltbreakerCore) rather than needing a separate spawn step later.
     const auto plateHealth =
         static_cast<int32_t>(UpdateConstants::beltbreakerPlateHealthPerTier * enemyHealthMult);
     for (int32_t i = 0; i < plateCount; i++)
@@ -223,9 +225,6 @@ void spawnBeltbreaker(Game& game, int32_t wave)
     playSFX(game, game.resources.sounds.bossWindUp);
 }
 
-// The Wreckworm: Rustbloom's signature boss, replaces the generic random-BossType pick at waves
-// 30/40/50. Wave 50 (the biome's last wave) is the hardest appearance and a transition beat into
-// Solar Forge - see work/galaxy-impact/biomes/bosses.md in the brain.md vault for full design.
 void spawnWreckworm(Game& game, int32_t wave)
 {
     game.run.bossSpawnCount++;
@@ -245,7 +244,6 @@ void spawnWreckworm(Game& game, int32_t wave)
         segmentCount = 9;
         burrowChargeUnlocked = true;
     }
-    // Molt pops thresholds off the back as health falls, so they're listed descending above.
 
     const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
     const auto dist = static_cast<float>(GetRandomValue(500, 650));
@@ -295,9 +293,6 @@ void spawnWreckworm(Game& game, int32_t wave)
               .wreckwormSpeedMult = 1.0F,
               .moltThresholds = std::move(moltThresholds)};
 
-    // Segments spawn already trailing the head in a line, alternating armor (dull, tanky, low
-    // priority) and infected (bright, softer, the real target) - the same alternation the design
-    // calls for, starting with an armor segment right behind the head.
     const Vector2 trailDir = Vector2Normalize(Vector2Subtract(spawnPos, game.run.player.position));
     const auto infectedHealth = static_cast<int32_t>(wreckwormSegmentHealthPerTier *
                                                      static_cast<float>(tier) * enemyHealthMult) +
@@ -361,8 +356,27 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
         boss.recoveryTimer -= deltaTime;
     }
 
-    // A segment never runs its own movement - it's entirely driven by updateWreckwormChain (or,
-    // during CoilClamp, by the head's own attack code in updateBoss).
+    // Built-in anti-camping punish (see Boss::meleeStompTimer) - explicitly excludes segments
+    // and attached plates rather than relying on the early-returns below, since both of those
+    // sit at their default IDLE state forever (their position/attacks are driven by their
+    // owner, not this function) and would otherwise silently accumulate toward a stomp neither
+    // one is set up to perform independently.
+    if (!boss.isWreckwormSegment && !(boss.isBeltbreakerPlate && boss.plateAttached) &&
+        boss.health > 0 && boss.state == BossState::IDLE &&
+        Vector2Distance(game.run.player.position, bossCenter) <= UpdateConstants::shockwaveStompRadius)
+    {
+        boss.meleeStompTimer += deltaTime;
+        if (boss.meleeStompTimer >= bossMeleeStompTriggerDuration)
+        {
+            boss.meleeStompTimer = 0;
+            forceBossAttack(game, boss, BossAttack::ShockwaveStomp);
+        }
+    }
+    else
+    {
+        boss.meleeStompTimer = 0;
+    }
+
     if (boss.isWreckwormSegment)
     {
         return;
@@ -372,8 +386,7 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
     {
         if (boss.plateAttached)
         {
-            // Always surrounds and revolves with the core - recomputed every frame from the
-            // core's live position/rotation, not just while visually "in the ring."
+
             if (Boss* core = findBeltbreakerById(game, boss.plateOwnerId); core != nullptr)
             {
                 const Vector2 slotCenter = beltbreakerPlateSlotPosition(*core, boss.plateSlotIndex);
@@ -381,9 +394,6 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
                     slotCenter, Vector2{.x = boss.size.x / 2, .y = boss.size.y / 2});
             }
 
-            // Regen isn't instant, and a plate can't recover health and contribute to shield
-            // generation at once (see countContributingPlates) - it just sits at whatever health
-            // it came home with and climbs back to full over beltbreakerPlateRegenDuration.
             if (boss.health > 0 && boss.health < boss.maxHealth)
             {
                 const float healPerSecond =
@@ -411,8 +421,7 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
                 }
                 else
                 {
-                    // Reforms its OWN slot (not just any open one). Health is whatever it came
-                    // back with - regen happens gradually while attached, not instantly here.
+
                     boss.plateAttached = true;
                     boss.plateReturning = false;
                     boss.plateExcursionTimer = 0;
@@ -420,16 +429,12 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
             }
             else
             {
-                // Core is gone - nothing to go home to; keep fighting independently.
+
                 boss.plateReturning = false;
             }
             return;
         }
 
-        // Detached and not returning: an excursion (whim harassment or PlateHurl) forces its own
-        // early return once the timer runs out, regardless of the core's shield state. A plate
-        // detached via the full shield-generation cycle has no timer and just waits on the
-        // core's own recall (see triggerBeltbreakerReturn).
         if (boss.plateExcursionTimer > 0)
         {
             boss.plateExcursionTimer -= deltaTime;
@@ -440,30 +445,18 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
                 return;
             }
         }
-        // Falls through to the same chase/strafe every other boss uses below - it's just an
-        // independent boss for now.
+
     }
 
-    // M12 dodge-window fix: EVERY attack now holds the boss still while actually firing (was only
-    // 4 of 11 — Spread/MineDrop/SummonAdds/ShockwaveStomp/Barrage/GravityWell/HomingBarrage used
-    // to strafe and chase at full speed *while* attacking, denying any weapon that needs proximity
-    // or sustained aim a reliable window). The restless strafe/chase this function does for every
-    // other state (IDLE, WINDING_UP) is deliberately untouched — bosses should still feel
-    // aggressive and hard to pin down between attacks, just not *during* one.
     if (boss.state == BossState::SHOOTING || boss.recoveryTimer > 0)
     {
         return;
     }
 
-    // Static: same as an enemy's - no movement, no attacks, no state-machine progress at all.
     if (boss.debuffStatic)
     {
         return;
     }
-
-    // A frozen, off-screen-but-still-attacking Beltbreaker core read as broken (unavoidable
-    // damage from a target the player can't even see) - it now moves and chases exactly like
-    // every other boss (never camera-relative) in every phase, Shielded included.
 
     const Vector2 toPlayer = Vector2Subtract(game.run.player.position, bossCenter);
     const float dist = Vector2Length(toPlayer);
@@ -478,9 +471,7 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
     const bool enraged =
         boss.health > 0 &&
         static_cast<float>(boss.health) <= static_cast<float>(boss.maxHealth) * enrageHealthFrac;
-    // M12: was 1.6F — sped the boss up exactly when players are trying to land the killing blow.
-    // Kept modest rather than removed outright so enrage still reads as "more dangerous," just not
-    // actively fighting the player's ability to finish the fight.
+
     const float speedMult = (enraged ? 1.25F : 1.0F) * (boss.debuffFreeze ? freezeSlowMult : 1.0F) *
                             (boss.isBeltbreakerPlate ? beltbreakerPlateMoveSpeedMult : 1.0F) *
                             (boss.isWreckwormHead ? boss.wreckwormSpeedMult : 1.0F);
@@ -498,8 +489,6 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
     }
 }
 
-// boss.position is the top-left corner (as in drawBoss's bossCenter) - offset by size/2 so this
-// matches where the core is actually drawn, not its hull's corner.
 auto beltbreakerCoreCenter(const Boss& core) -> Vector2
 {
     return Vector2{.x = core.position.x + core.size.x / 2, .y = core.position.y + core.size.y / 2};
@@ -526,8 +515,6 @@ auto findBeltbreakerById(Game& game, int32_t instanceId) -> Boss*
     return nullptr;
 }
 
-// "Protecting": any attached, alive plate blocks core damage regardless of its health - this is
-// what damageBoss checks for core invulnerability.
 auto countAttachedAlivePlates(Game& game, const Boss& core) -> int32_t
 {
     int32_t count = 0;
@@ -542,9 +529,6 @@ auto countAttachedAlivePlates(Game& game, const Boss& core) -> int32_t
     return count;
 }
 
-// "Contributing": attached AND fully healed. A plate can't recover its own health and help
-// charge the shield at the same time (see the regen tick in updateBossMovement) - it still
-// physically protects the core while regenerating, it just doesn't speed up the shield.
 auto countContributingPlates(Game& game, const Boss& core) -> int32_t
 {
     int32_t count = 0;
@@ -559,9 +543,6 @@ auto countContributingPlates(Game& game, const Boss& core) -> int32_t
     return count;
 }
 
-// Generation complete: every attached plate cuts loose and becomes its own independent boss -
-// same generic chase/attack code as any other boss (see updateBossMovement/updateBoss), just
-// with a small stagger on attackTimer so all plates don't all open fire in the same instant.
 void detachBeltbreakerPlates(Game& game, const Boss& core)
 {
     for (auto& boss : game.run.bosses)
@@ -576,9 +557,6 @@ void detachBeltbreakerPlates(Game& game, const Boss& core)
     }
 }
 
-// Only recalls THIS core's own plates (matched by Boss::instanceId) - with two Beltbreakers
-// alive at once, a global "recall every plate in the game" would yank the other core's plates
-// home early too.
 void triggerBeltbreakerReturn(Game& game, const Boss& core)
 {
     for (auto& boss : game.run.bosses)
@@ -591,20 +569,12 @@ void triggerBeltbreakerReturn(Game& game, const Boss& core)
     }
 }
 
-// Sends a single attached plate out on a timed job (whim harassment or a PlateHurl launch) -
-// unlike the full-cycle detach above, this plate forces its own return once durationSeconds
-// elapses, regardless of whether the core's shield ever goes up.
 void sendPlateOnExcursion(Boss& plate, float durationSeconds)
 {
     plate.plateAttached = false;
     plate.plateExcursionTimer = durationSeconds;
 }
 
-// The core's shield-generation / detach / recall cycle, plus the "at whim" harassment excursion
-// (not every plate cycle is the same to-and-fro - the core can peel one plate off to attack
-// independent of the main generate/detach/return timing). Plate orbiting, homing, regen, and
-// excursion countdowns are handled per-plate in updateBossMovement (every plate is its own Boss
-// update).
 void updateBeltbreakerCore(Game& game, Boss& core, float deltaTime)
 {
     if (!core.isBeltbreaker || core.health <= 0)
@@ -635,8 +605,6 @@ void updateBeltbreakerCore(Game& game, Boss& core, float deltaTime)
             return;
         }
 
-        // "At whim": while still generating, the core can peel a single healthy attached plate
-        // off to harass the player independently, without waiting for the whole ring to detach.
         core.harassTimer -= deltaTime;
         if (core.harassTimer <= 0)
         {
@@ -700,11 +668,6 @@ auto findWreckwormSegment(Game& game, int32_t headId, int32_t segmentIndex) -> B
     return nullptr;
 }
 
-// Snake-follow: each segment chases the entity ahead of it (the head, or the previous alive
-// segment), closing to wreckwormSegmentSpacing rather than snapping onto it - that's what gives
-// the chain its lag. Skipped entirely during CoilClamp, which drives segment positions itself
-// (see the CoilClamp handling in updateBoss) - a dead segment (molted) is simply skipped, the
-// next one in line just follows the one before it instead.
 void updateWreckwormChain(Game& game, Boss& head, float deltaTime)
 {
     if (!head.isWreckwormHead)
@@ -744,9 +707,6 @@ void updateWreckwormChain(Game& game, Boss& head, float deltaTime)
     }
 }
 
-// Molt: sheds the tail-most alive segments as the head's health crosses each scheduled threshold
-// (see Boss::moltThresholds), then opens the "exposed lull" crit window - reuses recoveryTimer
-// (holds movement) and a matching attackTimer reset (holds attacks) rather than adding new state.
 void triggerWreckwormMolt(Game& game, Boss& head)
 {
     constexpr int32_t moltShedCount = 2;
@@ -803,15 +763,10 @@ void applyActiveElementalDebuffs(Game& game, Boss& boss)
     }
 }
 
-// M18: centralizes every boss.health -= site so damage numbers and proportional hit-stop only
-// need to live in one place instead of being duplicated at each of the ~10 call sites.
 void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake)
 {
     applyActiveElementalDebuffs(game, boss);
 
-    // The core is invulnerable while its shield is up, or while it still has any attached plate
-    // protecting it - killing every attached plate (or waiting for the shield to finish charging
-    // and detach them) is the only way through. See updateBeltbreakerCore.
     if (boss.isBeltbreaker &&
         (boss.beltbreakerShielded || countAttachedAlivePlates(game, boss) > 0))
     {
@@ -819,9 +774,6 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake)
         return;
     }
 
-    // Armor segments are dull, tanky, low-priority filler - "block shots" reads here as taking a
-    // fraction of the hit rather than a full binary block, so they're still worth chipping in a
-    // pinch, just clearly not the efficient target.
     if (boss.isWreckwormSegment && boss.isArmorSegment)
     {
         amount = std::max(
@@ -831,18 +783,12 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake)
     boss.health -= amount;
     boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
     spawnDamageNumber(game, boss.position, amount);
-    // Continuous-contact ticks (beam/orbit-blade/burn accumulators calling this every frame) used
-    // to keep resetting the shake timer back to full before it could ever decay, reading as a
-    // shake that never stops - those callers pass applyShake=false and rely on the initial
-    // first-contact hit (which still shakes) instead.
+
     if (applyShake)
     {
         triggerShake(game, damageShakeIntensity(amount), damageShakeDuration);
     }
 
-    // Hit-stop scales with how big a bite this hit took out of the boss's max health, so a
-    // single heavy attack (e.g. a nerve burst or evolved weapon) reads as a "heavy" hit without
-    // needing every source of boss damage to hand-tune its own hitstop duration.
     constexpr float heavyHitFraction = 0.05F;
     constexpr float heavyHitPause = 0.1F;
     if (boss.maxHealth > 0 &&
@@ -864,21 +810,17 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake)
 
 void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 {
-    // Static: no state-machine progress at all, mirroring updateBossMovement's early return.
+
     if (boss.debuffStatic)
     {
         return;
     }
 
-    // An attached plate is protecting the core, not attacking - it only starts running its own
-    // attack moveset once detached (see updateBeltbreakerCore / detachBeltbreakerPlates).
     if (boss.isBeltbreakerPlate && boss.plateAttached)
     {
         return;
     }
 
-    // A segment never attacks on its own - only the Wreckworm head runs an attack state machine
-    // (see the Architecture pattern note: reuse existing systems instead of per-segment timers).
     if (boss.isWreckwormSegment)
     {
         return;
@@ -894,8 +836,6 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
     case BossState::IDLE:
         boss.attackTimer -= deltaTime;
 
-        // Confuse: too disoriented to commit to a new attack - it'll keep winding down its
-        // timer but never actually pull the trigger until the debuff clears.
         if (boss.attackTimer <= 0 && boss.health > 0 && !boss.debuffConfuse)
         {
             boss.attack = boss.moveset.at(static_cast<size_t>(
@@ -918,9 +858,6 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 break;
             case BossAttack::WormholeBeam:
                 boss.color = Palette::Shield;
-                break;
-            case BossAttack::MineDrop:
-                boss.color = Palette::AccentDim;
                 break;
             case BossAttack::ChargeDash:
                 boss.color = Palette::Crit;
@@ -946,10 +883,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             case BossAttack::BurrowCharge:
             {
                 boss.color = Palette::RustbloomHaze;
-                // Teleports now, during the wind-up, rather than at the moment it fires - the
-                // generic WINDING_UP charge-particle draw (drawBoss) already centers on the
-                // boss's live position, so this alone doubles as the "ground-crack" telegraph at
-                // the entry point without any bespoke draw code.
+
                 const float burrowAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
                 const auto burrowDist = static_cast<float>(GetRandomValue(550, 700));
                 const Vector2 entry = Vector2Add(game.run.player.position,
@@ -1093,9 +1027,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             boss.barrageTimer -= deltaTime;
             if (boss.barrageTimer <= 0)
             {
-                // A plate's Barrage is a mini version of the core's - slower shots, fired less
-                // often, for less damage, not a full-strength boss attack from something meant
-                // to be an individually-manageable threat.
+
                 const float attackScale =
                     boss.isBeltbreakerPlate ? beltbreakerPlateAttackScale : 1.0F;
                 boss.barrageTimer = barrageFireInterval / attackScale;
@@ -1143,20 +1075,13 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             const Vector2 toBoss = Vector2Subtract(bossCenter, game.run.player.position);
             if (Vector2Length(toBoss) > 0)
             {
-                // Pull now scales with the player's own speed instead of a flat constant - only
-                // holding the exact opposite direction lets them crawl free; any other input
-                // still nets them pulled in, which a flat pull well below player speed never
-                // threatened.
+
                 const Vector2 pull = Vector2Scale(Vector2Normalize(toBoss),
                                                   game.run.player.speed * gravityWellPullFraction);
                 game.run.player.position = Vector2Add(game.run.player.position,
                                                       Vector2Scale(pull, deltaTime * frameScale));
             }
 
-            // Getting dragged toward the core is far more dangerous if it still has its ring -
-            // plates spin up into a fan (even while the core is shielded) on top of their normal
-            // rotation in updateBeltbreakerCore, so running the wrong way (toward it) risks being
-            // chewed up by the ring, not just the pull itself.
             if (boss.isBeltbreaker)
             {
                 boss.plateAngleDeg =
@@ -1168,8 +1093,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 
         if (boss.attack == BossAttack::PlateHurl)
         {
-            // One-shot in effect: after the first SHOOTING frame every attached plate has
-            // detached, so later frames of this same attack find nothing left to launch.
+
             for (auto& plate : game.run.bosses)
             {
                 if (!plate.isBeltbreakerPlate || plate.plateOwnerId != boss.instanceId ||
@@ -1328,9 +1252,6 @@ void forceBossAttack(Game& game, Boss& boss, BossAttack attack)
     case BossAttack::WormholeBeam:
         boss.color = Palette::Shield;
         break;
-    case BossAttack::MineDrop:
-        boss.color = Palette::AccentDim;
-        break;
     case BossAttack::ChargeDash:
         boss.color = Palette::Crit;
         break;
@@ -1372,9 +1293,6 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
 
     boss.state = BossState::SHOOTING;
 
-    const auto projectileHealth = static_cast<int32_t>(std::max(
-        1.0F, static_cast<float>(baseProjectileHealth) * enemyHealthMult * waveEnemyScale(game)));
-
     switch (boss.attack)
     {
     case BossAttack::Beam:
@@ -1411,27 +1329,6 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         triggerShake(game, 6, 0.25F);
         break;
     }
-    case BossAttack::MineDrop:
-        boss.stateTimer = 0.5F;
-        playSFX(game, game.resources.sounds.slamBoom);
-        duckBGM(game);
-        for (int i = 0; i < mineDropCount; i++)
-        {
-            const float angle = static_cast<float>(i) * (360.0F / mineDropCount) * DEG2RAD;
-            const auto dist = static_cast<float>(GetRandomValue(60, 140));
-            const Vector2 pos = Vector2Add(
-                bossCenter, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
-
-            game.run.bossProjectiles.push_back(BossProjectile{.position = pos,
-                                                              .velocity = Vector2{},
-                                                              .radius = mineDropRadius,
-                                                              .homing = false,
-                                                              .active = true,
-                                                              .fromPlayer = false,
-                                                              .damage = mineDropDamage,
-                                                              .health = projectileHealth});
-        }
-        break;
     case BossAttack::ChargeDash:
         boss.stateTimer = chargeDashDuration;
         boss.chargeVelocity = Vector2Scale(
@@ -1509,9 +1406,7 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         triggerShake(game, 8, 0.3F);
         break;
     case BossAttack::CoilClamp:
-        // Center is whatever boss.targetPosition last got set to during WINDING_UP (see
-        // updateBoss) - a near-live read of the player's position at the moment the ring starts
-        // closing, reusing the field instead of adding a dedicated one.
+
         boss.stateTimer = wreckwormCoilClampDuration;
         boss.coilClampGapDeg = static_cast<float>(GetRandomValue(0, 359));
         playSFX(game, game.resources.sounds.bossWindUp);
@@ -1520,4 +1415,3 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         break;
     }
 }
-

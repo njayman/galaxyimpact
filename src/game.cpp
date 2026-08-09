@@ -202,6 +202,7 @@ void resetRun(Game& game)
     const ShipDef& ship = currentShip(game);
 
     game.run.player = Player{.position = Vector2{},
+                             .velocity = Vector2{},
                              .radius = ship.radius,
                              .color = ship.color,
                              .speed = ship.speed,
@@ -249,9 +250,9 @@ void resetRun(Game& game)
     game.run.orbitBladeProjectiles.clear();
     game.run.nerveBallProjectiles.clear();
     game.run.nerveSpiralProjectiles.clear();
-    game.run.elementalFields.clear();
     game.run.deathParticles.clear();
     game.run.dashTrailParticles.clear();
+    game.run.flameParticles.clear();
     game.run.damageNumbers.clear();
     game.run.weaponDowngrade = std::nullopt;
     game.run.followerDrones.clear();

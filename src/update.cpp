@@ -22,7 +22,6 @@
 #include <vector>
 auto isConsumablePickup(PickupType type) -> bool { return type == PickupType::SecondWind; }
 
-// Capped so early waves aren't starved of consumable pickups and late waves don't guarantee them.
 auto consumablePickupBiasWeight(int32_t wave) -> float
 {
     constexpr float maxBias = 4.0F;
@@ -30,8 +29,6 @@ auto consumablePickupBiasWeight(int32_t wave) -> float
     return std::min(maxBias, 1.0F + static_cast<float>(wave) / waveDivisor);
 }
 
-// M26: temporary-buff durations (Regen, Overcharge, elemental Infusion/Field) scale up with wave
-// number, capped at +50% so it can't snowball into an imbalance in a long/infinite-mode run.
 auto pickupDurationScale(int32_t wave) -> float
 {
     constexpr float maxBonus = 0.5F;
@@ -63,9 +60,7 @@ auto pickWeightedPickupIndex(int32_t wave) -> size_t
     }
     return weights.size() - 1;
 }
-// M22: screen shake proportional to damage dealt, layered on top of (not replacing) the existing
-// hand-tuned per-event shakes elsewhere — triggerShake only ever increases toward the larger of
-// the two, so a big scripted attack shake is never undercut by a small per-hit one.
+
 auto damageShakeIntensity(int32_t amount) -> float
 {
     constexpr float perDamageUnit = 0.4F;
@@ -85,9 +80,6 @@ void triggerShake(Game& game, float intensity, float duration)
     }
 }
 
-// M18: floating damage number, spawned alongside every hit that reduces an enemy/boss/hazard's
-// health. Small random horizontal jitter keeps overlapping hits (e.g. a pierced line of enemies)
-// from stacking illegibly on top of each other.
 void spawnDamageNumber(Game& game, Vector2 position, int32_t amount)
 {
     constexpr float damageNumberLife = 0.6F;
@@ -112,9 +104,6 @@ void updateDamageNumbers(Game& game, float deltaTime)
     std::erase_if(game.run.damageNumbers, [](const DamageNumber& n) { return n.timer <= 0; });
 }
 
-// M23: restores the Danger-pickup weapon downgrade once its timer runs out. If the weapon is
-// somehow gone by then (shouldn't normally happen — weapons are never removed mid-run) this is a
-// no-op rather than a crash.
 void updateWeaponDowngrade(Game& game, float deltaTime)
 {
     if (!game.run.weaponDowngrade.has_value())
@@ -133,8 +122,20 @@ void updateWeaponDowngrade(Game& game, float deltaTime)
     {
         if (weapon.type == downgrade.type)
         {
-            weapon.level += downgrade.amount;
-            game.run.achievementToast = std::string(weaponDisplayName(weapon.type)) + " restored!";
+            if (downgrade.unevolved)
+            {
+                weapon.evolved = true;
+            }
+            else if (downgrade.disabled)
+            {
+                weapon.disabled = false;
+            }
+            else
+            {
+                weapon.level += 1;
+            }
+            game.run.achievementToast =
+                std::string(effectiveWeaponName(weapon)) + " restored!";
             game.run.achievementToastTimer = 3.0F;
             break;
         }
@@ -600,9 +601,6 @@ void updateBgmLayers(Game& game, float deltaTime)
     SetMusicVolume(game.resources.bgm.swarmBoss, game.resources.bgm.swarmBossVolume * duckFactor);
 }
 
-// M22: shared kill-explosion burst for enemies/elite hazards/bosses (reuses the same
-// `deathParticles` vector/update/draw path as the player's own death explosion). Bosses pass a
-// bigger particleCount/speedScale for a more dramatic pop.
 void spawnKillExplosion(Game& game, Vector2 position, Color color, int32_t particleCount,
                         float speedScale)
 {
@@ -658,7 +656,6 @@ void updateGameplay(Game& game, float deltaTime)
     updateTurrets(game, deltaTime);
     updateFlamethrower(game, deltaTime);
     updateChainLightningBolts(game, deltaTime);
-    updateElementalFields(game, deltaTime);
     updatePlayerBuffs(game, deltaTime);
     updateWaveSpawner(game, deltaTime);
     updateBlackHole(game, deltaTime);
@@ -723,11 +720,6 @@ void updateGameplay(Game& game, float deltaTime)
         const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
                                  .y = boss.position.y + boss.size.y / 2};
 
-        // A Beltbreaker plate is a fraction of a boss fight, not its own encounter - the full
-        // score/XP/shockwave/victory-fanfare treatment below is scaled for defeating an entire
-        // boss and would fire once per plate (up to 8 times a fight) otherwise.
-        // Same treatment for a Wreckworm chain segment (killed outright by combat, or shed by its
-        // own head's Molt) - a piece of the fight, not a fight of its own.
         if (boss.isBeltbreakerPlate || boss.isWreckwormSegment)
         {
             boss.health = 0;
@@ -742,9 +734,6 @@ void updateGameplay(Game& game, float deltaTime)
         game.run.score += 1000;
         anyBossKilledThisFrame = true;
 
-        // The head is the fight - any segments still alive when it dies go with it rather than
-        // lingering as frozen, harmless leftovers (nothing drives their position once the head
-        // that owns updateWreckwormChain is gone).
         if (boss.isWreckwormHead)
         {
             for (auto& other : game.run.bosses)
@@ -878,6 +867,27 @@ auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>
         }
     }
 
+    // Bosses have no `.active` flag (unlike Enemy/EliteHazard) - `health > 0` is their alive
+    // check everywhere else in the codebase (see damageBoss). This loop was missing entirely
+    // until now, which silently made every weapon that targets via this function unable to aim
+    // at a boss at all.
+    for (const auto& boss : game.run.bosses)
+    {
+        if (boss.health <= 0)
+        {
+            continue;
+        }
+        const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
+                                 .y = boss.position.y + boss.size.y / 2};
+        const float d = Vector2Distance(from, bossCenter);
+        if (best < 0 || d < best)
+        {
+            best = d;
+            target = bossCenter;
+            found = true;
+        }
+    }
+
     if (!found)
     {
         return std::nullopt;
@@ -885,8 +895,6 @@ auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>
     return target;
 }
 
-// Seeker Swarm (evolved Homing Missiles): picks the nearest target that isn't the one another
-// missile in the same volley already locked onto, so a 2-missile volley spreads across 2 enemies.
 auto nearestEnemyExcluding(const Game& game, Vector2 from,
                            Vector2 exclude) -> std::optional<Vector2>
 {
@@ -925,6 +933,27 @@ auto nearestEnemyExcluding(const Game& game, Vector2 from,
         }
     }
 
+    for (const auto& boss : game.run.bosses)
+    {
+        if (boss.health <= 0)
+        {
+            continue;
+        }
+        const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
+                                 .y = boss.position.y + boss.size.y / 2};
+        if (Vector2Distance(bossCenter, exclude) <= excludeEpsilon)
+        {
+            continue;
+        }
+        const float d = Vector2Distance(from, bossCenter);
+        if (best < 0 || d < best)
+        {
+            best = d;
+            target = bossCenter;
+            found = true;
+        }
+    }
+
     if (!found)
     {
         return std::nullopt;
@@ -953,7 +982,7 @@ auto beamAimDirection(const Game& game, bool evolved) -> Vector2
     {
         return dir;
     }
-    // Lance Sweep: oscillate the aim direction across a narrow arc instead of a fixed line.
+
     constexpr float sweepArcDegrees = 40.0F;
     constexpr float sweepSpeed = 2.0F;
     const float sweepAngle =
@@ -993,11 +1022,6 @@ auto weaponCooldown(const Game& game, WeaponType kind, int32_t level) -> float
     }
     base *= 1 - 0.1F * static_cast<float>(
                            game.run.skillLevels.at(static_cast<size_t>(SkillType::Cooldown)));
-    // REBALANCE: removed an evolved-only "* 0.8F" cooldown bonus that used to stack silently on
-    // top of each evolution's documented damage multiplier for every cooldown-gated weapon
-    // (Homing/Mine/Shock, plus Forward/Photon Cannon) — evolutions are now a pure damage-budget
-    // bonus (see tools/balance_sim), consistent with Orbit/Beam's evolutions, which never had a
-    // cooldown to discount in the first place.
 
     for (const auto& hazard : game.run.eliteHazards)
     {
@@ -1029,8 +1053,6 @@ auto weaponDamage(const Game& game, int32_t level) -> int32_t
     return static_cast<int32_t>(dmg);
 }
 
-// M15: how many extra enemies a "stops on contact" projectile bounces to (0 if Ricochet isn't
-// equipped). Only meaningful for weapons that don't already pierce — callers gate on that.
 auto ricochetLevel(const Game& game) -> int32_t
 {
     for (const auto& w : game.run.weapons)
@@ -1043,12 +1065,6 @@ auto ricochetLevel(const Game& game) -> int32_t
     return 0;
 }
 
-// REBALANCE: drones used to read a "ship's current damage" figure hardcoded to weaponDamage's
-// level-0 reference (static_cast<float>(weaponDamage(game, 0))) — meaning leveling either drone
-// weapon past its damage-fraction step-function did nothing to its actual output, unlike every
-// other weapon in the game. Both drones now use weaponDamage(game, w.level) directly, like every
-// other weapon, so they actually grow as you invest in them. Follower/Laser Drone each get their
-// own fraction table (previously shared) so they can be tuned independently.
 auto followerDroneDamageFraction(int32_t level) -> float
 {
     constexpr std::array<float, 4> fractionByLevel{0.4F, 0.6F, 0.6F, 0.75F};
@@ -1145,8 +1161,6 @@ auto nearestAsteroidWithin(const Game& game, Vector2 from, float maxDist) -> std
     return target;
 }
 
-// Cluster Charges: an evolved mine detonating force-detonates any other active evolved mine
-// within chainRadius, cascading in the same frame for a single connected blast.
 void detonateMine(Game& game, size_t index)
 {
     Mine& mine = game.run.mines.at(index);
@@ -1245,10 +1259,14 @@ void updateWeapons(Game& game, float deltaTime)
             w.flashTimer -= deltaTime;
         }
 
+        if (w.disabled)
+        {
+            continue;
+        }
+
         if (w.type == WeaponType::Orbit || w.type == WeaponType::Beam)
         {
-            // Continuous contact weapons: handled every frame by updateOrbitBladeContact()/
-            // updateBeamContact(), not on this fire-and-cooldown cadence.
+
             continue;
         }
 
@@ -1264,11 +1282,7 @@ void updateWeapons(Game& game, float deltaTime)
         case WeaponType::Forward:
         {
             const Vector2 dir = aimAtMouse(game);
-            // REBALANCE: capped at 2 shots (was ramping to 3) and evolution no longer adds a
-            // bonus shot on top — Photon Cannon previously stacked an extra shot + x1.5 damage +
-            // pierce + a cooldown discount simultaneously, making it ~94x the weakest weapon in
-            // the game at equal investment. It now gets the same single damage-multiplier budget
-            // as every other evolution, plus pierce as its one unique mechanic.
+
             const int32_t shots = std::min(2, 1 + w.level / 4);
             constexpr float spread = 10;
             auto dmg = static_cast<int32_t>(static_cast<float>(weaponDamage(game, w.level)) *
@@ -1330,7 +1344,7 @@ void updateWeapons(Game& game, float deltaTime)
                 }
                 else if (w.evolved && firstTarget.has_value())
                 {
-                    // Seeker Swarm, no free target at spawn: fly straight until one appears.
+
                     dir = Vector2Normalize(Vector2Subtract(*firstTarget, game.run.player.position));
                     huntingNewTarget = true;
                 }
@@ -1502,6 +1516,23 @@ void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSourc
         }
     }
 
+    for (auto& boss : game.run.bosses)
+    {
+        if (boss.health <= 0)
+        {
+            continue;
+        }
+        const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
+                                 .y = boss.position.y + boss.size.y / 2};
+        const float bossRadius = std::max(boss.size.x, boss.size.y) / 2;
+        if (Vector2Distance(center, bossCenter) <= radius + bossRadius)
+        {
+            damageBoss(game, boss, dmg);
+            recordDamage(game, source, dmg);
+            hitAny = true;
+        }
+    }
+
     for (auto& asteroid : game.run.asteroids)
     {
         if (asteroid.active &&
@@ -1525,7 +1556,7 @@ void updateOrbitBladeContact(Game& game, float deltaTime)
     const auto it = std::ranges::find_if(game.run.weapons, [](const Weapon& w)
                                          { return w.type == WeaponType::Orbit; });
 
-    if (it == game.run.weapons.end())
+    if (it == game.run.weapons.end() || it->disabled)
     {
         for (auto& enemy : game.run.enemies)
         {
@@ -1691,7 +1722,6 @@ void updateOrbitBladeContact(Game& game, float deltaTime)
         }
     }
 
-    // Aegis Ring: evolved Orbit Blades destroy incoming boss projectiles outright on contact.
     if (w.evolved)
     {
         for (auto& projectile : game.run.bossProjectiles)
@@ -1709,7 +1739,7 @@ void updateOrbitBladeLaunch(Game& game, float deltaTime)
 {
     for (auto& w : game.run.weapons)
     {
-        if (w.type != WeaponType::Orbit)
+        if (w.type != WeaponType::Orbit || w.disabled)
         {
             continue;
         }
@@ -1728,7 +1758,7 @@ void updateOrbitBladeLaunch(Game& game, float deltaTime)
                                                         static_cast<size_t>(SkillType::Cooldown))));
 
         const int32_t bladeCount = orbitBladeCount(w.level);
-        const int32_t shots = std::max(1, bladeCount / 2);
+        const int32_t shots = std::max(1, bladeCount - 1);
         auto dmg = static_cast<int32_t>(static_cast<float>(weaponDamage(game, w.level)) * 0.7F);
         if (w.evolved)
         {
@@ -1753,10 +1783,8 @@ void updateOrbitBladeLaunch(Game& game, float deltaTime)
             const Vector2 shotDir{.x = dir.x * cosA - dir.y * sinA,
                                   .y = dir.x * sinA + dir.y * cosA};
 
-            // Launches from wherever that blade currently sits on the ring, not the ship's
-            // center, so it visually reads as one of the spinning blades being thrown.
             const Vector2 bladePos =
-                orbitBladePosition(game, game.run.player.position, ringRadius, s, bladeCount);
+                Vector2Add(game.run.player.position, Vector2Scale(shotDir, ringRadius));
 
             game.run.orbitBladeProjectiles.push_back(
                 OrbitBladeProjectile{.position = bladePos,
@@ -1766,18 +1794,11 @@ void updateOrbitBladeLaunch(Game& game, float deltaTime)
                                      .active = true});
         }
 
-        // Reuses the flashTimer field (otherwise unused by Orbit) to drive the "new blade
-        // regrowing" visual in drawOrbitBlades.
         w.flashTimer = orbitRegrowDuration;
         playSFX(game, game.resources.sounds.homingLaunch);
     }
 }
 
-// Shared by any piercing (no-deactivate-on-hit) travelling projectile: orbit blade shots and the
-// Ranger nerve ball behave identically (move, hit everything along the way, despawn out of range).
-// The world camera is always centered on the player and shows exactly screenWidth x screenHeight
-// world units (renderScale only changes pixel density, not field of view), so this is an exact
-// on-screen test, not an approximation.
 auto isOutsideCameraView(const Game& game, Vector2 pos, float margin) -> bool
 {
     return std::abs(pos.x - game.run.player.position.x) >
@@ -1891,8 +1912,6 @@ void updateNerveSpiralProjectiles(Game& game, float deltaTime)
             spiral.origin, Vector2Scale(spiral.direction, spiral.speed * deltaTime * frameScale));
         const Vector2& center = spiral.origin;
 
-        // life is just a generous safety-net cap; the real despawn condition is leaving the
-        // camera view, same as the nerve ball.
         if (spiral.age >= spiral.life || isOutsideCameraView(game, center, cameraDespawnMargin))
         {
             spiral.active = false;
@@ -1975,7 +1994,7 @@ void updateBeamContact(Game& game, float deltaTime)
     const auto it = std::ranges::find_if(game.run.weapons, [](const Weapon& w)
                                          { return w.type == WeaponType::Beam; });
 
-    if (it == game.run.weapons.end())
+    if (it == game.run.weapons.end() || it->disabled)
     {
         for (auto& enemy : game.run.enemies)
         {
@@ -2212,8 +2231,6 @@ void fireNerveBladeTornado(Game& game)
         count = orbitBladeCount(it->level);
     }
 
-    // Divided down further than a one-shot hit would need: this travels and hits repeatedly
-    // per frame of overlap as it spins through a target, not once.
     const int32_t dmgPerBlade = std::max(1, nerveBurstDamage / (count * 3));
 
     game.run.nerveSpiralProjectiles.push_back(
@@ -2269,9 +2286,6 @@ void fireNerveBurst(Game& game)
     }
 }
 
-// Shattered Belt's signature hazard (see work/galaxy-impact/biomes/index.md in the brain.md
-// vault): several Asteroid entries (inCluster=true) orbiting a shared, stationary center - reuses
-// every existing weapon/asteroid collision site untouched (see Asteroid::inCluster in space.hpp).
 void spawnRockCluster(Game& game, Vector2 center)
 {
     constexpr int32_t chunkCount = 5;
@@ -2316,9 +2330,6 @@ void updateWaveSpawner(Game& game, float deltaTime)
             game.run.waveTimer = GameConstants::waveDuration;
             recordWaveReached(game, game.run.waveNumber);
 
-            // M11: wave 100 (and every 100th wave after, since reaching wave 200+ is only
-            // possible once the wave-100 boss has already been beaten) spawns the final boss
-            // instead of a normal mega-boss.
             if (game.run.waveNumber % finalBossWaveInterval == 0)
             {
                 spawnFinalBossWave(game);
@@ -2383,8 +2394,6 @@ void updateWaveSpawner(Game& game, float deltaTime)
         game.run.asteroidSpawnTimer =
             static_cast<float>(GetRandomValue(8, 16)) / 10.0F * asteroidIntervalMultiplier;
 
-        // Shattered Belt only: roughly 1 in 3 asteroid spawns is a rock cluster instead of a lone
-        // drifting rock - frequent enough to actually read as the biome's signature hazard.
         if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt && GetRandomValue(0, 2) == 0)
         {
             const float clusterAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
@@ -2423,9 +2432,6 @@ constexpr int eliteHazardCap = 3;
 
 constexpr float confusePulseCycle = 3.0F;
 
-// Deterministic (not per-enemy-state) glow window so the "about to confuse you" tell is
-// learnable and visible before the pulse fires, per the design-analyst reviewer note that an
-// untelegraphed on-touch debuff reads as unfair rather than clever.
 auto confusePulseActive(float activeDuration) -> bool
 {
     return std::fmod(static_cast<float>(GetTime()), confusePulseCycle) >
@@ -2434,8 +2440,8 @@ auto confusePulseActive(float activeDuration) -> bool
 
 void updatePickups(Game& game, float deltaTime)
 {
-    const float magnetRadius = 70 +
-                               70 *
+    const float magnetRadius = 110 +
+                               110 *
                                    static_cast<float>(game.run.skillLevels.at(
                                        static_cast<size_t>(SkillType::PickupRadius))) *
                                    0.2F +
@@ -2489,9 +2495,6 @@ void updatePickups(Game& game, float deltaTime)
     }
 }
 
-// Shared by world-pickup collection and the instant level-up "Pickup" choice. `except` excludes
-// the originating world pickup from MagnetPulse's sweep (nullptr when there isn't one, i.e. when
-// applied directly from a level-up choice).
 void applyPickupEffect(Game& game, PickupType type, ElementType element, ElementMechanism mechanism,
                        const Pickup* except)
 {
@@ -2554,24 +2557,34 @@ void applyPickupEffect(Game& game, PickupType type, ElementType element, Element
         playSFX(game, game.resources.sounds.menuConfirm);
         break;
     case PickupType::Danger:
-        // One downgrade at a time, kept simple: a second Danger pickup while one is already
-        // active is a no-op rather than stacking or restacking the timer.
+
         if (!game.run.weaponDowngrade.has_value() && !game.run.weapons.empty())
         {
             auto& weapon = game.run.weapons.at(static_cast<size_t>(
                 GetRandomValue(0, static_cast<int32_t>(game.run.weapons.size()) - 1)));
-            const int32_t amount = std::min(dangerDowngradeLevels, weapon.level - 1);
-            if (amount > 0)
+
+            WeaponDowngrade downgrade{.type = weapon.type, .timer = dangerDowngradeDuration};
+            if (weapon.evolved)
             {
-                weapon.level -= amount;
-                game.run.weaponDowngrade = WeaponDowngrade{
-                    .type = weapon.type, .amount = amount, .timer = dangerDowngradeDuration};
-                triggerShake(game, 6, 0.25F);
-                playSFX(game, game.resources.sounds.explosion);
-                game.run.achievementToast =
-                    std::string(weaponDisplayName(weapon.type)) + " downgraded!";
-                game.run.achievementToastTimer = 3.0F;
+                weapon.evolved = false;
+                downgrade.unevolved = true;
             }
+            else if (weapon.level > 1)
+            {
+                weapon.level -= 1;
+            }
+            else
+            {
+                weapon.disabled = true;
+                downgrade.disabled = true;
+            }
+
+            game.run.achievementToast =
+                std::string(effectiveWeaponName(weapon)) + " stolen!";
+            game.run.achievementToastTimer = 3.0F;
+            game.run.weaponDowngrade = downgrade;
+            triggerShake(game, 6, 0.25F);
+            playSFX(game, game.resources.sounds.explosion);
         }
         break;
     case PickupType::Count:
@@ -2605,59 +2618,11 @@ void collectElementalPickup(Game& game, ElementType element, ElementMechanism me
             }
         }
         break;
-    case ElementMechanism::Field:
-        game.run.elementalFields.push_back(
-            ElementalField{.position = game.run.player.position,
-                           .radius = elementalFieldRadius,
-                           .timer = pickupEffectDuration * pickupDurationScale(game.run.waveNumber),
-                           .element = element,
-                           .active = true});
-        break;
     case ElementMechanism::Count:
         break;
     }
 
     playSFX(game, game.resources.sounds.menuConfirm);
-}
-
-void updateElementalFields(Game& game, float deltaTime)
-{
-    const float burnDps = currentBurnDps(game);
-
-    for (auto& field : game.run.elementalFields)
-    {
-        if (!field.active)
-        {
-            continue;
-        }
-
-        field.timer -= deltaTime;
-        if (field.timer <= 0)
-        {
-            field.active = false;
-            continue;
-        }
-
-        for (auto& enemy : game.run.enemies)
-        {
-            if (enemy.active && !enemy.phased &&
-                CheckCollisionCircles(field.position, field.radius, enemy.position,
-                                      enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
-            {
-                applyElementDebuff(enemy, field.element, burnDps);
-            }
-        }
-        for (auto& boss : game.run.bosses)
-        {
-            if (boss.health > 0 &&
-                CheckCollisionCircles(field.position, field.radius, boss.position, boss.size.x / 2))
-            {
-                applyElementDebuff(boss, field.element, burnDps);
-            }
-        }
-    }
-
-    std::erase_if(game.run.elementalFields, [](const ElementalField& f) { return !f.active; });
 }
 
 void startLevelUp(Game& game)
@@ -2766,8 +2731,7 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
     }
     else
     {
-        // Affinity: the first choice always favors a skill/weapon already owned, so early levels
-        // (few unlocked weapon slots) aren't dominated by picks for things not yet equipped.
+
         std::vector<SkillType> owned;
         for (const auto id : eligible)
         {
@@ -2803,7 +2767,6 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
             choices.push_back(LevelUpChoice{.type = ChoiceType::Skill, .skill = id});
         }
 
-        // Always offer an escape hatch: a random pickup in case none of the skill picks appeal.
         const auto& entry = pickupCatalog.at(pickWeightedPickupIndex(game.run.waveNumber));
         choices.push_back(LevelUpChoice{.type = ChoiceType::Pickup,
                                         .pickupType = entry.type,
@@ -2811,9 +2774,6 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
                                         .mechanism = entry.mechanism});
     }
 
-    // Only the original 6 weapons ever evolve — the 8 M15 additions share an inert placeholder
-    // skillLinkedPassive (SkillType::Damage) and never gained real evolved-behavior branches, so
-    // they must be excluded here or a fake "EVOLVE" choice can be offered that does nothing.
     constexpr size_t evolvableWeaponCount = 6;
     std::vector<WeaponType> evolvable;
     for (size_t i = 0; i < evolvableWeaponCount; i++)
@@ -3031,8 +2991,6 @@ void updateBullets(Game& game, float deltaTime)
                     }
                 }
 
-                // M15 Flak Cannon: splash nearby enemies once on the same hit that damaged the
-                // primary target (a small, accepted overlap rather than excluding the primary).
                 if (bullet.splashRadius > 0)
                 {
                     aoePulse(game, bullet.position, bullet.splashRadius, bullet.damage / 2,
@@ -3041,13 +2999,12 @@ void updateBullets(Game& game, float deltaTime)
 
                 if (bullet.pierceRemaining > 0)
                 {
-                    // Photon Cannon / Flak Cannon L3 / Railgun: punches through instead of
-                    // stopping at the first enemy.
+
                     bullet.pierceRemaining--;
                 }
                 else if (bullet.ricochetRemaining > 0)
                 {
-                    // M15 Ricochet: bounce to another active enemy instead of deactivating.
+
                     if (const auto next =
                             nearestEnemyExcluding(game, bullet.position, enemy.position);
                         next.has_value())
@@ -3092,8 +3049,6 @@ void updateBullets(Game& game, float deltaTime)
     }
 }
 
-// M15 Chain Lightning: instant multi-target hit at fire time (no travelling projectile). Arcs
-// from the nearest enemy to the next-nearest untouched enemy, up to `weapon.level` total targets.
 void fireChainLightning(Game& game, const Weapon& weapon)
 {
     const auto dmg = static_cast<int32_t>(static_cast<float>(weaponDamage(game, weapon.level)) *
@@ -3150,8 +3105,6 @@ void updateChainLightningBolts(Game& game, float deltaTime)
                   [](const ChainLightningBolt& bolt) { return bolt.timer <= 0; });
 }
 
-// M15 Follower Drone / Laser Drone: keeps the live drone count in sync with the weapon's current
-// level (1 drone at L1, 2 at L3+), independent of exactly when the level-up happened.
 auto droneCountForLevel(int32_t level) -> size_t
 {
     if (level >= 3)
@@ -3165,7 +3118,7 @@ void updateFollowerDrones(Game& game, float deltaTime)
 {
     const auto it = std::ranges::find_if(game.run.weapons, [](const Weapon& w)
                                          { return w.type == WeaponType::FollowerDrone; });
-    if (it == game.run.weapons.end())
+    if (it == game.run.weapons.end() || it->disabled)
     {
         game.run.followerDrones.clear();
         return;
@@ -3227,7 +3180,7 @@ void updateLaserDrones(Game& game, float deltaTime)
 {
     const auto it = std::ranges::find_if(game.run.weapons, [](const Weapon& w)
                                          { return w.type == WeaponType::LaserDrone; });
-    if (it == game.run.weapons.end())
+    if (it == game.run.weapons.end() || it->disabled)
     {
         game.run.laserDrones.clear();
         return;
@@ -3353,9 +3306,6 @@ auto flamethrowerConeDirs(const Game& game, int32_t level) -> std::vector<Vector
     return coneDirs;
 }
 
-// L3: the cone(s) periodically switch off for a short window, a power/uptime tradeoff. Shared
-// with the draw side so the visual cone actually disappears during the off-phase instead of
-// silently continuing to render while dealing no damage.
 auto flamethrowerActive(int32_t level) -> bool
 {
     if (level < 3)
@@ -3367,9 +3317,16 @@ auto flamethrowerActive(int32_t level) -> bool
 
 void updateFlamethrower(Game& game, float deltaTime)
 {
+    for (auto& particle : game.run.flameParticles)
+    {
+        particle.position = Vector2Add(particle.position, particle.velocity);
+        particle.life -= deltaTime;
+    }
+    std::erase_if(game.run.flameParticles, [](const Particle& p) { return p.life <= 0; });
+
     const auto it = std::ranges::find_if(game.run.weapons, [](const Weapon& w)
                                          { return w.type == WeaponType::Flamethrower; });
-    if (it == game.run.weapons.end())
+    if (it == game.run.weapons.end() || it->disabled)
     {
         return;
     }
@@ -3383,6 +3340,39 @@ void updateFlamethrower(Game& game, float deltaTime)
     const float range = flamethrowerRangeFor(w.level);
     const auto dps = static_cast<float>(weaponDamage(game, w.level)) * flamethrowerDamageMult;
     const auto coneDirs = flamethrowerConeDirs(game, w.level);
+
+    // Renders like the dash trail (fading particle puffs) rather than a flat drawn cone - see
+    // drawWeapons. Spawn rate is frame-rate dependent (same simplification the dash trail makes),
+    // dense enough at typical framerates to read as a continuous flame.
+    const auto particlesPerConeThisFrame = std::max(
+        1, static_cast<int32_t>(static_cast<float>(flameParticlesPerConePerSecond) * deltaTime));
+    // Baked into a per-frame displacement (not multiplied again in the update loop above) - same
+    // frame-rate-dependent simplification the dash trail already uses.
+    const float particleSpeed = (range / flameParticleLife) * deltaTime;
+    for (const auto& dir : coneDirs)
+    {
+        const float baseAngle = std::atan2(dir.y, dir.x);
+        for (int32_t i = 0; i < particlesPerConeThisFrame; i++)
+        {
+            const float spreadAngle =
+                baseAngle + (static_cast<float>(GetRandomValue(-100, 100)) / 100.0F) *
+                                flamethrowerHalfAngle;
+            const float speedJitter = static_cast<float>(GetRandomValue(70, 100)) / 100.0F;
+            // Inherit the player's own per-frame displacement so the flame's apparent reach
+            // doesn't shrink when moving in the direction it's firing (the particle would
+            // otherwise only out-pace the player by its own speed, not its speed relative to a
+            // stationary world).
+            const Vector2 outward{.x = std::cos(spreadAngle) * particleSpeed * speedJitter,
+                                  .y = std::sin(spreadAngle) * particleSpeed * speedJitter};
+            game.run.flameParticles.push_back(
+                Particle{.position = game.run.player.position,
+                         .velocity = Vector2Add(outward, game.run.player.velocity),
+                         .radius = flameParticleRadius,
+                         .life = flameParticleLife,
+                         .maxLife = flameParticleLife,
+                         .color = GetRandomValue(0, 1) == 0 ? Palette::Accent : Palette::Crit});
+        }
+    }
 
     for (size_t j = 0; j < game.run.enemies.size(); j++)
     {
@@ -3416,6 +3406,40 @@ void updateFlamethrower(Game& game, float deltaTime)
         {
             recordWeaponKill(game, WeaponType::Flamethrower);
         }
+    }
+
+    for (auto& boss : game.run.bosses)
+    {
+        if (boss.health <= 0)
+        {
+            continue;
+        }
+        const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
+                                 .y = boss.position.y + boss.size.y / 2};
+        const Vector2 toBoss = Vector2Subtract(bossCenter, game.run.player.position);
+        const float dist = Vector2Length(toBoss);
+        if (dist > range || dist <= 0.01F)
+        {
+            continue;
+        }
+        const Vector2 dirToBoss = Vector2Scale(toBoss, 1.0F / dist);
+        const bool inCone = std::ranges::any_of(
+            coneDirs, [&](const Vector2& dir)
+            { return Vector2DotProduct(dir, dirToBoss) >= std::cos(flamethrowerHalfAngle); });
+        if (!inCone)
+        {
+            continue;
+        }
+        const auto tick = static_cast<int32_t>(dps * deltaTime);
+        if (tick <= 0)
+        {
+            continue;
+        }
+        // Fires every frame while in range/cone (same per-tick pattern the enemy loop above
+        // uses, no accumulator) - applyShake=false so continuous contact doesn't keep resetting
+        // the screen-shake timer before it can decay (see damageBoss's applyShake doc comment).
+        damageBoss(game, boss, tick, false);
+        recordDamage(game, DamageSource::Flamethrower, tick);
     }
 }
 
@@ -3469,8 +3493,6 @@ void spawnRareBonusPickup(Game& game, Vector2 position)
     }
 }
 
-// M23: independent rare roll from spawnRareBonusPickup, so a Danger pickup can appear alongside
-// (not instead of) a good bonus pickup from the same kill.
 void spawnRareDangerPickup(Game& game, Vector2 position)
 {
     if (GetRandomValue(0, 999) >= dangerPickupChance)
@@ -3496,8 +3518,7 @@ void updateAsteroids(Game& game, float deltaTime)
 
         if (asteroid.inCluster)
         {
-            // Anchored to a stationary clusterCenter (not free-drifting on velocity) - this is
-            // what makes it read as a rotating hazard formation rather than another lone rock.
+
             asteroid.clusterAngleDeg = std::fmod(
                 asteroid.clusterAngleDeg + asteroid.clusterRotationSpeed * deltaTime, 360.0F);
             asteroid.position = Vector2Add(
@@ -3573,8 +3594,7 @@ void updateProjectiles(Game& game, float deltaTime)
             {
                 if (projectile.huntingNewTarget)
                 {
-                    // Seeker Swarm: keep flying straight until an untargeted enemy is close
-                    // enough to lock onto (mineSeekRadius reused as a reasonable acquire range).
+
                     if (const auto target =
                             nearestEnemyWithin(game, projectile.position, mineSeekRadius);
                         target.has_value())
@@ -3619,8 +3639,6 @@ void updateProjectiles(Game& game, float deltaTime)
                 continue;
             }
 
-            // Ricochet Strafer (Shattered Belt): bounces off the asteroid instead of breaking
-            // it, and only once - everything else that hits an asteroid destroys it as usual.
             if (!projectile.fromPlayer && projectile.ricochetRemaining > 0)
             {
                 const Vector2 normal =
@@ -3665,7 +3683,7 @@ void updateProjectiles(Game& game, float deltaTime)
                 }
                 if (projectile.ricochetRemaining > 0)
                 {
-                    // M15 Ricochet: retarget to another enemy instead of deactivating.
+
                     if (const auto next =
                             nearestEnemyExcluding(game, projectile.position, enemy.position);
                         next.has_value())
@@ -3704,6 +3722,27 @@ void updateProjectiles(Game& game, float deltaTime)
 
                 projectile.active = false;
                 damageEliteHazard(game, j, projectile.damage);
+                recordDamage(game, DamageSource::Homing, projectile.damage);
+                break;
+            }
+
+            // Player homing missiles used to fly straight through a boss dealing zero damage -
+            // targeting was fixed separately (see nearestEnemy/nearestEnemyExcluding) but this
+            // collision loop never existed at all, unlike updateBullets' equivalent boss loop.
+            for (auto& boss : game.run.bosses)
+            {
+                const Rectangle bossRect{.x = boss.position.x,
+                                         .y = boss.position.y,
+                                         .width = boss.size.x,
+                                         .height = boss.size.y};
+                if (!projectile.active || boss.health <= 0 ||
+                    !CheckCollisionCircleRec(projectile.position, projectile.radius, bossRect))
+                {
+                    continue;
+                }
+
+                projectile.active = false;
+                damageBoss(game, boss, projectile.damage);
                 recordDamage(game, DamageSource::Homing, projectile.damage);
                 break;
             }
@@ -3957,9 +3996,6 @@ auto applyWormholeTransit(const Game& game, Vector2& position, Vector2& velocity
     const WormholeFacing exitFacing = atA ? game.run.wormhole.facingB : game.run.wormhole.facingA;
     const Vector2 exitPoint = atA ? game.run.wormhole.positionB : game.run.wormhole.positionA;
 
-    // Exit angle = entry angle + 180 (a portal reverses the direction of travel through it) +
-    // the twist between the two mouths' facings. Deliberately unconditional: no "snap outward"
-    // correction, since that would override the entry angle rather than just redirecting it.
     const float deltaDegrees =
         (static_cast<float>(exitFacing) - static_cast<float>(entryFacing)) * 90.0F + 180.0F;
     velocity = Vector2Rotate(velocity, deltaDegrees * DEG2RAD);
@@ -3972,9 +4008,6 @@ auto applyWormholeTransit(const Game& game, Vector2& position, Vector2& velocity
     return true;
 }
 
-// Splits a straight instant-hit beam (boss Beam/WormholeBeam attacks) into 1 or 2 segments if it
-// passes through an active wormhole mouth, applying the same entry+180+twist redirect as
-// applyWormholeTransit. Only ever bends once per cast (no multi-bounce) to keep this bounded.
 auto wormholeBentBeamSegments(const Game& game, Vector2 start,
                               Vector2 end) -> std::vector<std::pair<Vector2, Vector2>>
 {

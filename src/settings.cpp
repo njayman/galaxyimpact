@@ -40,9 +40,7 @@ auto loadSettings() -> Settings
     }
 
     int32_t resIdx = 0;
-    // Legacy positional slot: used to hold the Easy/Normal/Hard difficulty index. The difficulty
-    // system is gone, but this read must stay so old save files don't misalign the fields after
-    // it (bgmOn, soundOn, fpsIndex, ...).
+
     int32_t legacyDifficulty = 0;
     int32_t bgmOn = 0;
     int32_t soundOn = 0;
@@ -93,8 +91,6 @@ void saveSettings(const Settings& settings)
         return;
     }
 
-    // The '0' below is a placeholder for the removed difficulty field, kept only so this
-    // positional slot lines up with legacy save files loadSettings() may still need to read.
     file << settings.resolutionIndex << ' ' << 0 << ' ' << (settings.bgmOn ? 1 : 0) << ' '
          << (settings.soundOn ? 1 : 0) << ' ' << settings.fpsIndex << ' ' << settings.hudScaleIndex
          << ' ' << settings.shipIndex;

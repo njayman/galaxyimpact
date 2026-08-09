@@ -17,8 +17,6 @@ enum class EnemyPattern : std::uint8_t
     Stationary
 };
 
-// 100-wave arc splits into 4 quarters, one biome each; wraps forever in infinite mode
-// since waveNumber keeps counting past 100 with no cap.
 enum class Biome : std::uint8_t
 {
     ShatteredBelt,
@@ -154,7 +152,6 @@ struct EnemyKind
 
 constexpr int enemyKindSwarmling = 1;
 
-// Biome-exclusive kinds (indices 17-29). Forward-referenced by index for split/spawn targets.
 constexpr int enemyKindRockDebris = 18;
 constexpr int enemyKindSporeSwarmling = 22;
 
@@ -321,7 +318,7 @@ constexpr std::array<EnemyKind, 33> enemyKinds{
               .contactDamage = 4,
               .score = 10,
               .pattern = EnemyPattern::Stationary,
-              .color = Palette::AccentDim,
+              .color = Color{.r = 190, .g = 225, .b = 245, .a = 255},
               .shape = EnemyShape::Star,
               .minWave = 3},
     EnemyKind{.name = "Laser Fence",
@@ -348,7 +345,6 @@ constexpr std::array<EnemyKind, 33> enemyKinds{
               .spawnCount = 3,
               .spawnInterval = 4.0},
 
-    // --- Shattered Belt (Q1, waves 1-25) ---
     EnemyKind{.name = "Rockhide",
               .radius = 20,
               .health = 36,
@@ -417,7 +413,6 @@ constexpr std::array<EnemyKind, 33> enemyKinds{
               .biome = Biome::ShatteredBelt,
               .orbitsNearestAsteroid = true},
 
-    // --- Rustbloom (Q2, waves 26-50) ---
     EnemyKind{.name = "Spore Swarmling",
               .radius = 8,
               .health = 4,
@@ -487,7 +482,6 @@ constexpr std::array<EnemyKind, 33> enemyKinds{
               .biomeExclusive = true,
               .biome = Biome::Rustbloom},
 
-    // --- Solar Forge (Q3, waves 51-75) ---
     EnemyKind{.name = "Cinder Wisp",
               .radius = 14,
               .health = 8,
@@ -543,7 +537,6 @@ constexpr std::array<EnemyKind, 33> enemyKinds{
               .biomeExclusive = true,
               .biome = Biome::SolarForge},
 
-    // --- Punctum (Q4, waves 76-100) ---
     EnemyKind{.name = "Null Crawler",
               .radius = 14,
               .health = 24,

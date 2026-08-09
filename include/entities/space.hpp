@@ -32,7 +32,6 @@ class Particle
     Color color;
 };
 
-// M18: floating combat text — one per damage instance dealt to an enemy/boss/hazard.
 class DamageNumber
 {
   public:
@@ -98,9 +97,6 @@ enum class AsteroidTier : std::uint8_t
     Small
 };
 
-// Every field below `active` has a default so every existing designated-init call site (which
-// only ever lists position/velocity/radius/tier/active) keeps compiling unchanged.
-// NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
 class Asteroid
 {
   public:
@@ -110,10 +106,6 @@ class Asteroid
     AsteroidTier tier;
     bool active;
 
-    // Shattered Belt's signature hazard: a "rotating rock cluster" is just several Asteroid
-    // entries orbiting a shared, stationary clusterCenter instead of free-drifting on velocity -
-    // reuses every existing weapon/asteroid collision site (they already break an asteroid on any
-    // hit) with zero changes there. See spawnRockCluster/updateAsteroids in update.cpp.
     bool inCluster = false;
     Vector2 clusterCenter{};
     float clusterOrbitRadius = 0;

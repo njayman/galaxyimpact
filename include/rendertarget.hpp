@@ -2,8 +2,6 @@
 
 #include "raylib.h"
 
-// RAII wrapper around RenderTexture2D so unloading can't be forgotten or done twice
-// across the resize/recreate cycle in syncScreenSize.
 class RenderTarget
 {
   public:

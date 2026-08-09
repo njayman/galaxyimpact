@@ -12,9 +12,6 @@ namespace
 {
 auto achievementsFilePath() -> std::string { return getSaveDataDir() + "achievements.txt"; }
 
-// Per-weapon kill count needed to unlock that weapon's Evolve choice.
-constexpr int32_t evolutionKillThreshold = 500;
-
 void showToast(Game& game, std::string_view message)
 {
     constexpr float toastDuration = 4.0F;
@@ -45,16 +42,20 @@ void unlockType(Game& game, Achievements& achievements, WeaponType weapon, std::
     showToast(game, std::string("Achievement unlocked: ") + std::string(label) + "!");
     saveAchievements(achievements);
 }
-
-// M9's cumulative dash-or-nerve-kill milestone for Flak Cannon — no exact number was specified,
-// this is a reasonable default to tune after playtest (same pattern as other numeric defaults
-// this session).
-constexpr int32_t flakCannonUnlockKillCount = 200;
 }
 
 auto weaponDisplayName(WeaponType weapon) -> std::string_view
 {
     return Skills.at(static_cast<size_t>(weaponGrantSkill.at(static_cast<size_t>(weapon)))).name;
+}
+
+auto effectiveWeaponName(const Weapon& weapon) -> std::string_view
+{
+    if (weapon.evolved)
+    {
+        return evolvedWeaponName.at(static_cast<size_t>(weapon.type));
+    }
+    return weaponDisplayName(weapon.type);
 }
 
 auto loadAchievements() -> Achievements
@@ -239,13 +240,6 @@ void recordWaveReached(Game& game, int32_t wave)
     }
     achievements.highestWaveReached = wave;
 
-    // REBALANCE (2026-08-01): a fresh save used to have exactly ONE weapon (the ship's default)
-    // and 3 slots all the way through the wave-5 miniboss AND the wave-10 megaboss — Homing didn't
-    // unlock until wave 10, the 4th slot not until wave 15. That's a real progression bug, not a
-    // DPS problem (a single leveled starting weapon has plenty of DPS for the wave-5/10 bosses;
-    // the issue is having no real build options while surviving long enough to level it). Pulled
-    // every early gate forward so a first run has 2-3 real weapon choices before its first boss
-    // fights, not just passives competing with a single weapon for 3 slots.
     bool changed = false;
     if (wave >= 3 && !achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Homing)))
     {

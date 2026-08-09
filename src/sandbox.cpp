@@ -11,9 +11,7 @@
 
 namespace
 {
-// Index 0 is XP (sandbox-only extra, not part of the shared catalog since it's never offered as a
-// deliberate pickup/level-up choice); indices 1.. mirror pickupCatalog (include/entities/item.hpp),
-// the single shared list also used by the level-up "Pickup" choice and the post-cap reward pool.
+
 constexpr size_t sandboxPickupCount = pickupCatalog.size() + 1;
 
 auto sandboxPickupOption(int32_t index) -> PickupCatalogEntry
@@ -79,10 +77,7 @@ void updateSandboxInput(Game& game)
 
     if (IsKeyPressed(KEY_V))
     {
-        // Signature bosses aren't on the generic B/Shift+B spawn path, and only exist at
-        // specific waves in play - this lets tuning use the sandbox's wave (-/+ ) to pick any
-        // appearance of a signature boss (e.g. wave 10/20/25 for the Beltbreaker) and spawn it
-        // on demand regardless of the wave-progression timer.
+
         if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
         {
             spawnBeltbreaker(game, game.run.waveNumber);

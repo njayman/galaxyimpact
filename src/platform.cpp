@@ -34,7 +34,7 @@ auto platformSaveDataReady() -> bool { return !idbfsSyncPending; }
 
 void platformSyncSaveData()
 {
-    // Fire-and-forget: nothing needs to block on the write completing.
+
     EM_ASM(FS.syncfs(
         false, function(err) {
             if (err)
