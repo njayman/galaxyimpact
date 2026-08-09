@@ -24,6 +24,9 @@ enum class PickupType : std::uint8_t
     MagnetPulse,
     Overcharge,
     SecondWind,
+    // Temporary buff: dash and shield-block cost no ability charge for the duration (see
+    // Player::overdriveTimer, updateAbilityCharges).
+    Overdrive,
     // M23: risk-reward world pickup, visually distinct (bad colors/shapes, hazard-enemy visual
     // language) — never offered as a level-up/reward choice, only spawns as a rare world drop.
     Danger,
@@ -96,7 +99,7 @@ struct PickupCatalogEntry
     std::string_view name;
 };
 
-constexpr std::array<PickupCatalogEntry, 19> pickupCatalog{
+constexpr std::array<PickupCatalogEntry, 20> pickupCatalog{
     PickupCatalogEntry{PickupType::LifeOrb, ElementType::Static, ElementMechanism::Infusion,
                        "Life Orb"},
     PickupCatalogEntry{PickupType::Shield, ElementType::Static, ElementMechanism::Infusion,
@@ -110,6 +113,8 @@ constexpr std::array<PickupCatalogEntry, 19> pickupCatalog{
                        "Overcharge"},
     PickupCatalogEntry{PickupType::SecondWind, ElementType::Static, ElementMechanism::Infusion,
                        "Second Wind"},
+    PickupCatalogEntry{PickupType::Overdrive, ElementType::Static, ElementMechanism::Infusion,
+                       "Overdrive"},
     PickupCatalogEntry{PickupType::Elemental, ElementType::Static, ElementMechanism::Infusion,
                        "Static Infusion"},
     PickupCatalogEntry{PickupType::Elemental, ElementType::Static, ElementMechanism::Nova,

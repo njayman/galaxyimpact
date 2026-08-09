@@ -21,6 +21,7 @@ class Player
     float blackHoleCoreTimer;
     float bossBodyTimer;
     float slowTimer;
+    float confusedTimer;
     int charges;
     float chargeRegenTimer;
     bool dashing;
@@ -35,8 +36,13 @@ class Player
     float regenTimer;
     float regenRate;
     float overchargeTimer;
-    bool dashTrailUnlocked;
+    // Timed, like every other buff below except secondWindReady - dashing only leaves a trail
+    // while this is above 0 (see updatePlayerBuffs).
+    float dashTrailTimer;
     bool secondWindReady;
+    // Dash and shield-block cost no ability charge while this is above 0 (see
+    // updateAbilityCharges).
+    float overdriveTimer;
 };
 
 // Every field is still value-initialized via aggregate init at every construction site; the

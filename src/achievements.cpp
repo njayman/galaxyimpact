@@ -4,7 +4,6 @@
 #include "entities/ship.hpp"
 #include "game.hpp"
 #include "platform.hpp"
-#include "settings.hpp"
 #include <fstream>
 #include <string>
 #include <string_view>
@@ -13,22 +12,8 @@ namespace
 {
 auto achievementsFilePath() -> std::string { return getSaveDataDir() + "achievements.txt"; }
 
-// Per-weapon kill count needed to unlock that weapon's Evolve choice, scaled so harder
-// difficulties (fewer, tougher kills) need fewer of them than easier ones.
-auto evolutionKillThreshold(Difficulty difficulty) -> int32_t
-{
-    switch (difficulty)
-    {
-    case Difficulty::Easy:
-        return 1000;
-    case Difficulty::Hard:
-        return 500;
-    case Difficulty::Normal:
-    case Difficulty::Count:
-        break;
-    }
-    return 700;
-}
+// Per-weapon kill count needed to unlock that weapon's Evolve choice.
+constexpr int32_t evolutionKillThreshold = 500;
 
 void showToast(Game& game, std::string_view message)
 {
@@ -182,8 +167,7 @@ void recordWeaponKill(Game& game, WeaponType weapon)
         return;
     }
 
-    const int32_t threshold = evolutionKillThreshold(game.resources.settings.difficulty);
-    if (achievements.killsByWeapon.at(idx) >= threshold)
+    if (achievements.killsByWeapon.at(idx) >= evolutionKillThreshold)
     {
         achievements.evolutionUnlocked.at(idx) = true;
         saveAchievements(achievements);
@@ -255,38 +239,45 @@ void recordWaveReached(Game& game, int32_t wave)
     }
     achievements.highestWaveReached = wave;
 
+    // REBALANCE (2026-08-01): a fresh save used to have exactly ONE weapon (the ship's default)
+    // and 3 slots all the way through the wave-5 miniboss AND the wave-10 megaboss — Homing didn't
+    // unlock until wave 10, the 4th slot not until wave 15. That's a real progression bug, not a
+    // DPS problem (a single leveled starting weapon has plenty of DPS for the wave-5/10 bosses;
+    // the issue is having no real build options while surviving long enough to level it). Pulled
+    // every early gate forward so a first run has 2-3 real weapon choices before its first boss
+    // fights, not just passives competing with a single weapon for 3 slots.
     bool changed = false;
-    if (wave >= 10 && !achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Homing)))
+    if (wave >= 3 && !achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Homing)))
     {
         achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Homing)) = true;
         showToast(game, "Achievement unlocked: Homing Missiles!");
         changed = true;
     }
-    if (wave >= 15 && achievements.slotCap < 4)
+    if (wave >= 8 && achievements.slotCap < 4)
     {
         achievements.slotCap = 4;
         showToast(game, "Achievement unlocked: 4th weapon slot!");
         changed = true;
     }
-    if (wave >= 20 && !achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Mine)))
+    if (wave >= 7 && !achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Mine)))
     {
         achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Mine)) = true;
         showToast(game, "Achievement unlocked: Mine Layer!");
         changed = true;
     }
-    if (wave >= 25 && !achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Shock)))
+    if (wave >= 12 && !achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Shock)))
     {
         achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Shock)) = true;
         showToast(game, "Achievement unlocked: Shockwave!");
         changed = true;
     }
-    if (wave >= 50 && achievements.slotCap < 5)
+    if (wave >= 35 && achievements.slotCap < 5)
     {
         achievements.slotCap = 5;
         showToast(game, "Achievement unlocked: 5th weapon slot!");
         changed = true;
     }
-    if (wave >= 70 && achievements.slotCap < 6)
+    if (wave >= 55 && achievements.slotCap < 6)
     {
         achievements.slotCap = 6;
         showToast(game, "Achievement unlocked: 6th weapon slot!");

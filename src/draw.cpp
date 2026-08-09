@@ -156,6 +156,30 @@ auto tiledWorldPos(Vector2 relativeTo, Vector2 offset, float tileW, float tileH)
     return Vector2Add(relativeTo, Vector2{.x = relX, .y = relY});
 }
 
+auto biomeVoidColor(const Game& game) -> Color
+{
+    switch (currentBiome(game.run.waveNumber))
+    {
+    case Biome::ShatteredBelt: return Palette::Void;
+    case Biome::Rustbloom: return Palette::RustbloomVoid;
+    case Biome::SolarForge: return Palette::SolarForgeVoid;
+    case Biome::Punctum: return Palette::PunctumVoid;
+    }
+    return Palette::Void;
+}
+
+auto biomeHazeColor(const Game& game) -> Color
+{
+    switch (currentBiome(game.run.waveNumber))
+    {
+    case Biome::ShatteredBelt: return Palette::Haze;
+    case Biome::Rustbloom: return Palette::RustbloomHaze;
+    case Biome::SolarForge: return Palette::SolarForgeHaze;
+    case Biome::Punctum: return Palette::PunctumHaze;
+    }
+    return Palette::Haze;
+}
+
 void drawBackgroundStars(const Game& game, Vector2 relativeTo)
 {
     const auto tileW = static_cast<float>(game.resources.screenWidth);
@@ -166,9 +190,10 @@ void drawBackgroundStars(const Game& game, Vector2 relativeTo)
         DrawCircleV(tiledWorldPos(relativeTo, p.position, tileW, tileH), p.radius, p.color);
     }
 
+    const Color haze = biomeHazeColor(game);
     for (const auto& s : game.run.stars)
     {
-        DrawCircleV(tiledWorldPos(relativeTo, s.position, tileW, tileH), s.radius, Palette::Haze);
+        DrawCircleV(tiledWorldPos(relativeTo, s.position, tileW, tileH), s.radius, haze);
     }
 }
 
@@ -230,9 +255,9 @@ void drawShipSelect(const Game& game)
     windowText(game, std::string(highlighted.description).c_str(), game.resources.windowWidth / 2,
                descY, 18, Palette::StructLight);
 
-    const std::string stats =
-        std::format("HP {:.0f}   Armor {:.0f}   Dmg x{:.1f}   Shields {}", highlighted.maxHealth,
-                    highlighted.armor, highlighted.damageMult, highlighted.maxShieldStacks);
+    const std::string stats = std::format(
+        "HP {:.0f}   Armor {:.0f}   Dmg {:+.0f}%   Shields {}", highlighted.maxHealth,
+        highlighted.armor, (highlighted.damageMult - 1.0F) * 100.0F, highlighted.maxShieldStacks);
     windowText(game, stats.c_str(), game.resources.windowWidth / 2, descY + 30, 18,
                Palette::StructMid);
 }
@@ -270,17 +295,10 @@ void drawSettings(const Game& game)
         resolutionOptions.at(static_cast<size_t>(game.resources.settings.resolutionIndex));
     const std::string displayMode = IsWindowFullscreen() ? "Fullscreen" : "Windowed";
 
-    const bool difficultyLocked = game.settingsReturnState == GameState::PAUSED;
-    const std::string difficultyValue =
-        std::string(
-            difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty)).name) +
-        (difficultyLocked ? " (locked)" : "");
-
-    const std::array<std::string, 7> stepperLabels{"Resolution", "Difficulty",  "", "", "FPS Cap",
-                                                   "HUD Scale",  "Display Mode"};
-    const std::array<std::string, 7> stepperValues{
+    const std::array<std::string, 6> stepperLabels{"Resolution", "", "", "FPS Cap", "HUD Scale",
+                                                   "Display Mode"};
+    const std::array<std::string, 6> stepperValues{
         std::format("{}x{}", res.width, res.height),
-        difficultyValue,
         "",
         "",
         std::format("{}", fpsOptions.at(static_cast<size_t>(game.resources.settings.fpsIndex))),
@@ -290,7 +308,7 @@ void drawSettings(const Game& game)
         displayMode,
     };
 
-    constexpr int32_t rowCount = 8;
+    constexpr int32_t rowCount = 7;
     for (int32_t i = 0; i < rowCount; i++)
     {
         const Rectangle rect =
@@ -302,12 +320,12 @@ void drawSettings(const Game& game)
             GuiSetState(STATE_FOCUSED);
         }
 
-        if (i == 2 || i == 3)
+        if (i == 1 || i == 2)
         {
             const bool on =
-                i == 2 ? game.resources.settings.bgmOn : game.resources.settings.soundOn;
+                i == 1 ? game.resources.settings.bgmOn : game.resources.settings.soundOn;
             bool checked = on;
-            const char* label = i == 2 ? "BGM" : "Sound";
+            const char* label = i == 1 ? "BGM" : "Sound";
             const Rectangle box{.x = rect.x,
                                 .y = rect.y + rect.height / 2 - 12 * scale,
                                 .width = 24 * scale,
@@ -500,9 +518,82 @@ void drawPassiveIcon(SkillType id, Vector2 c, float s, Color color)
     }
 }
 
+// The level-up screen's "Pickup" choice used to describe every single pickup with the same
+// generic "skip the skill picks" boilerplate, telling the player nothing about what they'd
+// actually be taking. This maps each PickupType (and, for Elemental, its element+mechanism combo)
+// to a real one-line effect description instead.
+auto elementEffectSummary(ElementType element) -> std::string_view
+{
+    switch (element)
+    {
+    case ElementType::Static:
+        return "fully stops movement, attacks, and contact damage";
+    case ElementType::Freeze:
+        return "halves movement and attack speed";
+    case ElementType::Burn:
+        return "deals damage over time";
+    case ElementType::Confuse:
+        return "randomizes movement (and Turret retargeting)";
+    case ElementType::Count:
+        break;
+    }
+    return "";
+}
+
+auto pickupChoiceDescription(PickupType type, ElementType element, ElementMechanism mechanism)
+    -> std::string
+{
+    switch (type)
+    {
+    case PickupType::LifeOrb:
+        return "Instantly heals a small amount of health.";
+    case PickupType::Shield:
+        return "+1 shield stack (blocks one hit).";
+    case PickupType::Regen:
+        return "Heals gradually for a while.";
+    case PickupType::DashTrail:
+        return "Dashing leaves a damaging trail behind you, for a while.";
+    case PickupType::MagnetPulse:
+        return "Instantly pulls every pickup on screen to you.";
+    case PickupType::Overcharge:
+        return "+50% weapon damage for a while.";
+    case PickupType::SecondWind:
+        return "Permanent: survive the next otherwise-fatal hit.";
+    case PickupType::Overdrive:
+        return "Dash and shield-block cost no charge, for a while.";
+    case PickupType::Elemental:
+    {
+        const auto effect = elementEffectSummary(element);
+        switch (mechanism)
+        {
+        case ElementMechanism::Infusion:
+            return std::format("Your hits apply {} to enemies for a while ({}).",
+                               elementNames.at(static_cast<size_t>(element)), effect);
+        case ElementMechanism::Nova:
+            return std::format("Instantly applies {} to every enemy on screen ({}).",
+                               elementNames.at(static_cast<size_t>(element)), effect);
+        case ElementMechanism::Field:
+            return std::format("Drops a zone that applies {} to anything that touches it ({}).",
+                               elementNames.at(static_cast<size_t>(element)), effect);
+        case ElementMechanism::Count:
+            break;
+        }
+        return "";
+    }
+    case PickupType::XP:
+    case PickupType::Danger:
+    case PickupType::Count:
+        break;
+    }
+    return "Applied instantly.";
+}
+
 auto evolutionHint(const Game& game, SkillType id) -> std::string
 {
-    for (size_t i = 0; i < weaponGrantSkill.size(); i++)
+    // Only the original 6 weapons ever evolve — the 8 M15 additions carry an inert placeholder
+    // skillLinkedPassive (always SkillType::Damage) and must never surface an evolution hint.
+    constexpr size_t evolvableWeaponCount = 6;
+    for (size_t i = 0; i < evolvableWeaponCount; i++)
     {
         const auto kind = static_cast<WeaponType>(i);
         if (skillLinkedPassive.at(i) == id && hasWeapon(game, kind))
@@ -652,7 +743,7 @@ void drawLevelUp(const Game& game)
                                                                e.mechanism == choice.mechanism;
                                                     });
             name = found != pickupCatalog.end() ? std::string(found->name) : "Pickup";
-            desc = "Skip the skill picks - take this pickup instead, applied instantly.";
+            desc = pickupChoiceDescription(choice.pickupType, choice.element, choice.mechanism);
             if (choice.pickupType == PickupType::Elemental)
             {
                 color = elementColors.at(static_cast<size_t>(choice.element));
@@ -1139,7 +1230,7 @@ void drawShip(const Game& game)
     {
         const Vector2 dashDir = Vector2Normalize(game.run.player.dashVelocity);
         const Color trailColor =
-            game.run.player.dashTrailUnlocked ? Palette::Accent : Palette::Crit;
+            game.run.player.dashTrailTimer > 0 ? Palette::Accent : Palette::Crit;
         for (int i = 1; i <= 3; i++)
         {
             const Vector2 trailPos =
@@ -1288,6 +1379,13 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     {
         color = ColorLerp(color, WHITE, enemy.hitFlashTimer / UpdateConstants::hitFlashDuration);
     }
+    if (enemy.burnDps > 0)
+    {
+        // Also doubles as the tell for Forgeborn's Burn immunity (Solar Forge): its burnDps
+        // never gets set in applyElementDebuff, so it's the only enemy that never shows this.
+        const float flicker = 0.6F + 0.4F * std::sin(static_cast<float>(GetTime()) * 10.0F);
+        color = ColorLerp(color, Palette::ElementBurn, 0.5F * flicker);
+    }
     if (enemy.isElite)
     {
         DrawCircleLines(static_cast<int32_t>(enemy.position.x),
@@ -1313,6 +1411,21 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
         DrawLineEx(enemy.position, lineEnd, 3, Fade(Palette::Crit, blink));
     }
 
+    if (kind.pulseInsteadOfSpawn && enemy.stateTimer < 0.6F)
+    {
+        const float warn = 1.0F - enemy.stateTimer / 0.6F;
+        DrawCircleLines(static_cast<int32_t>(enemy.position.x),
+                        static_cast<int32_t>(enemy.position.y), kind.pulseRadius,
+                        Fade(Palette::PunctumAccent, warn * 0.6F));
+    }
+
+    if (kind.contactAppliesConfuse && confusePulseActive(kind.confuseTelegraphDuration))
+    {
+        DrawCircleLines(static_cast<int32_t>(enemy.position.x),
+                        static_cast<int32_t>(enemy.position.y), kind.radius + 6,
+                        Palette::ElementConfuse);
+    }
+
     if (kind.pattern == EnemyPattern::Turret &&
         Vector2Distance(enemy.position, game.run.player.position) < 700.0F)
     {
@@ -1325,10 +1438,9 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
                                  360.0F);
     drawEnemyShape(kind.shape, enemy.position, kind.radius, spin, color);
 
-    auto maxHealth = static_cast<int32_t>(
-        static_cast<float>(kind.health) *
-        difficultyDefs.at(static_cast<size_t>(game.resources.settings.difficulty)).enemyHealthMult *
-        waveEnemyScale(game));
+    constexpr float enemyHealthMult = 1.2F;
+    auto maxHealth = static_cast<int32_t>(static_cast<float>(kind.health) * enemyHealthMult *
+                                          waveEnemyScale(game));
     if (enemy.isElite)
     {
         maxHealth *= 2;
@@ -1427,6 +1539,13 @@ void drawBossHull(BossShape shape, Vector2 center, Vector2 size, Color color)
         DrawPolyLines(center, 6, size.x / 2, 0, Fade(Palette::StructDark, 0.8F));
         DrawPolyLines(center, 6, size.x / 2 * 0.65F, 0, Fade(Palette::StructDark, 0.6F));
         break;
+    case BossShape::Segment:
+        // Organic hull - a soft-edged blob rather than a hard geometric plate, shared by the
+        // Wreckworm head and every chain segment alike (see BossShape::Segment in boss.hpp).
+        DrawCircle(cx, cy, size.x / 2, color);
+        DrawCircle(cx, cy, size.x / 2 * 0.55F, Fade(Palette::StructLight, 0.3F));
+        DrawCircleLines(cx, cy, size.x / 2, Fade(Palette::StructDark, 0.6F));
+        break;
     }
 }
 
@@ -1440,8 +1559,53 @@ void drawBoss(const Game& game, const Boss& boss)
         ufoColor =
             ColorLerp(ufoColor, WHITE, boss.hitFlashTimer / UpdateConstants::hitFlashDuration);
     }
+    if (boss.burnDps > 0)
+    {
+        const float flicker = 0.6F + 0.4F * std::sin(static_cast<float>(GetTime()) * 10.0F);
+        ufoColor = ColorLerp(ufoColor, Palette::ElementBurn, 0.5F * flicker);
+    }
+    if (boss.debuffFreeze)
+    {
+        ufoColor = ColorLerp(ufoColor, Palette::ElementFreeze, 0.35F);
+    }
+    if (boss.debuffStatic)
+    {
+        const float flicker = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 18.0F);
+        ufoColor = ColorLerp(ufoColor, Palette::ElementStatic, 0.4F * flicker);
+    }
 
     drawBossHull(boss.shape, bossCenter, boss.size, ufoColor);
+
+    // Plates are real Boss entries (see boss.hpp) drawn through this same function via the
+    // generic per-boss loop, so a thin ring marks one out as "attached and protecting" vs. an
+    // independent attacker (no ring - reads the same as any other boss once it's cut loose).
+    if (boss.isBeltbreakerPlate && boss.plateAttached)
+    {
+        DrawCircleLinesV(bossCenter, boss.size.x * 0.75F, ColorAlpha(Palette::Shield, 0.6F));
+    }
+
+    if (boss.isBeltbreaker && !boss.beltbreakerShielded)
+    {
+        // Fills up clockwise from empty to full as the core's shield charges - killing plates
+        // (see updateBeltbreakerCore) directly slows how fast this ring fills.
+        const float ringRadius = boss.size.x * 0.65F;
+        DrawRing(bossCenter, ringRadius - 3, ringRadius + 3, -90.0F,
+                -90.0F + 360.0F * std::clamp(boss.shieldGenProgress, 0.0F, 1.0F), 48, Palette::Shield);
+    }
+
+    if (boss.isBeltbreaker && boss.beltbreakerShielded)
+    {
+        // The core is untouchable right now - its plates are out attacking independently (drawn
+        // through this same function). The ring drains clockwise as the shield runs down, so you
+        // can see exactly how long until the plates come home and it drops.
+        const float total = UpdateConstants::beltbreakerShieldedDuration(boss.plateCount);
+        const float frac = std::clamp(boss.beltbreakerShieldTimer / total, 0.0F, 1.0F);
+        const float alpha = 0.35F + 0.25F * (std::sin(static_cast<float>(GetTime()) * 3.0F) + 1.0F) * 0.5F;
+        const float ringRadius = boss.size.x * 0.65F;
+        DrawCircleLinesV(bossCenter, ringRadius, ColorAlpha(Palette::Shield, alpha * 0.4F));
+        DrawRing(bossCenter, ringRadius - 3, ringRadius + 3, -90.0F, -90.0F + 360.0F * frac, 48,
+                ColorAlpha(Palette::Shield, alpha + 0.3F));
+    }
 
     if (boss.state == BossState::WINDING_UP)
     {
@@ -1462,20 +1626,24 @@ void drawBoss(const Game& game, const Boss& boss)
         }
     }
 
-    if (boss.health > 0)
+    // Plates (and Wreckworm chain segments, same reasoning) are small and can be several-at-once,
+    // so they keep a compact floating bar for quick in-combat reads. Real bosses get the "boss
+    // feel" treatment instead - see drawBossHealthBars, a fixed bar anchored to the bottom of the
+    // screen rather than a label that moves and shrinks with the boss's own hull.
+    if ((boss.isBeltbreakerPlate || boss.isWreckwormSegment) && boss.health > 0)
     {
         const float healthPercentage =
             static_cast<float>(boss.health) / static_cast<float>(boss.maxHealth);
         const float healthBarWidth = boss.size.x * healthPercentage;
         DrawRectangle(static_cast<int32_t>(boss.position.x),
-                      static_cast<int32_t>(boss.position.y) - 20, static_cast<int32_t>(boss.size.x),
-                      15, Fade(Palette::Haze, 0.25F));
+                      static_cast<int32_t>(boss.position.y) - 10, static_cast<int32_t>(boss.size.x),
+                      6, Fade(Palette::Haze, 0.25F));
         DrawRectangle(static_cast<int32_t>(boss.position.x),
-                      static_cast<int32_t>(boss.position.y) - 20,
-                      static_cast<int32_t>(healthBarWidth), 15, Palette::Haze);
+                      static_cast<int32_t>(boss.position.y) - 10,
+                      static_cast<int32_t>(healthBarWidth), 6, Palette::Haze);
         DrawRectangleLines(static_cast<int32_t>(boss.position.x),
-                           static_cast<int32_t>(boss.position.y) - 20,
-                           static_cast<int32_t>(boss.size.x), 15, Palette::StructDark);
+                           static_cast<int32_t>(boss.position.y) - 10,
+                           static_cast<int32_t>(boss.size.x), 6, Palette::StructDark);
     }
 
     if (boss.state == BossState::SHOOTING && boss.attack == BossAttack::Beam)
@@ -1631,6 +1799,40 @@ void drawOrbitBlades(const Game& game)
             DrawLineEx(start, end, 9, Fade(color, 0.2F));
             break;
         }
+        case WeaponType::Flamethrower:
+        {
+            // Was entirely unrendered before — updateFlamethrower() dealt real damage but had no
+            // visual counterpart at all, so the weapon looked completely non-functional in play.
+            if (!flamethrowerActive(w.level))
+            {
+                break;
+            }
+            const float range = flamethrowerRangeFor(w.level);
+            const float halfAngle = flamethrowerHalfAngleRad();
+            // Cheap flicker so it reads as fire rather than a static wedge.
+            const float flicker =
+                0.75F + 0.25F * std::sin(static_cast<float>(GetTime()) * 18.0F);
+            for (const auto& dir : flamethrowerConeDirs(game, w.level))
+            {
+                const float baseAngle = std::atan2(dir.y, dir.x);
+                const Vector2 left{
+                    .x = game.run.player.position.x + std::cos(baseAngle - halfAngle) * range,
+                    .y = game.run.player.position.y + std::sin(baseAngle - halfAngle) * range};
+                const Vector2 right{
+                    .x = game.run.player.position.x + std::cos(baseAngle + halfAngle) * range,
+                    .y = game.run.player.position.y + std::sin(baseAngle + halfAngle) * range};
+                const Vector2 mid{
+                    .x = game.run.player.position.x + std::cos(baseAngle) * range * 0.5F,
+                    .y = game.run.player.position.y + std::sin(baseAngle) * range * 0.5F};
+                DrawTriangle(game.run.player.position, left, right,
+                            Fade(Palette::AccentDim, 0.30F * flicker));
+                DrawTriangle(game.run.player.position, mid, right,
+                            Fade(Palette::Crit, 0.35F * flicker));
+                DrawTriangleLines(game.run.player.position, left, right,
+                                  Fade(Palette::Accent, 0.5F * flicker));
+            }
+            break;
+        }
         case WeaponType::Shock:
         {
             const float maxRadius = shockwaveRadius(w.level, w.evolved);
@@ -1748,8 +1950,53 @@ void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius)
                  Vector2Subtract(base, Vector2Scale(perp, 6)), Palette::Crit);
 }
 
+// Anchored to the bottom of the screen, like a classic boss-fight HP bar, rather than a label
+// that shrinks and moves with the boss's own hull - Beltbreaker plates are excluded (they keep
+// their own small floating bar in drawBoss; several stacked full-width bars for up to 8 plates
+// would be noise, not a "boss feel").
+void drawBossHealthBars(const Game& game)
+{
+    const auto scaledScreenWidth =
+        static_cast<int32_t>(static_cast<float>(game.resources.screenWidth) / hudScale(game));
+    const auto scaledScreenHeight =
+        static_cast<int32_t>(static_cast<float>(game.resources.screenHeight) / hudScale(game));
+
+    constexpr int32_t barWidth = 520;
+    constexpr int32_t barHeight = 20;
+    constexpr int32_t barGap = 8;
+    const int32_t barX = (scaledScreenWidth - barWidth) / 2;
+    int32_t barY = scaledScreenHeight - 70;
+
+    for (const auto& boss : game.run.bosses)
+    {
+        if (boss.health <= 0 || boss.isBeltbreakerPlate || boss.isWreckwormSegment)
+        {
+            continue;
+        }
+
+        const float frac = std::clamp(
+            static_cast<float>(boss.health) / static_cast<float>(boss.maxHealth), 0.0F, 1.0F);
+        DrawRectangle(barX, barY, barWidth, barHeight, Fade(Palette::StructMid, 0.5F));
+        DrawRectangle(barX, barY, static_cast<int32_t>(static_cast<float>(barWidth) * frac),
+                      barHeight, boss.color);
+        DrawRectangleLines(barX, barY, barWidth, barHeight, Palette::StructDark);
+
+        if (boss.isBeltbreaker && boss.beltbreakerShielded)
+        {
+            constexpr const char* shieldedLabel = "SHIELDED";
+            const auto textWidth =
+                static_cast<int32_t>(MeasureTextEx(game.resources.font, shieldedLabel, 16, 1).x);
+            drawText(game, shieldedLabel, barX + (barWidth - textWidth) / 2, barY + 1, 16,
+                    Palette::StructLight);
+        }
+
+        barY -= barHeight + barGap;
+    }
+}
+
 void drawHUD(const Game& game)
 {
+    drawBossHealthBars(game);
     drawHealthBar(game, 10, 10);
     drawShieldStackPips(game, 10 + healthBarWidthWithLabel() + 20, 10);
 
@@ -2014,11 +2261,23 @@ void drawActiveBuffs(const Game& game, int32_t x, int32_t y)
         cursorX += 18 + 11 * 9 + 14;
     }
 
-    if (player.dashTrailUnlocked)
+    if (player.dashTrailTimer > 0)
     {
         DrawCircleV(Vector2{.x = static_cast<float>(cursorX) + 7, .y = static_cast<float>(y) + 9},
                     7, Palette::Shield);
-        drawText(game, "Dash Trail", cursorX + 18, y, 16, Palette::Shield);
+        const std::string label =
+            std::format("Dash Trail {:.0f}s", std::ceil(player.dashTrailTimer));
+        drawText(game, label.c_str(), cursorX + 18, y, 16, Palette::Shield);
+        cursorX += 18 + static_cast<int32_t>(label.size()) * 9 + 14;
+    }
+
+    if (player.overdriveTimer > 0)
+    {
+        DrawCircleV(Vector2{.x = static_cast<float>(cursorX) + 7, .y = static_cast<float>(y) + 9},
+                    7, Palette::Crit);
+        const std::string label =
+            std::format("Overdrive {:.0f}s", std::ceil(player.overdriveTimer));
+        drawText(game, label.c_str(), cursorX + 18, y, 16, Palette::Crit);
     }
 }
 
@@ -2029,16 +2288,17 @@ void drawSandboxHUD(const Game& game)
         bossAttackNames.at(static_cast<size_t>(game.sandboxBossAttackIndex)));
     const std::string pickupName(sandboxPickupName(game.sandboxPickupIndex));
     const std::string shipName(currentShip(game).name);
-    const std::array<std::string, 7> lines{
+    const std::array<std::string, 8> lines{
         "SANDBOX",
         std::format("[ / ]: cycle enemy ({})   E: spawn enemy   B: spawn boss", kindName),
         "K: clear board   L: level-up picker   H: full heal   R: reset abilities",
         std::format("G: death {}   , / . : cycle boss attack ({})   O: command nearest boss",
                     game.sandboxDeathEnabled ? "ON" : "OFF", attackName),
-        std::format("- / + : wave ({})   I / Shift+I: cycle ship ({})", game.run.waveNumber,
-                    shipName),
+        std::format("- / + : wave ({}, {})   I / Shift+I: cycle ship ({})", game.run.waveNumber,
+                    biomeName(currentBiome(game.run.waveNumber)), shipName),
         "N: spawn black hole   M: spawn wormhole   U: spawn hazard (+Shift: debuff)",
         std::format("; / ': cycle pickup ({})   P: drop selected pickup", pickupName),
+        "V: spawn signature boss for current biome/wave (Beltbreaker/Wreckworm only so far)",
     };
 
     int32_t y =
@@ -2056,7 +2316,7 @@ void drawSandboxHUD(const Game& game)
 auto drawGame(Game& game) -> void
 {
     BeginTextureMode(game.resources.worldTarget);
-    ClearBackground(Palette::Void);
+    ClearBackground(biomeVoidColor(game));
 
     switch (game.state)
     {

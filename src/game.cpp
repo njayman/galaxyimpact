@@ -228,8 +228,9 @@ void resetRun(Game& game)
                              .regenTimer = 0,
                              .regenRate = 0,
                              .overchargeTimer = 0,
-                             .dashTrailUnlocked = false,
-                             .secondWindReady = false};
+                             .dashTrailTimer = 0,
+                             .secondWindReady = false,
+                             .overdriveTimer = 0};
 
     game.run.bosses.clear();
 

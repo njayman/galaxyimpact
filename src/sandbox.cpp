@@ -77,6 +77,22 @@ void updateSandboxInput(Game& game)
         spawnSwarmBoss(game);
     }
 
+    if (IsKeyPressed(KEY_V))
+    {
+        // Signature bosses aren't on the generic B/Shift+B spawn path, and only exist at
+        // specific waves in play - this lets tuning use the sandbox's wave (-/+ ) to pick any
+        // appearance of a signature boss (e.g. wave 10/20/25 for the Beltbreaker) and spawn it
+        // on demand regardless of the wave-progression timer.
+        if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
+        {
+            spawnBeltbreaker(game, game.run.waveNumber);
+        }
+        else if (currentBiome(game.run.waveNumber) == Biome::Rustbloom)
+        {
+            spawnWreckworm(game, game.run.waveNumber);
+        }
+    }
+
     if (IsKeyPressed(KEY_K))
     {
         game.run.enemies.clear();

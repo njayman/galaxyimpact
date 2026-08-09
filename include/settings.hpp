@@ -2,33 +2,6 @@
 
 #include <array>
 #include <cstdint>
-#include <string_view>
-
-enum class Difficulty : std::uint8_t
-{
-    Easy,
-    Normal,
-    Hard,
-
-    Count
-};
-
-struct DifficultyDef
-{
-    std::string_view name;
-    float enemyHealthMult;
-    float enemyDamageMult;
-    float spawnRateMult;
-};
-
-constexpr std::array<DifficultyDef, static_cast<size_t>(Difficulty::Count)> difficultyDefs{
-    DifficultyDef{
-        .name = "Easy", .enemyHealthMult = 0.65, .enemyDamageMult = 0.6, .spawnRateMult = 1.4},
-    DifficultyDef{
-        .name = "Normal", .enemyHealthMult = 0.85, .enemyDamageMult = 0.8, .spawnRateMult = 1.15},
-    DifficultyDef{
-        .name = "Hard", .enemyHealthMult = 1.2, .enemyDamageMult = 1.15, .spawnRateMult = 0.85},
-};
 
 struct ResolutionOption
 {
@@ -52,7 +25,6 @@ constexpr int32_t defaultHudScaleIndex = 1;
 struct Settings
 {
     int32_t resolutionIndex{};
-    Difficulty difficulty{Difficulty::Normal};
     bool bgmOn{true};
     bool soundOn{true};
     int32_t fpsIndex{};
