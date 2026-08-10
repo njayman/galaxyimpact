@@ -7,6 +7,7 @@
 #include "raymath.h"
 #include "sound.hpp"
 #include "update.hpp"
+#include "update_constants.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -259,6 +260,7 @@ void resetRun(Game& game)
     game.run.laserDrones.clear();
     game.run.turrets.clear();
     game.run.chainLightningBolts.clear();
+    game.run.sniperShots.clear();
     game.run.weapons = {Weapon{.type = ship.defaultWeapon, .level = 1}};
     game.run.skillLevels.fill(0);
     game.run.skillLevels.at(
@@ -275,9 +277,10 @@ void resetRun(Game& game)
     game.run.wormhole.timer = static_cast<float>(GetRandomValue(400, 700)) / 10.0F;
     game.run.asteroidSpawnTimer = 1.0F;
     game.run.enemySpawnTimer = 1.0F;
-    game.run.shadowPockets.clear();
-    game.run.shadowPocketSpawnTimer = 1.0F;
+    game.run.solarForgeHeatMeter = 0;
     game.run.solarForgeHeatTickTimer = 0;
+    game.run.fluidContactTickTimer = 0;
+    game.run.organicMergeTimer = organicMergeCheckInterval;
 
     game.run.xp = 0;
     game.run.level = 1;

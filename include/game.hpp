@@ -101,11 +101,13 @@ struct GameplayState
     std::vector<LaserDrone> laserDrones;
     std::vector<Turret> turrets;
     std::vector<ChainLightningBolt> chainLightningBolts;
+    std::vector<ChainLightningBolt> sniperShots;
     float asteroidSpawnTimer;
     float enemySpawnTimer;
-    std::vector<ShadowPocket> shadowPockets;
-    float shadowPocketSpawnTimer;
+    float solarForgeHeatMeter;
     float solarForgeHeatTickTimer;
+    float fluidContactTickTimer;
+    float organicMergeTimer;
     int xp;
     int level;
     int xpToNext;
@@ -143,6 +145,13 @@ struct Game
     int sandboxBossAttackIndex;
     int sandboxPickupIndex;
     bool sandboxNaturalSpawnEnabled;
+
+    bool sandboxBrowserMode;
+    int browserCategoryIndex;
+    int browserBossTypeIndex;
+    int browserWeaponIndex;
+    int browserShipIndex;
+    int browserParticleIndex;
 
     GameResources resources;
     GameplayState run;

@@ -8,12 +8,6 @@
 #include <cstddef>
 #include <vector>
 
-// Boss-specific attacks that only make sense on the boss they were built for - Beltbreaker/
-// Wreckworm build their own hand-picked movesets and never call this function, but nothing
-// previously stopped a *generic* boss from randomly rolling one of these and hitting code that
-// assumes fields (plateOwnerId, segmentCount, ...) a generic Boss never sets up. ShockwaveStomp
-// is excluded too: it's now a built-in anti-camping mechanic every boss has automatically (see
-// updateBossMovement), not a moveset pick.
 auto isGenericMovesetAttack(BossAttack attack) -> bool
 {
     switch (attack)
@@ -22,6 +16,8 @@ auto isGenericMovesetAttack(BossAttack attack) -> bool
     case BossAttack::PlateHurl:
     case BossAttack::BurrowCharge:
     case BossAttack::CoilClamp:
+    case BossAttack::MeteorHell:
+    case BossAttack::MeteorSwarm:
         return false;
     default:
         return true;
@@ -264,7 +260,7 @@ void spawnWreckworm(Game& game, int32_t wave)
     }
     const BossAttack firstAttack = moveset.front();
 
-    constexpr float headSize = 96.0F;
+    constexpr float headSize = 192.0F;
 
     Boss head{.position = spawnPos,
               .size = Vector2{.x = headSize, .y = headSize},
@@ -312,7 +308,7 @@ void spawnWreckworm(Game& game, int32_t wave)
         const Color segColor = armor ? Palette::StructMid : Palette::RustbloomAccent;
 
         Boss segment{.position = segPos,
-                     .size = Vector2{.x = 40, .y = 40},
+                     .size = Vector2{.x = 80, .y = 80},
                      .color = segColor,
                      .baseColor = segColor,
                      .health = segHealth,
@@ -343,17 +339,21 @@ void spawnSlagmaw(Game& game, int32_t wave)
 
     const int32_t tier = wave / megaBossWaveInterval;
 
-    float heatFillRate = 0.045F;
-    bool hotRoundUnlocked = false;
+    std::vector<BossAttack> moveset{BossAttack::Barrage, BossAttack::ChargeDash,
+                                    BossAttack::MeteorHell, BossAttack::MeteorSwarm};
+    float attackTimerMin = 2.5F;
+    float attackTimerMax = 4.5F;
+    if (wave >= 70)
+    {
+        moveset.push_back(BossAttack::HomingBarrage);
+        attackTimerMin = 2.0F;
+        attackTimerMax = 3.5F;
+    }
     if (wave >= 75)
     {
-        heatFillRate = 0.09F;
-        hotRoundUnlocked = true;
-    }
-    else if (wave >= 70)
-    {
-        heatFillRate = 0.065F;
-        hotRoundUnlocked = true;
+        moveset.push_back(BossAttack::MeteorHell);
+        attackTimerMin = 1.6F;
+        attackTimerMax = 3.0F;
     }
 
     const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
@@ -366,7 +366,8 @@ void spawnSlagmaw(Game& game, int32_t wave)
                                              megaBossHealthMult * enemyHealthMult *
                                              waveEnemyScale(game));
 
-    constexpr float slagmawSize = 110.0F;
+    constexpr float slagmawSize = 450.0F;
+    const BossAttack firstAttack = moveset.front();
 
     Boss boss{.position = spawnPos,
               .size = Vector2{.x = slagmawSize, .y = slagmawSize},
@@ -375,9 +376,12 @@ void spawnSlagmaw(Game& game, int32_t wave)
               .health = health,
               .maxHealth = health,
               .state = BossState::IDLE,
-              .attack = BossAttack::ChargeDash,
-              .moveset = {BossAttack::ChargeDash},
-              .attackTimer = static_cast<float>(GetRandomValue(20, 40)) / 10.0F,
+              .attack = firstAttack,
+              .moveset = std::move(moveset),
+              .attackTimer = static_cast<float>(GetRandomValue(
+                                static_cast<int32_t>(attackTimerMin * 10),
+                                static_cast<int32_t>(attackTimerMax * 10))) /
+                            10.0F,
               .stateTimer = 0,
               .targetPosition = Vector2{},
               .slamHit = false,
@@ -390,47 +394,13 @@ void spawnSlagmaw(Game& game, int32_t wave)
               .isSwarm = false,
               .strafePhase = 0,
               .hitFlashTimer = 0,
-              .shape = BossShape::HexPlated,
+              .shape = BossShape::SpikedRing,
               .isBeltbreaker = false,
               .instanceId = game.run.bossSpawnCount,
-              .isSlagmaw = true,
-              .heatMeter = 0,
-              .heatFillRate = heatFillRate,
-              .slagmawPhase = SlagmawPhase::Ember,
-              .slagmawHotRoundUnlocked = hotRoundUnlocked};
+              .isSlagmaw = true};
 
     game.run.bosses.push_back(std::move(boss));
     playSFX(game, game.resources.sounds.bossWindUp);
-}
-
-void updateSlagmawHeat(Game& game, Boss& boss, float deltaTime)
-{
-    if (!boss.isSlagmaw || boss.health <= 0)
-    {
-        return;
-    }
-
-    boss.heatMeter += boss.heatFillRate * deltaTime;
-
-    if (boss.heatMeter >= slagmawHeatFlareEnd && boss.slagmawPhase != SlagmawPhase::Vent)
-    {
-        boss.slagmawPhase = SlagmawPhase::Vent;
-        boss.slagmawVentPending = true;
-    }
-    else if (boss.slagmawPhase == SlagmawPhase::Ember && boss.heatMeter >= slagmawHeatEmberEnd)
-    {
-        boss.slagmawPhase = SlagmawPhase::Flare;
-        boss.moveset = boss.slagmawHotRoundUnlocked
-                            ? std::vector<BossAttack>{BossAttack::Barrage, BossAttack::Beam,
-                                                      BossAttack::HomingBarrage}
-                            : std::vector<BossAttack>{BossAttack::Barrage, BossAttack::Beam};
-    }
-
-    if (boss.slagmawVentPending && boss.state == BossState::IDLE)
-    {
-        boss.slagmawVentPending = false;
-        forceBossAttack(game, boss, BossAttack::Slam);
-    }
 }
 
 void spawnBoss(Game& game) { spawnBossWave(game, megaBossHealthMult, megaBossSizeMult, true); }
@@ -458,11 +428,6 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
         boss.recoveryTimer -= deltaTime;
     }
 
-    // Built-in anti-camping punish (see Boss::meleeStompTimer) - explicitly excludes segments
-    // and attached plates rather than relying on the early-returns below, since both of those
-    // sit at their default IDLE state forever (their position/attacks are driven by their
-    // owner, not this function) and would otherwise silently accumulate toward a stomp neither
-    // one is set up to perform independently.
     if (!boss.isWreckwormSegment && !(boss.isBeltbreakerPlate && boss.plateAttached) &&
         boss.health > 0 && boss.state == BossState::IDLE &&
         Vector2Distance(game.run.player.position, bossCenter) <= UpdateConstants::shockwaveStompRadius)
@@ -550,6 +515,31 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
 
     }
 
+    if (boss.isSlagmaw && boss.health > 0)
+    {
+        const float offscreenDist =
+            std::max(static_cast<float>(game.resources.screenWidth),
+                     static_cast<float>(game.resources.screenHeight)) /
+                2 +
+            ghostTeleportMargin;
+        if (boss.ghostFadeAlpha >= 1.0F &&
+            Vector2Distance(bossCenter, game.run.player.position) > offscreenDist)
+        {
+            const float teleportAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+            const Vector2 spawnCenter = Vector2Add(
+                game.run.player.position,
+                Vector2{.x = std::cos(teleportAngle) * offscreenDist * 0.85F,
+                        .y = std::sin(teleportAngle) * offscreenDist * 0.85F});
+            boss.position =
+                Vector2Subtract(spawnCenter, Vector2{.x = boss.size.x / 2, .y = boss.size.y / 2});
+            boss.ghostFadeAlpha = 0;
+        }
+        if (boss.ghostFadeAlpha < 1.0F)
+        {
+            boss.ghostFadeAlpha = std::min(1.0F, boss.ghostFadeAlpha + deltaTime / ghostFadeDuration);
+        }
+    }
+
     if (boss.state == BossState::SHOOTING || boss.recoveryTimer > 0)
     {
         return;
@@ -570,24 +560,44 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
     const Vector2 dirToPlayer = Vector2Scale(toPlayer, 1.0F / dist);
     const Vector2 perp{.x = -dirToPlayer.y, .y = dirToPlayer.x};
 
+    bool wreckwormShouldMove = true;
+    if (boss.isWreckwormHead)
+    {
+        wreckwormShouldMove =
+            boss.wreckwormPrevPlayerDist >= 0 && dist > boss.wreckwormPrevPlayerDist;
+        boss.wreckwormPrevPlayerDist = dist;
+    }
+
     const bool enraged =
         boss.health > 0 &&
         static_cast<float>(boss.health) <= static_cast<float>(boss.maxHealth) * enrageHealthFrac;
 
     const float speedMult = (enraged ? 1.25F : 1.0F) * (boss.debuffFreeze ? freezeSlowMult : 1.0F) *
                             (boss.isBeltbreakerPlate ? beltbreakerPlateMoveSpeedMult : 1.0F) *
-                            (boss.isWreckwormHead ? boss.wreckwormSpeedMult : 1.0F);
+                            (boss.isWreckwormHead ? boss.wreckwormSpeedMult : 1.0F) *
+                            (boss.isSlagmaw ? slagmawMoveSpeedMult : 1.0F);
 
     const float radialAmount =
         std::clamp((dist - bossEngageDistance) / bossEngageDistance, -1.5F, 1.5F);
     const float strafe = std::sin(static_cast<float>(GetTime()) * 0.9F + boss.strafePhase);
 
     Vector2 move = Vector2Add(Vector2Scale(dirToPlayer, radialAmount), Vector2Scale(perp, strafe));
-    if (Vector2Length(move) > 0)
+    if (Vector2Length(move) > 0 && wreckwormShouldMove)
     {
         const float chaseSpeed = (game.run.player.speed * 1.15F + 1) * speedMult;
         move = Vector2Scale(Vector2Normalize(move), chaseSpeed);
         boss.position = Vector2Add(boss.position, Vector2Scale(move, deltaTime * frameScale));
+
+        if (boss.isWreckwormHead && GetRandomValue(0, 3) == 0)
+        {
+            game.run.flameParticles.push_back(
+                Particle{.position = bossCenter,
+                        .velocity = Vector2Scale(move, -0.3F),
+                        .radius = boss.size.x * 0.05F,
+                        .life = 1.2F,
+                        .maxLife = 1.2F,
+                        .color = Palette::RustbloomAccent});
+        }
     }
 }
 
@@ -1041,6 +1051,10 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             case BossAttack::CoilClamp:
                 boss.color = Palette::RustbloomAccent;
                 break;
+            case BossAttack::MeteorHell:
+            case BossAttack::MeteorSwarm:
+                boss.color = Palette::SolarForgeAccent;
+                break;
             case BossAttack::Count:
                 break;
             }
@@ -1072,7 +1086,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                     Vector2Distance(bossCenter, asteroid.position) <= radius + asteroid.radius)
                 {
                     asteroid.active = false;
-                    breakAsteroid(game.run.asteroids, asteroid);
+                    breakAsteroid(game, asteroid);
                 }
             }
 
@@ -1081,7 +1095,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 const auto& e = game.run.enemies.at(i);
                 if (e.active && !e.phased &&
                     Vector2Distance(bossCenter, e.position) <=
-                        radius + enemyKinds.at(static_cast<size_t>(e.kind)).radius)
+                        radius + enemyCollisionRadius(e))
                 {
                     killEnemyForBossAttack(game, i, false);
                 }
@@ -1137,6 +1151,48 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             }
         }
 
+        if (boss.attack == BossAttack::MeteorHell)
+        {
+            boss.barrageTimer -= deltaTime;
+            if (boss.barrageTimer <= 0)
+            {
+                boss.barrageTimer = meteorHellSpawnInterval;
+                playSFX(game, game.resources.sounds.spreadBurst);
+                triggerShake(game, 5, 0.2F);
+
+                const auto roundProjectileHealth = static_cast<int32_t>(
+                    std::max(1.0F, static_cast<float>(baseProjectileHealth) * meteorHellHealthMult *
+                                       enemyHealthMult * waveEnemyScale(game)));
+                const int32_t spawnCount =
+                    GetRandomValue(meteorHellSpawnPerBatchMin, meteorHellSpawnPerBatchMax);
+                for (int32_t i = 0; i < spawnCount; i++)
+                {
+
+                    const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+                    const auto dist = static_cast<float>(
+                        GetRandomValue(static_cast<int32_t>(meteorHellSpawnDistMin),
+                                       static_cast<int32_t>(meteorHellSpawnDistMax)));
+                    const Vector2 spawnPos = Vector2Add(
+                        game.run.player.position,
+                        Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+                    const Vector2 vel = Vector2Scale(
+                        Vector2Normalize(Vector2Subtract(game.run.player.position, spawnPos)),
+                        meteorHellProjSpeed);
+
+                    game.run.bossProjectiles.push_back(
+                        BossProjectile{.position = spawnPos,
+                                       .velocity = vel,
+                                       .radius = 10,
+                                       .homing = false,
+                                       .active = true,
+                                       .fromPlayer = false,
+                                       .damage = enemyDamage(game, crossfireProjectileDamage),
+                                       .health = roundProjectileHealth,
+                                       .isMeteor = true});
+                }
+            }
+        }
+
         if (boss.attack == BossAttack::Beam)
         {
             const Vector2 direction =
@@ -1179,6 +1235,9 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 const Vector2 direction =
                     Vector2Normalize(Vector2Subtract(game.run.player.position, bossCenter));
 
+                const bool isWreckworm = boss.isWreckwormHead || boss.isWreckwormSegment;
+                constexpr std::array<Color, 3> fluidColors{Palette::RustbloomAccent, Palette::Charge,
+                                                            Palette::Accent};
                 game.run.bossProjectiles.push_back(BossProjectile{
                     .position = bossCenter,
                     .velocity = Vector2Scale(direction, barrageProjSpeed * attackScale),
@@ -1190,7 +1249,10 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                         1, static_cast<int32_t>(
                                static_cast<float>(enemyDamage(game, crossfireProjectileDamage)) *
                                attackScale)),
-                    .health = 1});
+                    .health = 1,
+                    .isMeteor = boss.isSlagmaw,
+                    .isFluid = isWreckworm,
+                    .fluidColor = fluidColors.at(static_cast<size_t>(GetRandomValue(0, 2)))});
                 playSFX(game, game.resources.sounds.spreadBurst);
             }
         }
@@ -1303,15 +1365,6 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             boss.attackTimer = static_cast<float>(GetRandomValue(15, 40)) / 10.0F * rateMult;
             boss.color = boss.baseColor;
             boss.recoveryTimer = bossRecoveryDuration;
-
-            if (boss.isSlagmaw && boss.attack == BossAttack::Slam)
-            {
-                boss.heatMeter = 0;
-                boss.slagmawPhase = SlagmawPhase::Ember;
-                boss.moveset = {BossAttack::ChargeDash};
-                boss.recoveryTimer = slagmawCritWindowDuration;
-                boss.attackTimer = slagmawCritWindowDuration;
-            }
         }
         break;
     }
@@ -1327,6 +1380,8 @@ auto bossWindupDuration(BossAttack attack) -> float
         return 1.4F;
     case BossAttack::ChargeDash:
         return 1.2F;
+    case BossAttack::MeteorHell:
+        return 1.4F;
     default:
         return 1.0F;
     }
@@ -1340,7 +1395,7 @@ void processBeamAttack(Game& game, Boss& boss, Vector2 beamStart, Vector2 beamEn
             CheckCollisionCircleLine(asteroid.position, asteroid.radius, beamStart, beamEnd))
         {
             asteroid.active = false;
-            breakAsteroid(game.run.asteroids, asteroid);
+            breakAsteroid(game, asteroid);
         }
     }
 
@@ -1348,7 +1403,7 @@ void processBeamAttack(Game& game, Boss& boss, Vector2 beamStart, Vector2 beamEn
     {
         const auto& e = game.run.enemies.at(i);
         if (e.active && !e.phased &&
-            CheckCollisionCircleLine(e.position, enemyKinds.at(static_cast<size_t>(e.kind)).radius,
+            CheckCollisionCircleLine(e.position, enemyCollisionRadius(e),
                                      beamStart, beamEnd))
         {
             killEnemyForBossAttack(game, i, false);
@@ -1434,6 +1489,10 @@ void forceBossAttack(Game& game, Boss& boss, BossAttack attack)
     case BossAttack::CoilClamp:
         boss.color = Palette::RustbloomAccent;
         break;
+    case BossAttack::MeteorHell:
+    case BossAttack::MeteorSwarm:
+        boss.color = Palette::SolarForgeAccent;
+        break;
     case BossAttack::Count:
         break;
     }
@@ -1513,7 +1572,7 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
                                        UpdateConstants::shockwaveStompRadius + asteroid.radius)
             {
                 asteroid.active = false;
-                breakAsteroid(game.run.asteroids, asteroid);
+                breakAsteroid(game, asteroid);
             }
         }
         for (size_t i = 0; i < game.run.enemies.size(); i++)
@@ -1522,7 +1581,7 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
             if (e.active && !e.phased &&
                 Vector2Distance(bossCenter, e.position) <=
                     UpdateConstants::shockwaveStompRadius +
-                        enemyKinds.at(static_cast<size_t>(e.kind)).radius)
+                        enemyCollisionRadius(e))
             {
                 killEnemyForBossAttack(game, i, false);
             }
@@ -1565,6 +1624,21 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         boss.stateTimer = wreckwormCoilClampDuration;
         boss.coilClampGapDeg = static_cast<float>(GetRandomValue(0, 359));
         playSFX(game, game.resources.sounds.bossWindUp);
+        break;
+    case BossAttack::MeteorHell:
+        boss.stateTimer = meteorHellDuration(game.run.waveNumber);
+        boss.barrageTimer = 0;
+        playSFX(game, game.resources.sounds.spreadBurst);
+        triggerShake(game, 8, 0.3F);
+        break;
+    case BossAttack::MeteorSwarm:
+        boss.stateTimer = 0.6F;
+        playSFX(game, game.resources.sounds.spreadBurst);
+        triggerShake(game, 6, 0.25F);
+        for (int32_t i = 0; i < meteorSwarmSpawnCount; i++)
+        {
+            spawnEnemyAt(game, enemyKindMeteorChunk, spawnRingPosition(game));
+        }
         break;
     case BossAttack::Count:
         break;

@@ -655,7 +655,9 @@ void updateGameplay(Game& game, float deltaTime)
     updateLaserDrones(game, deltaTime);
     updateTurrets(game, deltaTime);
     updateFlamethrower(game, deltaTime);
+    updateSolarForgeEnemyFireParticles(game, deltaTime);
     updateChainLightningBolts(game, deltaTime);
+    updateSniperShots(game, deltaTime);
     updatePlayerBuffs(game, deltaTime);
     updateWaveSpawner(game, deltaTime);
     updateBlackHole(game, deltaTime);
@@ -699,13 +701,13 @@ void updateGameplay(Game& game, float deltaTime)
         updateBeltbreakerCore(game, boss, deltaTime);
         updateWreckwormChain(game, boss, deltaTime);
         updateWreckwormSegmentVolley(game, boss, deltaTime);
-        updateSlagmawHeat(game, boss, deltaTime);
     }
 
     updateBullets(game, deltaTime);
     updateAsteroids(game, deltaTime);
-    updateShadowPockets(game, deltaTime);
     updateSolarForgeHeat(game, deltaTime);
+    updateFluidHazardContact(game, deltaTime);
+    updateOrganicMerges(game, deltaTime);
     updateEnemies(game, deltaTime);
     updateProjectiles(game, deltaTime);
     updateMines(game, deltaTime);
@@ -790,7 +792,7 @@ void updateGameplay(Game& game, float deltaTime)
 
     updateBossDeathShockwave(game, deltaTime);
 
-    if (game.run.xp >= game.run.xpToNext)
+    if (game.run.player.health > 0 && game.run.xp >= game.run.xpToNext)
     {
         startLevelUp(game);
     }
@@ -871,10 +873,6 @@ auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>
         }
     }
 
-    // Bosses have no `.active` flag (unlike Enemy/EliteHazard) - `health > 0` is their alive
-    // check everywhere else in the codebase (see damageBoss). This loop was missing entirely
-    // until now, which silently made every weapon that targets via this function unable to aim
-    // at a boss at all.
     for (const auto& boss : game.run.bosses)
     {
         if (boss.health <= 0)
@@ -885,6 +883,66 @@ auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>
                                  .y = boss.position.y + boss.size.y / 2};
         const float d = Vector2Distance(from, bossCenter);
         if (best < 0 || d < best)
+        {
+            best = d;
+            target = bossCenter;
+            found = true;
+        }
+    }
+
+    if (!found)
+    {
+        return std::nullopt;
+    }
+    return target;
+}
+
+auto farthestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>
+{
+    float best = -1;
+    Vector2 target{};
+    bool found = false;
+
+    for (const auto& enemy : game.run.enemies)
+    {
+        if (!enemy.active)
+        {
+            continue;
+        }
+        const float d = Vector2Distance(from, enemy.position);
+        if (d > best)
+        {
+            best = d;
+            target = enemy.position;
+            found = true;
+        }
+    }
+
+    for (const auto& hazard : game.run.eliteHazards)
+    {
+        if (!hazard.active)
+        {
+            continue;
+        }
+        const float d = Vector2Distance(from, hazard.position);
+        if (d > best)
+        {
+            best = d;
+            target = hazard.position;
+            found = true;
+        }
+    }
+
+    for (const auto& boss : game.run.bosses)
+    {
+        if (boss.health <= 0)
+        {
+            continue;
+        }
+        const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
+                                 .y = boss.position.y + boss.size.y / 2};
+        const float d = Vector2Distance(from, bossCenter);
+        if (d > best)
         {
             best = d;
             target = bossCenter;
@@ -1449,6 +1507,29 @@ void updateWeapons(Game& game, float deltaTime)
             playSFX(game, game.resources.sounds.shoot);
             break;
         }
+        case WeaponType::Sniper:
+        {
+
+            if (const auto target = farthestEnemy(game, game.run.player.position);
+                target.has_value())
+            {
+                const Vector2 dir =
+                    Vector2Normalize(Vector2Subtract(*target, game.run.player.position));
+                auto dmg = static_cast<int32_t>(static_cast<float>(weaponDamage(game, w.level)) *
+                                                sniperDamageMult);
+                if (w.level >= 3)
+                {
+                    dmg = static_cast<int32_t>(static_cast<float>(dmg) * 1.3F);
+                }
+                const Vector2 start = game.run.player.position;
+                const Vector2 end = Vector2Add(start, Vector2Scale(dir, sniperLineLength));
+                sniperLineHit(game, start, end, dmg);
+                game.run.sniperShots.push_back(
+                    ChainLightningBolt{.from = start, .to = end, .timer = sniperLineFlashDuration});
+                playSFX(game, game.resources.sounds.shoot);
+            }
+            break;
+        }
         case WeaponType::ChainLightning:
             fireChainLightning(game, w);
             break;
@@ -1491,7 +1572,7 @@ void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSourc
         auto& enemy = game.run.enemies.at(j);
         if (enemy.active && !enemy.phased &&
             Vector2Distance(center, enemy.position) <=
-                radius + enemyKinds.at(static_cast<size_t>(enemy.kind)).radius)
+                radius + enemyCollisionRadius(enemy))
         {
             damageEnemy(game, j, dmg);
             recordDamage(game, source, dmg);
@@ -1545,7 +1626,7 @@ void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSourc
         {
             asteroid.active = false;
             game.run.score += asteroidScore(asteroid.tier);
-            breakAsteroid(game.run.asteroids, asteroid);
+            breakAsteroid(game, asteroid);
             hitAny = true;
         }
     }
@@ -1611,7 +1692,7 @@ void updateOrbitBladeContact(Game& game, float deltaTime)
     {
         auto& enemy = game.run.enemies.at(j);
         if (!enemy.active || enemy.phased ||
-            !touchesAnyBlade(enemy.position, enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
+            !touchesAnyBlade(enemy.position, enemyCollisionRadius(enemy)))
         {
             enemy.orbitContact = false;
             enemy.orbitDamageAccum = 0;
@@ -1723,7 +1804,7 @@ void updateOrbitBladeContact(Game& game, float deltaTime)
         {
             asteroid.active = false;
             game.run.score += asteroidScore(asteroid.tier);
-            breakAsteroid(game.run.asteroids, asteroid);
+            breakAsteroid(game, asteroid);
         }
     }
 
@@ -1841,7 +1922,7 @@ void updatePiercingProjectiles(Game& game, float deltaTime,
             auto& enemy = game.run.enemies.at(j);
             if (enemy.active && !enemy.phased &&
                 CheckCollisionCircles(proj.position, proj.radius, enemy.position,
-                                      enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
+                                      enemyCollisionRadius(enemy)))
             {
                 damageEnemy(game, j, proj.damage);
                 recordDamage(game, source, proj.damage);
@@ -1883,7 +1964,7 @@ void updatePiercingProjectiles(Game& game, float deltaTime,
             {
                 asteroid.active = false;
                 game.run.score += asteroidScore(asteroid.tier);
-                breakAsteroid(game.run.asteroids, asteroid);
+                breakAsteroid(game, asteroid);
             }
         }
     }
@@ -1937,7 +2018,7 @@ void updateNerveSpiralProjectiles(Game& game, float deltaTime)
                 auto& enemy = game.run.enemies.at(j);
                 if (enemy.active && !enemy.phased &&
                     CheckCollisionCircles(bladePos, orbitBladeHitRadius, enemy.position,
-                                          enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
+                                          enemyCollisionRadius(enemy)))
                 {
                     damageEnemy(game, j, spiral.damagePerBlade);
                     recordDamage(game, DamageSource::Nerve, spiral.damagePerBlade);
@@ -1984,7 +2065,7 @@ void updateNerveSpiralProjectiles(Game& game, float deltaTime)
                 {
                     asteroid.active = false;
                     game.run.score += asteroidScore(asteroid.tier);
-                    breakAsteroid(game.run.asteroids, asteroid);
+                    breakAsteroid(game, asteroid);
                 }
             }
         }
@@ -2036,7 +2117,7 @@ void updateBeamContact(Game& game, float deltaTime)
         auto& enemy = game.run.enemies.at(j);
         if (!enemy.active || enemy.phased ||
             !CheckCollisionCircleLine(
-                enemy.position, enemyKinds.at(static_cast<size_t>(enemy.kind)).radius, start, end))
+                enemy.position, enemyCollisionRadius(enemy), start, end))
         {
             enemy.beamContact = false;
             enemy.beamDamageAccum = 0;
@@ -2144,7 +2225,7 @@ void updateBeamContact(Game& game, float deltaTime)
         {
             asteroid.active = false;
             game.run.score += asteroidScore(asteroid.tier);
-            breakAsteroid(game.run.asteroids, asteroid);
+            breakAsteroid(game, asteroid);
         }
     }
 }
@@ -2156,7 +2237,7 @@ void nerveLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg, float ext
         const auto& enemy = game.run.enemies.at(j);
         if (enemy.active && !enemy.phased &&
             CheckCollisionCircleLine(
-                enemy.position, enemyKinds.at(static_cast<size_t>(enemy.kind)).radius + extraRadius,
+                enemy.position, enemyCollisionRadius(enemy) + extraRadius,
                 start, end))
         {
             damageEnemy(game, j, dmg);
@@ -2187,7 +2268,7 @@ void nerveLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg, float ext
         {
             asteroid.active = false;
             game.run.score += asteroidScore(asteroid.tier);
-            breakAsteroid(game.run.asteroids, asteroid);
+            breakAsteroid(game, asteroid);
         }
     }
 
@@ -2205,6 +2286,60 @@ void nerveLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg, float ext
             recordDamage(game, DamageSource::Nerve, dmg);
         }
     }
+}
+
+void sniperLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg)
+{
+    for (size_t j = 0; j < game.run.enemies.size(); j++)
+    {
+        const auto& enemy = game.run.enemies.at(j);
+        if (enemy.active && !enemy.phased &&
+            CheckCollisionCircleLine(enemy.position, enemyCollisionRadius(enemy), start, end))
+        {
+            damageEnemy(game, j, dmg);
+            recordDamage(game, DamageSource::Sniper, dmg);
+            if (!enemy.active)
+            {
+                recordWeaponKill(game, WeaponType::Sniper);
+            }
+        }
+    }
+
+    for (size_t j = 0; j < game.run.eliteHazards.size(); j++)
+    {
+        const auto& hazard = game.run.eliteHazards.at(j);
+        if (hazard.active &&
+            CheckCollisionCircleLine(hazard.position, EliteHazardConstants::radius, start, end))
+        {
+            damageEliteHazard(game, j, dmg);
+            recordDamage(game, DamageSource::Sniper, dmg);
+        }
+    }
+
+    for (auto& boss : game.run.bosses)
+    {
+        if (boss.health <= 0)
+        {
+            continue;
+        }
+        const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
+                                 .y = boss.position.y + boss.size.y / 2};
+        if (CheckCollisionCircleLine(bossCenter, boss.size.x / 2, start, end))
+        {
+            damageBoss(game, boss, dmg);
+            recordDamage(game, DamageSource::Sniper, dmg);
+        }
+    }
+}
+
+void updateSniperShots(Game& game, float deltaTime)
+{
+    for (auto& bolt : game.run.sniperShots)
+    {
+        bolt.timer -= deltaTime;
+    }
+    std::erase_if(game.run.sniperShots, [](const ChainLightningBolt& bolt)
+                  { return bolt.timer <= 0; });
 }
 
 void fireNerveBeam(Game& game)
@@ -2319,59 +2454,70 @@ void spawnRockCluster(Game& game, Vector2 center)
     }
 }
 
-void updateShadowPockets(Game& game, float deltaTime)
-{
-    for (auto& pocket : game.run.shadowPockets)
-    {
-        if (Vector2Distance(pocket.position, game.run.player.position) > asteroidDespawnRadius)
-        {
-            pocket.active = false;
-        }
-    }
-    std::erase_if(game.run.shadowPockets, [](const ShadowPocket& p) { return !p.active; });
-
-    if (currentBiome(game.run.waveNumber) != Biome::SolarForge)
-    {
-        return;
-    }
-
-    game.run.shadowPocketSpawnTimer -= deltaTime;
-    if (game.run.shadowPocketSpawnTimer <= 0 &&
-        static_cast<int32_t>(game.run.shadowPockets.size()) < maxShadowPockets)
-    {
-        game.run.shadowPocketSpawnTimer = static_cast<float>(GetRandomValue(
-                                              static_cast<int32_t>(shadowPocketSpawnIntervalMin * 10),
-                                              static_cast<int32_t>(shadowPocketSpawnIntervalMax * 10))) /
-                                          10.0F;
-        const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-        const Vector2 pos = Vector2Add(
-            game.run.player.position,
-            Vector2{.x = std::cos(angle) * 500, .y = std::sin(angle) * 500});
-        game.run.shadowPockets.push_back(
-            ShadowPocket{.position = pos, .radius = shadowPocketRadius, .active = true});
-    }
-}
-
 void updateSolarForgeHeat(Game& game, float deltaTime)
 {
-    if (currentBiome(game.run.waveNumber) != Biome::SolarForge || game.run.player.health <= 0)
+    if (game.run.player.health <= 0)
     {
         return;
     }
 
-    for (const auto& pocket : game.run.shadowPockets)
+    const bool inSolarForge = currentBiome(game.run.waveNumber) == Biome::SolarForge;
+    const bool onSafePath = !inSolarForge || isSolarForgeCaveOpen(game.run.player.position);
+
+    if (onSafePath)
     {
-        if (Vector2Distance(pocket.position, game.run.player.position) <= pocket.radius)
-        {
-            return;
-        }
+        game.run.solarForgeHeatMeter =
+            std::max(0.0F, game.run.solarForgeHeatMeter - solarForgeHeatDecayRate * deltaTime);
+    }
+    else
+    {
+        game.run.solarForgeHeatMeter += deltaTime;
+    }
+
+    if (!inSolarForge || game.run.solarForgeHeatMeter <= solarForgeMeltThreshold)
+    {
+        game.run.solarForgeHeatTickTimer = 0;
+        return;
     }
 
     game.run.solarForgeHeatTickTimer -= deltaTime;
     if (game.run.solarForgeHeatTickTimer <= 0)
     {
-        game.run.solarForgeHeatTickTimer = solarForgeHeatTickInterval;
-        damagePlayer(game, enemyDamage(game, solarForgeHeatDamage));
+        game.run.solarForgeHeatTickTimer = solarForgeMeltTickInterval;
+        damagePlayer(game, enemyDamage(game, solarForgeMeltDamage));
+    }
+}
+
+void updateFluidHazardContact(Game& game, float deltaTime)
+{
+    if (game.run.player.health <= 0)
+    {
+        return;
+    }
+
+    bool touching = false;
+    for (const auto& asteroid : game.run.asteroids)
+    {
+        if (asteroid.active && asteroid.isFluid &&
+            Vector2Distance(asteroid.position, game.run.player.position) <=
+                asteroid.radius + game.run.player.radius)
+        {
+            touching = true;
+            break;
+        }
+    }
+
+    if (!touching)
+    {
+        game.run.fluidContactTickTimer = 0;
+        return;
+    }
+
+    game.run.fluidContactTickTimer -= deltaTime;
+    if (game.run.fluidContactTickTimer <= 0)
+    {
+        game.run.fluidContactTickTimer = fluidContactTickInterval;
+        damagePlayer(game, enemyDamage(game, fluidContactDamage));
     }
 }
 
@@ -2481,6 +2627,19 @@ void updateWaveSpawner(Game& game, float deltaTime)
         const Vector2 spawnPos =
             Vector2Add(game.run.player.position,
                        Vector2{.x = std::cos(angle) * 500, .y = std::sin(angle) * 500});
+
+        if (currentBiome(game.run.waveNumber) == Biome::SolarForge)
+        {
+
+            game.run.asteroids.push_back(Asteroid{.position = spawnPos,
+                                                  .velocity = Vector2{},
+                                                  .radius = asteroidRadius(tier),
+                                                  .tier = tier,
+                                                  .active = true,
+                                                  .isFluid = true});
+            return;
+        }
+
         const float driftAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
         const Vector2 direction{.x = std::cos(driftAngle), .y = std::sin(driftAngle)};
         const float speed = static_cast<float>(GetRandomValue(25, 45)) / 10.0F;
@@ -3006,8 +3165,7 @@ void updateBullets(Game& game, float deltaTime)
                 bullet.active = false;
                 asteroid.active = false;
                 game.run.score += asteroidScore(asteroid.tier);
-                breakAsteroid(game.run.asteroids, asteroid);
-                playSFX(game, game.resources.sounds.explosion);
+                breakAsteroid(game, asteroid);
             }
         }
 
@@ -3031,8 +3189,8 @@ void updateBullets(Game& game, float deltaTime)
             {
                 continue;
             }
-            const auto& kind = enemyKinds.at(static_cast<size_t>(enemy.kind));
-            if (CheckCollisionCircles(bullet.position, bullet.radius, enemy.position, kind.radius))
+            if (CheckCollisionCircles(bullet.position, bullet.radius, enemy.position,
+                                      enemyCollisionRadius(enemy)))
             {
                 damageEnemy(game, j, bullet.damage);
                 recordDamage(game, bullet.source, bullet.damage);
@@ -3139,7 +3297,7 @@ void fireChainLightning(Game& game, const Weapon& weapon)
             auto& enemy = game.run.enemies.at(j);
             if (enemy.active && !enemy.phased &&
                 Vector2Distance(enemy.position, to) <=
-                    enemyKinds.at(static_cast<size_t>(enemy.kind)).radius)
+                    enemyCollisionRadius(enemy))
             {
                 damageEnemy(game, j, dmg);
                 recordDamage(game, DamageSource::ChainLightning, dmg);
@@ -3406,13 +3564,9 @@ void updateFlamethrower(Game& game, float deltaTime)
     const auto dps = static_cast<float>(weaponDamage(game, w.level)) * flamethrowerDamageMult;
     const auto coneDirs = flamethrowerConeDirs(game, w.level);
 
-    // Renders like the dash trail (fading particle puffs) rather than a flat drawn cone - see
-    // drawWeapons. Spawn rate is frame-rate dependent (same simplification the dash trail makes),
-    // dense enough at typical framerates to read as a continuous flame.
     const auto particlesPerConeThisFrame = std::max(
         1, static_cast<int32_t>(static_cast<float>(flameParticlesPerConePerSecond) * deltaTime));
-    // Baked into a per-frame displacement (not multiplied again in the update loop above) - same
-    // frame-rate-dependent simplification the dash trail already uses.
+
     const float particleSpeed = (range / flameParticleLife) * deltaTime;
     for (const auto& dir : coneDirs)
     {
@@ -3423,10 +3577,7 @@ void updateFlamethrower(Game& game, float deltaTime)
                 baseAngle + (static_cast<float>(GetRandomValue(-100, 100)) / 100.0F) *
                                 flamethrowerHalfAngle;
             const float speedJitter = static_cast<float>(GetRandomValue(70, 100)) / 100.0F;
-            // Inherit the player's own per-frame displacement so the flame's apparent reach
-            // doesn't shrink when moving in the direction it's firing (the particle would
-            // otherwise only out-pace the player by its own speed, not its speed relative to a
-            // stationary world).
+
             const Vector2 outward{.x = std::cos(spreadAngle) * particleSpeed * speedJitter,
                                   .y = std::sin(spreadAngle) * particleSpeed * speedJitter};
             game.run.flameParticles.push_back(
@@ -3500,11 +3651,65 @@ void updateFlamethrower(Game& game, float deltaTime)
         {
             continue;
         }
-        // Fires every frame while in range/cone (same per-tick pattern the enemy loop above
-        // uses, no accumulator) - applyShake=false so continuous contact doesn't keep resetting
-        // the screen-shake timer before it can decay (see damageBoss's applyShake doc comment).
+
         damageBoss(game, boss, tick, false);
         recordDamage(game, DamageSource::Flamethrower, tick);
+    }
+}
+
+void updateSolarForgeEnemyFireParticles(Game& game, float deltaTime)
+{
+    for (const auto& enemy : game.run.enemies)
+    {
+        if (!enemy.active || enemy.phased)
+        {
+            continue;
+        }
+        const auto& kind = enemyKinds.at(static_cast<size_t>(enemy.kind));
+        if (!kind.biomeExclusive || kind.biome != Biome::SolarForge)
+        {
+            continue;
+        }
+        if (GetRandomValue(0, 99) >= solarForgeEnemyFireChancePercent)
+        {
+            continue;
+        }
+
+        const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+        const auto offset = static_cast<float>(GetRandomValue(0, static_cast<int32_t>(kind.radius)));
+        game.run.flameParticles.push_back(Particle{
+            .position = Vector2Add(
+                enemy.position, Vector2{.x = std::cos(angle) * offset, .y = std::sin(angle) * offset}),
+            .velocity = Vector2{.x = 0, .y = -solarForgeEnemyFireParticleSpeed * deltaTime},
+            .radius = solarForgeEnemyFireParticleRadius,
+            .life = solarForgeEnemyFireParticleLife,
+            .maxLife = solarForgeEnemyFireParticleLife,
+            .color = GetRandomValue(0, 1) == 0 ? Palette::ElementBurn : Palette::SolarForgeAccent});
+    }
+
+    for (const auto& boss : game.run.bosses)
+    {
+        if (!boss.isSlagmaw || boss.health <= 0)
+        {
+            continue;
+        }
+        if (GetRandomValue(0, 99) >= solarForgeEnemyFireChancePercent * 3)
+        {
+            continue;
+        }
+        const Vector2 center{.x = boss.position.x + boss.size.x / 2,
+                             .y = boss.position.y + boss.size.y / 2};
+        const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+        const auto offset =
+            static_cast<float>(GetRandomValue(0, static_cast<int32_t>(boss.size.x / 2)));
+        game.run.flameParticles.push_back(Particle{
+            .position = Vector2Add(center, Vector2{.x = std::cos(angle) * offset,
+                                                    .y = std::sin(angle) * offset}),
+            .velocity = Vector2{.x = 0, .y = -solarForgeEnemyFireParticleSpeed * deltaTime},
+            .radius = solarForgeEnemyFireParticleRadius * 1.5F,
+            .life = solarForgeEnemyFireParticleLife,
+            .maxLife = solarForgeEnemyFireParticleLife,
+            .color = GetRandomValue(0, 1) == 0 ? Palette::ElementBurn : Palette::SolarForgeAccent});
     }
 }
 
@@ -3619,7 +3824,7 @@ void updateAsteroids(Game& game, float deltaTime)
             if (dist <= game.run.blackhole.radius)
             {
                 asteroid.active = false;
-                breakAsteroid(game.run.asteroids, asteroid);
+                breakAsteroid(game, asteroid);
                 continue;
             }
         }
@@ -3639,7 +3844,7 @@ void updateAsteroids(Game& game, float deltaTime)
             }
 
             asteroid.active = false;
-            breakAsteroid(game.run.asteroids, asteroid);
+            breakAsteroid(game, asteroid);
         }
     }
 }
@@ -3719,7 +3924,7 @@ void updateProjectiles(Game& game, float deltaTime)
             }
 
             asteroid.active = false;
-            breakAsteroid(game.run.asteroids, asteroid);
+            breakAsteroid(game, asteroid);
 
             if (projectile.fromPlayer)
             {
@@ -3733,7 +3938,7 @@ void updateProjectiles(Game& game, float deltaTime)
             auto& enemy = game.run.enemies.at(j);
             if (!projectile.active || !enemy.active || enemy.phased ||
                 !CheckCollisionCircles(projectile.position, projectile.radius, enemy.position,
-                                       enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
+                                       enemyCollisionRadius(enemy)))
             {
                 continue;
             }
@@ -3791,9 +3996,6 @@ void updateProjectiles(Game& game, float deltaTime)
                 break;
             }
 
-            // Player homing missiles used to fly straight through a boss dealing zero damage -
-            // targeting was fixed separately (see nearestEnemy/nearestEnemyExcluding) but this
-            // collision loop never existed at all, unlike updateBullets' equivalent boss loop.
             for (auto& boss : game.run.bosses)
             {
                 const Rectangle bossRect{.x = boss.position.x,

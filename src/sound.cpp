@@ -445,6 +445,26 @@ auto generateExplosionSfx() -> std::vector<float>
     return out;
 }
 
+auto generateRockBreakSfx() -> std::vector<float>
+{
+
+    std::vector<float> out(secondsToSamples(0.22F), 0.0F);
+    addKick(out, 0.0F, 0.2F, 110, 45, 0.10F, 0.14F);
+    addNoise(out, 0.0F, 0.10F, 0.05F);
+    addTone(out, 0.0F, 70.0F, 0.14F, 0.12F);
+    return out;
+}
+
+auto generateSquishHitSfx() -> std::vector<float>
+{
+
+    std::vector<float> out(secondsToSamples(0.18F), 0.0F);
+    addKick(out, 0.0F, 0.2F, 220, 90, 0.06F, 0.08F);
+    addNoise(out, 0.0F, 0.14F, 0.05F);
+    addTone(out, 0.01F, 140.0F, 0.1F, 0.07F);
+    return out;
+}
+
 auto generateMenuMoveSfx() -> std::vector<float>
 {
     std::vector<float> out(secondsToSamples(0.08F), 0.0F);
@@ -583,6 +603,8 @@ auto LoadSounds() -> Sounds
     sounds.nerveCharge = loadSoundFromSamples(generateNerveChargeSfx());
     sounds.nerveRelease = loadSoundFromSamples(generateNerveReleaseSfx());
     sounds.nerveFizzle = loadSoundFromSamples(generateNerveFizzleSfx());
+    sounds.rockBreak = loadSoundFromSamples(generateRockBreakSfx());
+    sounds.squishHit = loadSoundFromSamples(generateSquishHitSfx());
     return sounds;
 }
 

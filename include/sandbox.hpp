@@ -11,18 +11,14 @@ void enterSandbox(Game& game);
 void updateSandboxInput(Game& game);
 
 auto sandboxPickupName(int32_t index) -> std::string_view;
+auto sandboxPickupPreview(int32_t index) -> PickupCatalogEntry;
 
-// A one-shot/toggle action shown as a raygui button in the sandbox instructions menu
-// (GameState::SANDBOX_MENU). Label is a function of game state so toggles (death enabled,
-// natural spawn) can show their current ON/OFF value.
 struct SandboxMenuButton
 {
     std::function<std::string(const Game&)> label;
     std::function<void(Game&)> action;
 };
 
-// A cyclable value (enemy kind, boss attack, wave, ship, pickup) shown as a "-" button, a
-// readonly value box with a label, and a "+" button.
 struct SandboxMenuStepper
 {
     std::string_view label;
@@ -43,3 +39,20 @@ auto sandboxMenuCloseButtonRect(const Game& game) -> Rectangle;
 auto sandboxToggleIndicatorRect(const Game& game) -> Rectangle;
 
 void updateSandboxMenuInput(Game& game);
+
+constexpr int32_t browserCategoryCount = 6;
+constexpr int32_t browserParticleStyleCount = 3;
+
+auto browserCategoryLabel(int32_t category) -> std::string_view;
+auto browserParticleStyleName(int32_t index) -> std::string_view;
+auto browserItemCount(int32_t category) -> int32_t;
+auto browserIndexRef(Game& game) -> int&;
+auto browserCurrentName(const Game& game) -> std::string;
+auto browserCurrentDetails(const Game& game) -> std::string;
+void browserCycleItem(Game& game, int32_t dir);
+
+auto sandboxBrowserPreviewRect(const Game& game) -> Rectangle;
+auto sandboxBrowserCategoryButtonRect(const Game& game, int32_t index) -> Rectangle;
+auto sandboxBrowserPrevButtonRect(const Game& game) -> Rectangle;
+auto sandboxBrowserNextButtonRect(const Game& game) -> Rectangle;
+auto sandboxBrowserModeToggleRect(const Game& game) -> Rectangle;

@@ -33,9 +33,9 @@ constexpr Color RustbloomVoid{.r = 16, .g = 14, .b = 10, .a = 255};
 constexpr Color RustbloomHaze{.r = 150, .g = 120, .b = 80, .a = 255};
 constexpr Color RustbloomAccent{.r = 140, .g = 165, .b = 70, .a = 255};
 
-constexpr Color SolarForgeVoid{.r = 24, .g = 10, .b = 6, .a = 255};
-constexpr Color SolarForgeHaze{.r = 230, .g = 140, .b = 60, .a = 255};
-constexpr Color SolarForgeAccent{.r = 255, .g = 100, .b = 35, .a = 255};
+constexpr Color SolarForgeVoid{.r = 16, .g = 4, .b = 4, .a = 255};
+constexpr Color SolarForgeHaze{.r = 190, .g = 35, .b = 25, .a = 255};
+constexpr Color SolarForgeAccent{.r = 225, .g = 15, .b = 15, .a = 255};
 
 constexpr Color PunctumVoid{.r = 6, .g = 6, .b = 10, .a = 255};
 constexpr Color PunctumHaze{.r = 200, .g = 150, .b = 230, .a = 255};

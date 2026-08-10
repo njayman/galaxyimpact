@@ -588,7 +588,7 @@ void updatePlayerBuffs(Game& game, float deltaTime)
             auto& enemy = game.run.enemies.at(i);
             if (enemy.active && !enemy.phased &&
                 CheckCollisionCircles(player.position, dashTrailRadius, enemy.position,
-                                      enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
+                                      enemyCollisionRadius(enemy)))
             {
                 damageEnemy(game, i, dashTrailDamage);
                 recordDamage(game, DamageSource::Dash, dashTrailDamage);

@@ -87,9 +87,98 @@ void spawnEnemyAt(Game& game, int kindIndex, Vector2 pos)
                                      .phased = false,
                                      .orbitAngle = 0,
                                      .orbitDist = 200,
+                                     .orbitCenterCurrent = pos,
                                      .isElite = elite,
                                      .hitByDash = false,
-                                     .hitFlashTimer = 0});
+                                     .hitFlashTimer = 0,
+                                     .organicSeed =
+                                         static_cast<float>(GetRandomValue(0, 6283)) / 1000.0F});
+}
+
+auto organicVertexRadius(float baseRadius, int32_t vertexIndex, float seed) -> float
+{
+    const float t = static_cast<float>(GetTime()) * organicWobbleSpeed + seed;
+    const float phase = static_cast<float>(vertexIndex) * 2.399F;
+    return baseRadius * (1.0F + organicWobbleAmplitude * std::sin(t + phase));
+}
+
+auto enemyCollisionRadius(const Enemy& enemy) -> float
+{
+    const auto& kind = enemyKinds.at(static_cast<size_t>(enemy.kind));
+    if (kind.shape != EnemyShape::Organic)
+    {
+        return kind.radius;
+    }
+    const float baseRadius = kind.radius * enemy.organicRadiusMult;
+    float sum = 0;
+    for (int32_t i = 0; i < organicVertexCount; i++)
+    {
+        sum += organicVertexRadius(baseRadius, i, enemy.organicSeed);
+    }
+    return sum / static_cast<float>(organicVertexCount);
+}
+
+void updateOrganicMerges(Game& game, float deltaTime)
+{
+    game.run.organicMergeTimer -= deltaTime;
+    if (game.run.organicMergeTimer > 0)
+    {
+        return;
+    }
+    game.run.organicMergeTimer = organicMergeCheckInterval;
+
+    std::vector<size_t> candidates;
+    for (size_t i = 0; i < game.run.enemies.size(); i++)
+    {
+        const auto& e = game.run.enemies.at(i);
+        if (e.active && !e.phased &&
+            enemyKinds.at(static_cast<size_t>(e.kind)).shape == EnemyShape::Organic &&
+            e.mergeCount < organicMergeMaxCount)
+        {
+            candidates.push_back(i);
+        }
+    }
+    if (candidates.size() < 2)
+    {
+        return;
+    }
+
+    const size_t pickIdx = candidates.at(
+        static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(candidates.size()) - 1)));
+
+    std::optional<size_t> partner;
+    float bestDist = organicMergeRange;
+    for (size_t j : candidates)
+    {
+        if (j == pickIdx)
+        {
+            continue;
+        }
+        const float dist = Vector2Distance(game.run.enemies.at(pickIdx).position,
+                                           game.run.enemies.at(j).position);
+        if (dist < bestDist)
+        {
+            bestDist = dist;
+            partner = j;
+        }
+    }
+    if (!partner.has_value() || GetRandomValue(0, 99) >= organicMergeChancePercent)
+    {
+        return;
+    }
+
+    Enemy& a = game.run.enemies.at(pickIdx);
+    Enemy& b = game.run.enemies.at(*partner);
+    Enemy& survivor = a.health >= b.health ? a : b;
+    Enemy& absorbed = a.health >= b.health ? b : a;
+
+    survivor.health += absorbed.health;
+    survivor.mergeCount++;
+    survivor.organicRadiusMult += organicMergeRadiusGrowth;
+    absorbed.active = false;
+
+    spawnKillExplosion(game, absorbed.position,
+                       enemyKinds.at(static_cast<size_t>(absorbed.kind)).color, 10, 1.1F);
 }
 
 void applyElementDebuff(Enemy& enemy, ElementType element, float burnDps)
@@ -128,6 +217,25 @@ void applyActiveElementalDebuffs(Game& game, Enemy& enemy)
     }
 }
 
+void spawnOrganicHitSplash(Game& game, Vector2 position, Color color)
+{
+
+    constexpr int32_t splashCount = 6;
+    for (int32_t i = 0; i < splashCount; i++)
+    {
+        const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+        const float speed = static_cast<float>(GetRandomValue(15, 45)) / 10.0F;
+        const float life = static_cast<float>(GetRandomValue(15, 30)) / 100.0F;
+        game.run.deathParticles.push_back(
+            Particle{.position = position,
+                     .velocity = Vector2{.x = std::cos(angle) * speed, .y = std::sin(angle) * speed},
+                     .radius = static_cast<float>(GetRandomValue(2, 4)),
+                     .life = life,
+                     .maxLife = life,
+                     .color = color});
+    }
+}
+
 void damageEnemy(Game& game, size_t index, int32_t amount)
 {
     const auto kind = enemyKinds.at(static_cast<size_t>(game.run.enemies.at(index).kind));
@@ -135,6 +243,12 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
     game.run.enemies.at(index).health -= amount;
     game.run.enemies.at(index).hitFlashTimer = UpdateConstants::hitFlashDuration;
     applyActiveElementalDebuffs(game, game.run.enemies.at(index));
+
+    if (kind.shape == EnemyShape::Organic)
+    {
+        spawnOrganicHitSplash(game, game.run.enemies.at(index).position, kind.color);
+        playSFX(game, game.resources.sounds.squishHit);
+    }
 
     spawnDamageNumber(game, game.run.enemies.at(index).position, std::min(amount, healthBefore));
 
@@ -145,9 +259,6 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
 
     game.run.enemies.at(index).active = false;
 
-    // Rustbloom's locked design: dead Hive Nodes leave exploitable cover/sightline breaks -
-    // reuses the Asteroid entity wholesale (blocks bullets/beams, same debris trick as the
-    // Wreckworm's Molt and Shattered Belt's rock clusters), no new hazard type needed.
     if (game.run.enemies.at(index).kind == enemyKindHiveNode)
     {
         game.run.asteroids.push_back(Asteroid{.position = game.run.enemies.at(index).position,
@@ -400,15 +511,16 @@ void updateEnemies(Game& game, float deltaTime)
             case EnemyPattern::Orbit:
             {
                 enemy.orbitAngle += 1.5F * speedMod * deltaTime;
-                if (enemy.orbitDist > kind.radius + 20)
-                {
 
+                if (enemy.orbitDist > kind.radius + 6)
+                {
                     enemy.orbitDist -= 9 * speedMod * deltaTime;
                 }
 
                 Vector2 orbitCenter = game.run.player.position;
                 if (kind.orbitsNearestAsteroid)
                 {
+                    Vector2 nearestAsteroid = enemy.orbitCenterCurrent;
                     float bestDist = -1;
                     for (const auto& asteroid : game.run.asteroids)
                     {
@@ -416,13 +528,31 @@ void updateEnemies(Game& game, float deltaTime)
                         {
                             continue;
                         }
-                        const float dist = Vector2Distance(enemy.position, asteroid.position);
+                        const float dist =
+                            Vector2Distance(enemy.orbitCenterCurrent, asteroid.position);
                         if (bestDist < 0 || dist < bestDist)
                         {
                             bestDist = dist;
-                            orbitCenter = asteroid.position;
+                            nearestAsteroid = asteroid.position;
                         }
                     }
+
+                    const Vector2 toTarget =
+                        Vector2Subtract(nearestAsteroid, enemy.orbitCenterCurrent);
+                    const float retargetDist = Vector2Length(toTarget);
+                    if (retargetDist > 1.0F)
+                    {
+                        const float step =
+                            std::min(retargetDist, orbitAsteroidRetargetSpeed * deltaTime);
+                        enemy.orbitCenterCurrent = Vector2Add(
+                            enemy.orbitCenterCurrent,
+                            Vector2Scale(toTarget, step / retargetDist));
+                    }
+                    else
+                    {
+                        enemy.orbitCenterCurrent = nearestAsteroid;
+                    }
+                    orbitCenter = enemy.orbitCenterCurrent;
                 }
 
                 enemy.position = Vector2Add(
@@ -482,11 +612,15 @@ void updateEnemies(Game& game, float deltaTime)
                 if (enemy.stateTimer <= 0)
                 {
                     enemy.stateTimer = kind.spawnInterval / speedMod;
+
+                    const bool spawnFromPod = kind.biomeExclusive && kind.biome == Biome::Rustbloom;
+                    const Vector2 spawnOrigin =
+                        spawnFromPod ? rustbloomNearestPodCenter(enemy.position) : enemy.position;
                     for (int s = 0; s < kind.spawnCount; s++)
                     {
                         const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
                         const Vector2 offset{.x = std::cos(angle) * 30, .y = std::sin(angle) * 30};
-                        spawnEnemyAt(game, kind.spawnKind, Vector2Add(enemy.position, offset));
+                        spawnEnemyAt(game, kind.spawnKind, Vector2Add(spawnOrigin, offset));
                     }
                 }
                 break;
@@ -523,7 +657,17 @@ void updateEnemies(Game& game, float deltaTime)
             }
         }
 
-        if (Vector2Distance(enemy.position, game.run.player.position) > entityDespawnRadius)
+        if (enemy.kind == enemyKindMeteorChunk)
+        {
+
+            if (isOutsideCameraView(game, enemy.position, cameraDespawnMargin))
+            {
+                enemy.position = spawnRingPosition(game);
+                enemy.fadeAlpha = 0;
+            }
+            enemy.fadeAlpha = std::min(1.0F, enemy.fadeAlpha + deltaTime / ghostFadeDuration);
+        }
+        else if (Vector2Distance(enemy.position, game.run.player.position) > entityDespawnRadius)
         {
             enemy.active = false;
             continue;
@@ -535,7 +679,7 @@ void updateEnemies(Game& game, float deltaTime)
         }
 
         const bool collides =
-            game.run.player.health > 0 &&
+            game.run.player.health > 0 && enemy.fadeAlpha >= 1.0F &&
             CheckCollisionCircles(game.run.player.position, game.run.player.radius, enemy.position,
                                   kind.radius);
 

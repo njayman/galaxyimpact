@@ -9,10 +9,7 @@ class Player
 {
   public:
     Vector2 position;
-    // This frame's actual world-space displacement (post-dash/black-hole-pull/etc) - not an
-    // input direction, a measured delta. Lets effects spawned off the player (e.g. flamethrower
-    // particles) inherit the player's own motion so they don't visually lag/shorten while moving
-    // in the same direction they're fired.
+
     Vector2 velocity;
     float radius;
     Color color;

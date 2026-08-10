@@ -1,5 +1,6 @@
 #include "sandbox.hpp"
 
+#include "achievements.hpp"
 #include "entities/enemy.hpp"
 #include "entities/item.hpp"
 #include "entities/ship.hpp"
@@ -147,6 +148,21 @@ constexpr int32_t buttonGapY = 10;
 constexpr int32_t buttonCols = 3;
 constexpr int32_t buttonTopY =
     stepperTopY + stepperCount * (stepperRowHeight + stepperRowGap) + 40;
+
+constexpr int32_t modeToggleWidth = 160;
+constexpr int32_t modeToggleHeight = 40;
+
+constexpr int32_t categoryTabWidth = 150;
+constexpr int32_t categoryTabHeight = 38;
+constexpr int32_t categoryTabGap = 10;
+constexpr int32_t categoryTabTopY = 150;
+
+constexpr int32_t previewWidth = 360;
+constexpr int32_t previewHeight = 300;
+constexpr int32_t previewTopY = 220;
+
+constexpr int32_t arrowButtonWidth = 50;
+constexpr int32_t arrowButtonHeight = 50;
 }
 
 }
@@ -324,6 +340,192 @@ auto sandboxToggleIndicatorRect(const Game& game) -> Rectangle
     return Rectangle{.x = 10 * scale, .y = 10 * scale, .width = 200 * scale, .height = 34 * scale};
 }
 
+auto browserCategoryLabel(int32_t category) -> std::string_view
+{
+    switch (category)
+    {
+    case 0:
+        return "Enemies";
+    case 1:
+        return "Bosses";
+    case 2:
+        return "Player";
+    case 3:
+        return "Pickups";
+    case 4:
+        return "Weapons";
+    case 5:
+        return "Particles";
+    default:
+        return "";
+    }
+}
+
+auto browserParticleStyleName(int32_t index) -> std::string_view
+{
+    switch (index)
+    {
+    case 0:
+        return "Flame";
+    case 1:
+        return "Dash Trail";
+    case 2:
+        return "Death Burst";
+    default:
+        return "";
+    }
+}
+
+auto browserItemCount(int32_t category) -> int32_t
+{
+    switch (category)
+    {
+    case 0:
+        return static_cast<int32_t>(enemyKinds.size());
+    case 1:
+        return static_cast<int32_t>(bossTypes.size());
+    case 2:
+        return static_cast<int32_t>(ShipClass::Count);
+    case 3:
+        return static_cast<int32_t>(sandboxPickupCount);
+    case 4:
+        return static_cast<int32_t>(WeaponType::Count);
+    case 5:
+        return browserParticleStyleCount;
+    default:
+        return 1;
+    }
+}
+
+auto browserIndexRef(Game& game) -> int&
+{
+    switch (game.browserCategoryIndex)
+    {
+    case 0:
+        return game.sandboxKindIndex;
+    case 1:
+        return game.browserBossTypeIndex;
+    case 2:
+        return game.browserShipIndex;
+    case 3:
+        return game.sandboxPickupIndex;
+    case 4:
+        return game.browserWeaponIndex;
+    case 5:
+    default:
+        return game.browserParticleIndex;
+    }
+}
+
+auto browserCurrentName(const Game& game) -> std::string
+{
+    switch (game.browserCategoryIndex)
+    {
+    case 0:
+        return std::string(enemyKinds.at(static_cast<size_t>(game.sandboxKindIndex)).name);
+    case 1:
+        return std::string(bossTypes.at(static_cast<size_t>(game.browserBossTypeIndex)).name);
+    case 2:
+        return std::string(ships.at(static_cast<size_t>(game.browserShipIndex)).name);
+    case 3:
+        return std::string(sandboxPickupName(game.sandboxPickupIndex));
+    case 4:
+        return std::string(
+            weaponDisplayName(static_cast<WeaponType>(game.browserWeaponIndex)));
+    case 5:
+        return std::string(browserParticleStyleName(game.browserParticleIndex));
+    default:
+        return "";
+    }
+}
+
+auto browserCurrentDetails(const Game& game) -> std::string
+{
+    switch (game.browserCategoryIndex)
+    {
+    case 0:
+    {
+        const auto& kind = enemyKinds.at(static_cast<size_t>(game.sandboxKindIndex));
+        const std::string biome =
+            kind.biomeExclusive ? std::string(biomeName(kind.biome)) : std::string("All Biomes");
+        return std::format("Biome: {}   HP: {}   Damage: {}   Speed: {:.1f}", biome, kind.health,
+                           kind.contactDamage, kind.speed);
+    }
+    case 1:
+    {
+        const auto& type = bossTypes.at(static_cast<size_t>(game.browserBossTypeIndex));
+        return std::format("HP Mult: {:.2f}   Size Mult: {:.2f}", type.healthMult, type.sizeMult);
+    }
+    default:
+        return "";
+    }
+}
+
+void browserCycleItem(Game& game, int32_t dir)
+{
+    const int32_t count = browserItemCount(game.browserCategoryIndex);
+    int& idx = browserIndexRef(game);
+    idx = (idx + dir + count) % count;
+}
+
+auto sandboxBrowserModeToggleRect(const Game& game) -> Rectangle
+{
+    const float scale = guiUiScale(game);
+    return Rectangle{.x = 20 * scale, .y = 20 * scale,
+                      .width = static_cast<float>(SandboxMenuLayout::modeToggleWidth) * scale,
+                      .height = static_cast<float>(SandboxMenuLayout::modeToggleHeight) * scale};
+}
+
+auto sandboxBrowserCategoryButtonRect(const Game& game, int32_t index) -> Rectangle
+{
+    const float scale = guiUiScale(game);
+    const auto totalWidth =
+        static_cast<float>(browserCategoryCount * SandboxMenuLayout::categoryTabWidth +
+                           (browserCategoryCount - 1) * SandboxMenuLayout::categoryTabGap);
+    const float startX = static_cast<float>(game.resources.windowWidth) / 2 - totalWidth * scale / 2;
+    return Rectangle{
+        .x = startX + static_cast<float>(index) *
+                          static_cast<float>(SandboxMenuLayout::categoryTabWidth +
+                                             SandboxMenuLayout::categoryTabGap) *
+                          scale,
+        .y = static_cast<float>(SandboxMenuLayout::categoryTabTopY) * scale,
+        .width = static_cast<float>(SandboxMenuLayout::categoryTabWidth) * scale,
+        .height = static_cast<float>(SandboxMenuLayout::categoryTabHeight) * scale};
+}
+
+auto sandboxBrowserPreviewRect(const Game& game) -> Rectangle
+{
+    const float scale = guiUiScale(game);
+    return Rectangle{.x = static_cast<float>(game.resources.windowWidth) / 2 -
+                          static_cast<float>(SandboxMenuLayout::previewWidth) * scale / 2,
+                      .y = static_cast<float>(SandboxMenuLayout::previewTopY) * scale,
+                      .width = static_cast<float>(SandboxMenuLayout::previewWidth) * scale,
+                      .height = static_cast<float>(SandboxMenuLayout::previewHeight) * scale};
+}
+
+auto sandboxBrowserPrevButtonRect(const Game& game) -> Rectangle
+{
+    const Rectangle preview = sandboxBrowserPreviewRect(game);
+    const float scale = guiUiScale(game);
+    return Rectangle{.x = preview.x - static_cast<float>(SandboxMenuLayout::arrowButtonWidth) * scale -
+                          10 * scale,
+                      .y = preview.y + preview.height / 2 -
+                          static_cast<float>(SandboxMenuLayout::arrowButtonHeight) * scale / 2,
+                      .width = static_cast<float>(SandboxMenuLayout::arrowButtonWidth) * scale,
+                      .height = static_cast<float>(SandboxMenuLayout::arrowButtonHeight) * scale};
+}
+
+auto sandboxBrowserNextButtonRect(const Game& game) -> Rectangle
+{
+    const Rectangle preview = sandboxBrowserPreviewRect(game);
+    const float scale = guiUiScale(game);
+    return Rectangle{.x = preview.x + preview.width + 10 * scale,
+                      .y = preview.y + preview.height / 2 -
+                          static_cast<float>(SandboxMenuLayout::arrowButtonHeight) * scale / 2,
+                      .width = static_cast<float>(SandboxMenuLayout::arrowButtonWidth) * scale,
+                      .height = static_cast<float>(SandboxMenuLayout::arrowButtonHeight) * scale};
+}
+
 void enterSandbox(Game& game)
 {
     resetRun(game);
@@ -334,6 +536,12 @@ void enterSandbox(Game& game)
     game.sandboxBossAttackIndex = 0;
     game.sandboxPickupIndex = 0;
     game.sandboxNaturalSpawnEnabled = false;
+    game.sandboxBrowserMode = false;
+    game.browserCategoryIndex = 0;
+    game.browserBossTypeIndex = 0;
+    game.browserWeaponIndex = 0;
+    game.browserShipIndex = 0;
+    game.browserParticleIndex = 0;
 }
 
 void updateSandboxInput(Game& game)
@@ -496,6 +704,35 @@ void updateSandboxMenuInput(Game& game)
         return;
     }
 
+    if (CheckCollisionPointRec(mouse, sandboxBrowserModeToggleRect(game)))
+    {
+        game.sandboxBrowserMode = !game.sandboxBrowserMode;
+        return;
+    }
+
+    if (game.sandboxBrowserMode)
+    {
+        for (int32_t i = 0; i < browserCategoryCount; i++)
+        {
+            if (CheckCollisionPointRec(mouse, sandboxBrowserCategoryButtonRect(game, i)))
+            {
+                game.browserCategoryIndex = i;
+                return;
+            }
+        }
+        if (CheckCollisionPointRec(mouse, sandboxBrowserPrevButtonRect(game)))
+        {
+            browserCycleItem(game, -1);
+            return;
+        }
+        if (CheckCollisionPointRec(mouse, sandboxBrowserNextButtonRect(game)))
+        {
+            browserCycleItem(game, 1);
+            return;
+        }
+        return;
+    }
+
     const auto& steppers = sandboxMenuSteppers();
     for (int32_t i = 0; i < static_cast<int32_t>(steppers.size()); i++)
     {
@@ -523,3 +760,5 @@ void updateSandboxMenuInput(Game& game)
 }
 
 auto sandboxPickupName(int32_t index) -> std::string_view { return sandboxPickupOption(index).name; }
+
+auto sandboxPickupPreview(int32_t index) -> PickupCatalogEntry { return sandboxPickupOption(index); }

@@ -229,6 +229,10 @@ void recordSkillMaxed(Game& game, SkillType id)
     {
         unlockType(game, achievements, WeaponType::Flamethrower, "Flamethrower");
     }
+    else if (id == SkillType::Railgun)
+    {
+        unlockType(game, achievements, WeaponType::Sniper, "Sniper");
+    }
 }
 
 void recordWaveReached(Game& game, int32_t wave)

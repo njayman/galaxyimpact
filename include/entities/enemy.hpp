@@ -51,7 +51,8 @@ enum class EnemyShape : std::uint8_t
     Hexagon,
     Octagon,
     Ring,
-    Star
+    Star,
+    Organic
 };
 
 const float eliteChance = 0.06;
@@ -70,6 +71,8 @@ class Enemy
     bool phased;
     float orbitAngle;
     float orbitDist;
+
+    Vector2 orbitCenterCurrent{};
     bool isElite;
     bool hitByDash;
     float hitFlashTimer;
@@ -84,6 +87,14 @@ class Enemy
     float burnDamageAccum;
     float confuseWanderTimer;
     Vector2 confuseWanderDir;
+
+    float organicSeed = 0;
+
+    int32_t mergeCount = 0;
+
+    float organicRadiusMult = 1.0F;
+
+    float fadeAlpha = 1.0F;
 };
 
 enum class EliteHazardRole : std::uint8_t
@@ -156,7 +167,9 @@ constexpr int enemyKindRockDebris = 18;
 constexpr int enemyKindSporeSwarmling = 22;
 constexpr int enemyKindHiveNode = 24;
 
-constexpr std::array<EnemyKind, 33> enemyKinds{
+constexpr int enemyKindMeteorChunk = 33;
+
+constexpr std::array<EnemyKind, 34> enemyKinds{
     EnemyKind{.name = "Drifter",
               .radius = 14,
               .health = 10,
@@ -422,7 +435,7 @@ constexpr std::array<EnemyKind, 33> enemyKinds{
               .score = 4,
               .pattern = EnemyPattern::Chase,
               .color = Palette::RustbloomAccent,
-              .shape = EnemyShape::Triangle,
+              .shape = EnemyShape::Organic,
               .minWave = 26,
               .biomeExclusive = true,
               .biome = Biome::Rustbloom,
@@ -436,7 +449,7 @@ constexpr std::array<EnemyKind, 33> enemyKinds{
               .score = 13,
               .pattern = EnemyPattern::Turret,
               .color = Palette::RustbloomHaze,
-              .shape = EnemyShape::Octagon,
+              .shape = EnemyShape::Organic,
               .minWave = 26,
               .fireInterval = 2.5,
               .projectileSpeed = 6,
@@ -450,7 +463,7 @@ constexpr std::array<EnemyKind, 33> enemyKinds{
               .score = 20,
               .pattern = EnemyPattern::Spawner,
               .color = Palette::RustbloomAccent,
-              .shape = EnemyShape::Octagon,
+              .shape = EnemyShape::Organic,
               .minWave = 26,
               .spawnKind = enemyKindSporeSwarmling,
               .spawnCount = 2,
@@ -465,7 +478,7 @@ constexpr std::array<EnemyKind, 33> enemyKinds{
               .score = 10,
               .pattern = EnemyPattern::Charge,
               .color = Palette::RustbloomHaze,
-              .shape = EnemyShape::Triangle,
+              .shape = EnemyShape::Organic,
               .minWave = 26,
               .biomeExclusive = true,
               .biome = Biome::Rustbloom},
@@ -477,7 +490,7 @@ constexpr std::array<EnemyKind, 33> enemyKinds{
               .score = 8,
               .pattern = EnemyPattern::Chase,
               .color = Palette::Charge,
-              .shape = EnemyShape::Diamond,
+              .shape = EnemyShape::Organic,
               .minWave = 26,
               .isLeech = true,
               .biomeExclusive = true,
@@ -567,4 +580,14 @@ constexpr std::array<EnemyKind, 33> enemyKinds{
               .pulseInsteadOfSpawn = true,
               .pulseDamage = 3,
               .pulseRadius = 90},
+    EnemyKind{.name = "Meteor Chunk",
+              .radius = 22,
+              .health = 26,
+              .speed = 0.3,
+              .contactDamage = 2,
+              .score = 16,
+              .pattern = EnemyPattern::Chase,
+              .color = Palette::SolarForgeAccent,
+              .shape = EnemyShape::Hexagon,
+              .minWave = 9999},
 };

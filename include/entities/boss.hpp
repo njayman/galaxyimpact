@@ -30,16 +30,6 @@ enum class BossState : std::uint8_t
     SHOOTING
 };
 
-// Heat-meter phases for the Slagmaw (Solar Forge) - drives which reflavored generic BossAttack
-// is in the moveset, in fixed order, instead of the usual random-from-moveset pick every other
-// boss uses. See updateSlagmawHeat.
-enum class SlagmawPhase : std::uint8_t
-{
-    Ember,
-    Flare,
-    Vent
-};
-
 enum class BossAttack : std::uint8_t
 {
     Beam,
@@ -59,6 +49,10 @@ enum class BossAttack : std::uint8_t
 
     CoilClamp,
 
+    MeteorHell,
+
+    MeteorSwarm,
+
     Count
 };
 
@@ -67,7 +61,7 @@ constexpr int bossAttackCount = static_cast<int>(BossAttack::Count);
 constexpr std::array<std::string_view, bossAttackCount> bossAttackNames{
     "Beam",          "Spread",         "Slam",     "WormholeBeam", "ChargeDash",
     "SummonAdds",    "ShockwaveStomp", "Barrage",  "GravityWell",  "HomingBarrage",
-    "PlateHurl",     "BurrowCharge",   "CoilClamp"};
+    "PlateHurl",     "BurrowCharge",   "CoilClamp", "MeteorHell",   "MeteorSwarm"};
 
 class Boss
 {
@@ -103,10 +97,6 @@ class Boss
 
     float recoveryTimer{};
 
-    // Built-in anti-camping punish, every boss has this regardless of moveset (see
-    // updateBossMovement / ShockwaveStomp): accumulates while the player sits within stomp
-    // range and the boss is IDLE, resets otherwise, forces a ShockwaveStomp once it crosses
-    // bossMeleeStompTriggerDuration.
     float meleeStompTimer{};
 
     bool isFinalBoss = false;
@@ -148,12 +138,11 @@ class Boss
     bool isArmorSegment = false;
     float segmentVolleyTimer = 0;
 
+    float wreckwormPrevPlayerDist = -1.0F;
+
     bool isSlagmaw = false;
-    float heatMeter = 0;
-    float heatFillRate = 0;
-    SlagmawPhase slagmawPhase = SlagmawPhase::Ember;
-    bool slagmawHotRoundUnlocked = false;
-    bool slagmawVentPending = false;
+
+    float ghostFadeAlpha = 1.0F;
 
     bool debuffStatic = false;
     bool debuffFreeze = false;
@@ -288,6 +277,11 @@ class BossProjectile
     int health;
 
     bool huntingNewTarget = false;
+
+    bool isMeteor = false;
+
+    bool isFluid = false;
+    Color fluidColor = Palette::RustbloomAccent;
 
     int32_t ricochetRemaining = 0;
 };

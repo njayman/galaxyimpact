@@ -123,8 +123,6 @@ constexpr float enrageSpeedMult = 0.5F;
 
 constexpr float bossRecoveryDuration = 0.5F;
 
-// How long a player has to sit within a boss's ShockwaveStomp blast radius (reused as the
-// trigger range - see updateBossMovement) before it auto-punishes the camping.
 constexpr float bossMeleeStompTriggerDuration = 2.5F;
 
 constexpr int32_t baseProjectileHealth = 3;
@@ -151,7 +149,7 @@ constexpr float beltbreakerPlateShieldDashShieldDuration = 2.5F;
 
 constexpr int32_t bossHpPerTier = 500;
 
-constexpr float wreckwormSegmentSpacing = 42.0F;
+constexpr float wreckwormSegmentSpacing = 80.0F;
 
 constexpr float wreckwormChainFollowSpeed = 9.0F;
 constexpr float wreckwormBurrowChargeDuration = 0.55F;
@@ -166,31 +164,69 @@ constexpr float wreckwormArmorDamageMult = 0.35F;
 constexpr float wreckwormSegmentHealthPerTier = 90.0F;
 constexpr float wreckwormArmorHealthMult = 2.0F;
 
-// Infected segments each fire their own weak spore volley on a stagger - the fight was reading
-// as "shoot the drifting worm" with only the head as a threat source. Weaker than the head's own
-// Barrage (see wreckwormSegmentVolleyDamageMult) since there can be up to 5 of these firing.
 constexpr float wreckwormSegmentVolleyIntervalMin = 3.0F;
 constexpr float wreckwormSegmentVolleyIntervalMax = 5.0F;
 constexpr float wreckwormSegmentVolleyDamageMult = 0.4F;
 constexpr float wreckwormSegmentVolleyProjSpeed = 7.0F;
 
-// The Slagmaw (Solar Forge boss) - heat meter (0-1) fills passively, phase boundaries pick which
-// reflavored generic attack is live: Ember (< emberEnd) = ChargeDash, Flare (< flareEnd) =
-// Barrage/Beam(+HomingBarrage once slagmawHotRoundUnlocked), Vent (>= flareEnd) = one forced Slam
-// eruption, then a held crit window before heat resets. Fill rate itself is picked per-wave in
-// spawnSlagmaw (60/70/75), same literal-per-tier pattern as spawnWreckworm's segmentCount.
-constexpr float slagmawHeatEmberEnd = 0.4F;
-constexpr float slagmawHeatFlareEnd = 0.85F;
-constexpr float slagmawCritWindowDuration = 2.0F;
+constexpr float meteorHellSpawnDistMin = 500.0F;
+constexpr float meteorHellSpawnDistMax = 700.0F;
+constexpr float meteorHellSpawnInterval = 1.0F;
+constexpr int32_t meteorHellSpawnPerBatchMin = 3;
+constexpr int32_t meteorHellSpawnPerBatchMax = 4;
+constexpr float meteorHellProjSpeed = 2.2F;
+constexpr float meteorHellHealthMult = 1.6F;
 
-// Solar Forge's ambient heat DoT - "open areas" are the default, shadow pockets are the
-// exception, matching the locked biome design ("rising ambient heat DoT... with safe shadow
-// pockets"). Ticks damagePlayer whenever the player is outside every live pocket's radius.
-constexpr float shadowPocketRadius = 130.0F;
-constexpr float shadowPocketSpawnIntervalMin = 6.0F;
-constexpr float shadowPocketSpawnIntervalMax = 10.0F;
-constexpr float solarForgeHeatTickInterval = 1.0F;
-constexpr int32_t solarForgeHeatDamage = 1;
+constexpr auto meteorHellDuration(int32_t wave) -> float
+{
+    if (wave >= 75)
+    {
+        return 7.0F;
+    }
+    if (wave >= 70)
+    {
+        return 5.0F;
+    }
+    return 3.0F;
+}
+
+constexpr float slagmawMoveSpeedMult = 0.32F;
+constexpr float ghostFadeDuration = 2.2F;
+constexpr float ghostTeleportMargin = 120.0F;
+
+constexpr int32_t meteorSwarmSpawnCount = 4;
+
+constexpr float caveNoiseScaleCoarse = 380.0F;
+constexpr float caveNoiseScaleFine = 60.0F;
+constexpr float caveTunnelHalfWidth = 0.17F;
+
+constexpr float rustbloomPodCellSize = 140.0F;
+constexpr float rustbloomPodChance = 0.28F;
+
+constexpr float solarForgeMeltThreshold = 10.0F;
+constexpr float solarForgeHeatDecayRate = 2.5F;
+constexpr float solarForgeMeltTickInterval = 0.5F;
+constexpr int32_t solarForgeMeltDamage = 2;
+
+constexpr float fluidContactTickInterval = 0.5F;
+constexpr int32_t fluidContactDamage = 3;
+
+constexpr float orbitAsteroidRetargetSpeed = 240.0F;
+
+constexpr int32_t solarForgeEnemyFireChancePercent = 10;
+constexpr float solarForgeEnemyFireParticleLife = 0.4F;
+constexpr float solarForgeEnemyFireParticleRadius = 5.0F;
+constexpr float solarForgeEnemyFireParticleSpeed = 18.0F;
+
+constexpr int32_t organicVertexCount = 10;
+constexpr float organicWobbleAmplitude = 0.22F;
+constexpr float organicWobbleSpeed = 2.0F;
+
+constexpr float organicMergeCheckInterval = 2.5F;
+constexpr int32_t organicMergeChancePercent = 8;
+constexpr float organicMergeRange = 90.0F;
+constexpr int32_t organicMergeMaxCount = 3;
+constexpr float organicMergeRadiusGrowth = 0.22F;
 
 constexpr float wormholeRadius = 26;
 constexpr float wormholeLifetime = 20.0F;
@@ -244,7 +280,7 @@ constexpr float turretLife = 8.0F;
 
 constexpr float turretFireInterval = 0.7F;
 constexpr float flakSplashRadius = 40.0F;
-constexpr float flamethrowerRange = 160.0F;
+constexpr float flamethrowerRange = 260.0F;
 constexpr float flamethrowerHalfAngle = 20.0F * DEG2RAD;
 constexpr float flamethrowerOffAngle = 45.0F * DEG2RAD;
 constexpr float chainLightningRange = 260.0F;
@@ -256,6 +292,11 @@ constexpr float shockDamageMult = 1.5F;
 constexpr float flakCannonDamageMult = 0.35F;
 
 constexpr float railgunBaseDamageMult = 2.6F;
+
+constexpr float sniperDamageMult = 2.3F;
+
+constexpr float sniperLineLength = 2000.0F;
+constexpr float sniperLineFlashDuration = 0.2F;
 constexpr float chainLightningDamageMult = 1.9F;
 constexpr float flamethrowerDamageMult = 2.5F;
 

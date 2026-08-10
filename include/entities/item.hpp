@@ -130,6 +130,7 @@ enum class WeaponType : std::uint8_t
     ChainLightning,
     TurretDeploy,
     Flamethrower,
+    Sniper,
 
     Count
 };
@@ -142,15 +143,10 @@ class Weapon
     float timer;
     bool evolved;
     float flashTimer;
-    // Danger-pickup steal, level-1 case only (see WeaponDowngrade) - stops this weapon firing
-    // entirely without removing it from the loadout/slot count, so it can be cleanly restored.
+
     bool disabled = false;
 };
 
-// M23 Danger pickup: steals one equipped weapon. Evolved -> un-evolve; otherwise level N ->
-// N-1; level 1 (never evolved) -> the weapon is disabled outright. Exactly one of
-// unevolved/disabled is ever true for a given instance (a plain level-down sets neither) -
-// restoration on timeout undoes whichever branch was taken.
 class WeaponDowngrade
 {
   public:
@@ -176,6 +172,7 @@ enum class SkillType : std::uint8_t
     ChainLightning,
     TurretDeploy,
     Flamethrower,
+    Sniper,
     Damage,
     Barrier,
     Cooldown,
@@ -231,6 +228,9 @@ constexpr std::array<Skill, static_cast<size_t>(SkillType::Count)> Skills{
           .description = "Deploys a stationary auto-firing turret.",
           .maxLevel = 3},
     Skill{.name = "Flamethrower", .description = "Continuous forward damage cone.", .maxLevel = 3},
+    Skill{.name = "Sniper",
+          .description = "Auto-fires a piercing bolt at the farthest enemy.",
+          .maxLevel = 3},
     Skill{.name = "Warhead Tuning", .description = "+15% damage on all weapons.", .maxLevel = 5},
     Skill{.name = "Barrier Mastery",
           .description = "+shield duration, faster charge regen.",
@@ -246,18 +246,18 @@ constexpr std::array<SkillType, static_cast<size_t>(WeaponType::Count)> weaponGr
     SkillType::MineLayers,   SkillType::BeamSweep,     SkillType::ShockWave,
     SkillType::Ricochet,     SkillType::FollowerDrone, SkillType::LaserDrone,
     SkillType::FlakCannon,   SkillType::Railgun,       SkillType::ChainLightning,
-    SkillType::TurretDeploy, SkillType::Flamethrower};
+    SkillType::TurretDeploy, SkillType::Flamethrower,  SkillType::Sniper};
 
 constexpr std::array<SkillType, static_cast<size_t>(WeaponType::Count)> skillLinkedPassive{
     SkillType::Damage,    SkillType::Barrier, SkillType::Cooldown, SkillType::PickupRadius,
     SkillType::MoveSpeed, SkillType::MaxHp,   SkillType::Damage,   SkillType::Damage,
     SkillType::Damage,    SkillType::Damage,  SkillType::Damage,   SkillType::Damage,
-    SkillType::Damage,    SkillType::Damage};
+    SkillType::Damage,    SkillType::Damage,  SkillType::Damage};
 
 constexpr std::array<std::string_view, static_cast<size_t>(WeaponType::Count)> evolvedWeaponName{
     "Photon Cannon", "Aegis Ring",      "Seeker Swarm",   "Cluster Charges", "Lance Sweep",
     "Bulwark Pulse", "Ricochet",        "Follower Drone", "Laser Drone",     "Flak Cannon",
-    "Railgun",       "Chain Lightning", "Turret Deploy",  "Flamethrower"};
+    "Railgun",       "Chain Lightning", "Turret Deploy",  "Flamethrower",    "Sniper"};
 
 enum class ChoiceType : std::uint8_t
 {
@@ -294,6 +294,7 @@ enum class DamageSource : std::uint8_t
     ChainLightning,
     TurretDeploy,
     Flamethrower,
+    Sniper,
 
     Count
 };
@@ -301,7 +302,7 @@ enum class DamageSource : std::uint8_t
 constexpr std::array<std::string_view, static_cast<size_t>(DamageSource::Count)> damageSourceNames{
     "Forward", "Orbit",           "Homing",        "Mine",           "Beam",        "Shock",
     "Dash",    "Nerve",           "Elemental",     "Follower Drone", "Laser Drone", "Flak Cannon",
-    "Railgun", "Chain Lightning", "Turret Deploy", "Flamethrower"};
+    "Railgun", "Chain Lightning", "Turret Deploy", "Flamethrower",   "Sniper"};
 
 struct DamageMeter
 {

@@ -19,14 +19,8 @@ constexpr float bossDeathShockwaveDuration = 3.0F;
 constexpr float shockFlashDuration = 0.4F;
 constexpr float waveEnemyScalePerWave = 0.035F;
 
-// M27 Player Constant, RoR2-style: a flat per-level multiplier on player damage, symmetric to
-// waveEnemyScale's per-level term on the enemy side. First-pass weight, same as
-// waveEnemyScalePerLevel - not re-converged against tools/balance_sim.
 constexpr float playerConstantPerLevel = 0.02F;
-// M27: waveEnemyScale also factors in player level (not just wave) - a player who out-levels
-// the wave pace (grinding, or just a strong build) pushes this the same coefficient up too, so
-// bosses/enemies don't fall behind actual player power. One coefficient, two inputs, not two
-// separate multipliers stacked on top of each other.
+
 constexpr float waveEnemyScalePerLevel = 0.03F;
 constexpr float pickupExpiryWarning = 2.5F;
 constexpr float shockwaveStompRadius = 220;
@@ -74,6 +68,8 @@ void fireNerveBeam(Game& game);
 void fireNerveBladeTornado(Game& game);
 void fireNerveBall(Game& game);
 void nerveLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg, float extraRadius = 0);
+void sniperLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg);
+void updateSniperShots(Game& game, float deltaTime);
 void updateOrbitBladeContact(Game& game, float deltaTime);
 void updateOrbitBladeLaunch(Game& game, float deltaTime);
 void updatePiercingProjectiles(Game& game, float deltaTime,
@@ -94,6 +90,7 @@ void updatePlayerMovement(Game& game, float deltaTime);
 void updateShieldAndBarrier(Game& game, float deltaTime);
 void updateAbilityCharges(Game& game, float deltaTime);
 auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>;
+auto farthestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>;
 auto nearestEnemyExcluding(const Game& game, Vector2 from,
                            Vector2 exclude) -> std::optional<Vector2>;
 auto weaponCooldown(const Game& game, WeaponType kind, int32_t level) -> float;
@@ -105,6 +102,7 @@ void updateFollowerDrones(Game& game, float deltaTime);
 void updateLaserDrones(Game& game, float deltaTime);
 void updateTurrets(Game& game, float deltaTime);
 void updateFlamethrower(Game& game, float deltaTime);
+void updateSolarForgeEnemyFireParticles(Game& game, float deltaTime);
 void updateChainLightningBolts(Game& game, float deltaTime);
 void fireChainLightning(Game& game, const Weapon& weapon);
 auto mineCount(int32_t level, bool evolved) -> int;
@@ -142,8 +140,8 @@ auto findBeltbreakerById(Game& game, int32_t instanceId) -> Boss*;
 void updateWreckwormChain(Game& game, Boss& head, float deltaTime);
 void updateWreckwormSegmentVolley(Game& game, Boss& segment, float deltaTime);
 void spawnSlagmaw(Game& game, int32_t wave);
-void updateSlagmawHeat(Game& game, Boss& boss, float deltaTime);
-void updateShadowPockets(Game& game, float deltaTime);
+void updateSafePathSegments(Game& game, float deltaTime);
+void updateFluidHazardContact(Game& game, float deltaTime);
 void updateSolarForgeHeat(Game& game, float deltaTime);
 auto findWreckwormSegment(Game& game, int32_t headId, int32_t segmentIndex) -> Boss*;
 void triggerWreckwormMolt(Game& game, Boss& head);
@@ -197,6 +195,9 @@ auto flamethrowerActive(int32_t level) -> bool;
 auto confusePulseActive(float activeDuration) -> bool;
 auto waveEnemyScale(const Game& game) -> float;
 auto playerConstant(const Game& game) -> float;
+auto organicVertexRadius(float baseRadius, int32_t vertexIndex, float seed) -> float;
+auto enemyCollisionRadius(const Enemy& enemy) -> float;
+void updateOrganicMerges(Game& game, float deltaTime);
 auto isFusedPassive(const Game& game, SkillType id) -> bool;
 auto hasWeapon(const Game& game, WeaponType kind) -> bool;
 auto weaponForGrantSkill(SkillType id) -> std::optional<WeaponType>;

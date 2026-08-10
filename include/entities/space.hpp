@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <vector>
 
+struct Game;
+
 namespace SpaceConstants
 {
 constexpr float LargeRadius = 32.0F;
@@ -111,6 +113,8 @@ class Asteroid
     float clusterOrbitRadius = 0;
     float clusterAngleDeg = 0;
     float clusterRotationSpeed = 0;
+
+    bool isFluid = false;
 };
 
 const int maxAsteroid = 40;
@@ -118,16 +122,8 @@ const int maxAsteroid = 40;
 auto asteroidRadius(AsteroidTier tier) -> float;
 auto asteroidScore(AsteroidTier tier) -> int;
 
-// Solar Forge's arena hazard: a safe pocket in the biome's ambient heat DoT (see
-// updateSolarForgeHeat). Purely a static safe-zone marker, no collision/health of its own.
-class ShadowPocket
-{
-  public:
-    Vector2 position;
-    float radius;
-    bool active;
-};
+auto isSolarForgeCaveOpen(Vector2 worldPos) -> bool;
 
-const int maxShadowPockets = 3;
+auto rustbloomNearestPodCenter(Vector2 worldPos) -> Vector2;
 
-void breakAsteroid(std::vector<Asteroid>& asteroids, const Asteroid& asteroid);
+void breakAsteroid(Game& game, const Asteroid& asteroid);

@@ -15,6 +15,7 @@
 #include "sandbox.hpp"
 #include "settings.hpp"
 #include "update.hpp"
+#include "update_constants.hpp"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -91,8 +92,13 @@ void drawShieldIndicator(const Player& player);
 void drawChargeParticles(Vector2 center, float fraction, Color color, float maxRadius,
                          float minRadius);
 void drawComet(const BossProjectile& projectile);
+void drawMeteorProjectile(const BossProjectile& projectile);
+void drawFluidBlob(Vector2 center, float radius, Color color, float seed, Vector2 trailDir);
+void drawPanelShape(Vector2 center, float radius, int32_t sides, float rotationDeg, Color baseColor,
+                    float seed);
+void drawPanelHex(Vector2 center, float radius, float rotationDeg, Color baseColor, float seed);
 void drawHUD(const Game& game);
-void drawActiveBuffs(const Game& game, int32_t x, int32_t y);
+void drawStatusRow(const Game& game, int32_t x, int32_t y);
 void drawDownwardTriangleIcon(float cx, int32_t y, float size, Color fillColor, bool filled);
 void drawHealthBar(const Game& game, int32_t x, int32_t y);
 auto healthBarWidthWithLabel() -> int32_t;
@@ -100,9 +106,13 @@ void drawShieldStackPips(const Game& game, int32_t x, int32_t y);
 void drawNerveBar(const Game& game, int32_t x, int32_t y);
 auto drawDamageMeter(const Game& game, int32_t x, int32_t y) -> int32_t;
 void drawChargePips(const Game& game, int32_t x, int32_t y);
-void drawDebuffIndicator(const Game& game, int32_t x, int32_t y);
+void drawOrganicEnemyShape(Vector2 center, float baseRadius, float seed, Color color);
+void drawMeteorBossShape(Vector2 center, float radius, int32_t seed, Color baseColor);
+auto hashNoise(float seed) -> float;
 void drawSandboxToggleIndicator(const Game& game);
 void drawSandboxMenu(const Game& game);
+void drawSandboxBrowser(const Game& game);
+void drawPickupIcon(PickupType type, ElementType element, Vector2 position, float alpha);
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius);
 
 void beginPixelZoom(const Game& game)
@@ -372,8 +382,6 @@ struct UnlockHint
     std::string progress;
 };
 
-// Mirrors the actual unlock logic in achievements.cpp - kept as display-only text/progress here
-// so the player can see exactly what they're chasing, not just a locked/unlocked flag.
 auto weaponUnlockHint(const Game& game, WeaponType weapon) -> UnlockHint
 {
     const auto& ach = game.resources.achievements;
@@ -423,6 +431,8 @@ auto weaponUnlockHint(const Game& game, WeaponType weapon) -> UnlockHint
         return {"Max the Beam Sweep skill", skillProgress(SkillType::BeamSweep)};
     case WeaponType::Flamethrower:
         return {"Max the Homing Missiles skill", skillProgress(SkillType::HomingMissiles)};
+    case WeaponType::Sniper:
+        return {"Max the Railgun skill", skillProgress(SkillType::Railgun)};
     case WeaponType::Count:
         break;
     }
@@ -631,8 +641,15 @@ void drawWeaponIcon(WeaponType kind, Vector2 c, float s, Color color)
                       static_cast<int32_t>(s * 0.8F), static_cast<int32_t>(s * 0.8F), color);
         break;
     case WeaponType::Flamethrower:
-        DrawTriangle(Vector2{.x = c.x - s, .y = c.y}, Vector2{.x = c.x + s * 0.6F, .y = c.y - s},
-                     Vector2{.x = c.x + s * 0.6F, .y = c.y + s}, color);
+        DrawTriangle(Vector2{.x = c.x - s, .y = c.y}, Vector2{.x = c.x + s * 0.6F, .y = c.y + s},
+                     Vector2{.x = c.x + s * 0.6F, .y = c.y - s}, color);
+        break;
+    case WeaponType::Sniper:
+        DrawCircleLines(static_cast<int32_t>(c.x), static_cast<int32_t>(c.y), s, color);
+        DrawLineEx(Vector2{.x = c.x - s * 1.3F, .y = c.y}, Vector2{.x = c.x + s * 1.3F, .y = c.y},
+                  1.5F, color);
+        DrawLineEx(Vector2{.x = c.x, .y = c.y - s * 1.3F}, Vector2{.x = c.x, .y = c.y + s * 1.3F},
+                  1.5F, color);
         break;
     case WeaponType::Count:
         break;
@@ -1047,9 +1064,149 @@ void drawHighScores(const Game& game, int32_t x, int32_t y, const std::vector<in
     }
 }
 
+void drawSolarForgeCaveBackground(const Game& game)
+{
+    if (currentBiome(game.run.waveNumber) != Biome::SolarForge)
+    {
+        return;
+    }
+
+    constexpr float cellSize = 48.0F;
+    const float halfW = static_cast<float>(game.resources.screenWidth) / 2 + cellSize;
+    const float halfH = static_cast<float>(game.resources.screenHeight) / 2 + cellSize;
+    const Vector2 center = game.run.player.position;
+    const float startX = std::floor((center.x - halfW) / cellSize) * cellSize;
+    const float startY = std::floor((center.y - halfH) / cellSize) * cellSize;
+
+    for (float y = startY; y < center.y + halfH; y += cellSize)
+    {
+        for (float x = startX; x < center.x + halfW; x += cellSize)
+        {
+            const Vector2 cellCenter{.x = x + cellSize / 2, .y = y + cellSize / 2};
+            if (isSolarForgeCaveOpen(cellCenter))
+            {
+                continue;
+            }
+            const float shade = hashNoise(x * 0.013F + y * 0.029F);
+            const Color rock =
+                ColorLerp(Palette::SolarForgeAccent, Palette::Void, 0.5F + shade * 0.25F);
+
+            const float jx = (hashNoise(x * 0.071F + y * 0.019F + 4.1F) - 0.5F) * cellSize * 0.6F;
+            const float jy = (hashNoise(x * 0.019F + y * 0.071F + 8.3F) - 0.5F) * cellSize * 0.6F;
+            const Vector2 blobCenter{.x = cellCenter.x + jx, .y = cellCenter.y + jy};
+            const float blobRadius =
+                cellSize * (0.74F + (hashNoise(x * 0.037F + y * 0.053F + 1.7F) - 0.5F) * 0.3F);
+
+            DrawCircleV(blobCenter, blobRadius, Fade(rock, 0.38F));
+            DrawCircleLines(static_cast<int32_t>(blobCenter.x), static_cast<int32_t>(blobCenter.y),
+                            blobRadius, Fade(ColorLerp(rock, WHITE, 0.2F), 0.2F));
+            if (shade > 0.78F)
+            {
+                const float ex = (hashNoise(x * 0.091F + y * 0.061F + 2.3F) - 0.5F) * cellSize * 0.5F;
+                const float ey = (hashNoise(x * 0.061F + y * 0.091F + 6.7F) - 0.5F) * cellSize * 0.5F;
+
+                const float glowPulse =
+                    0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 1.3F + shade * 30.0F);
+                const Color emberColor = ColorLerp(Palette::ElementBurn, YELLOW, glowPulse * 0.5F);
+                DrawCircleV(Vector2{.x = cellCenter.x + ex, .y = cellCenter.y + ey}, cellSize * 0.16F,
+                           Fade(emberColor, 0.5F + glowPulse * 0.3F));
+            }
+        }
+    }
+}
+
+void drawRustbloomBackground(const Game& game)
+{
+    if (currentBiome(game.run.waveNumber) != Biome::Rustbloom)
+    {
+        return;
+    }
+
+    const auto t = static_cast<float>(GetTime());
+
+    {
+        constexpr float fragmentCellSize = 260.0F;
+        const float halfW = static_cast<float>(game.resources.screenWidth) / 2 + fragmentCellSize;
+        const float halfH = static_cast<float>(game.resources.screenHeight) / 2 + fragmentCellSize;
+        const Vector2 fragArea = game.run.player.position;
+        const float fragStartX = std::floor((fragArea.x - halfW) / fragmentCellSize) * fragmentCellSize;
+        const float fragStartY = std::floor((fragArea.y - halfH) / fragmentCellSize) * fragmentCellSize;
+        for (float y = fragStartY; y < fragArea.y + halfH; y += fragmentCellSize)
+        {
+            for (float x = fragStartX; x < fragArea.x + halfW; x += fragmentCellSize)
+            {
+                const float presence = hashNoise(x * 0.011F + y * 0.023F + 50.0F);
+                if (presence > 0.35F)
+                {
+                    continue;
+                }
+                const float jx =
+                    (hashNoise(x * 0.031F + y * 0.013F + 61.0F) - 0.5F) * fragmentCellSize * 0.5F;
+                const float jy =
+                    (hashNoise(x * 0.013F + y * 0.031F + 67.0F) - 0.5F) * fragmentCellSize * 0.5F;
+                const Vector2 fragCenter{.x = x + fragmentCellSize / 2 + jx,
+                                         .y = y + fragmentCellSize / 2 + jy};
+                const float fragRadius = fragmentCellSize * (0.22F + presence * 0.25F);
+                const float rot = hashNoise(presence * 71.0F) * 360.0F;
+
+                const float shapeRoll = hashNoise(presence * 53.0F + 4.0F);
+                const int32_t sides = shapeRoll < 0.2F ? 0 : 3 + static_cast<int32_t>(shapeRoll * 7.5F) % 6;
+                drawPanelShape(fragCenter, fragRadius, sides, rot, Fade(Palette::StructMid, 0.5F),
+                              presence * 90.0F);
+            }
+        }
+    }
+
+    constexpr float cellSize = rustbloomPodCellSize;
+    const float halfW = static_cast<float>(game.resources.screenWidth) / 2 + cellSize;
+    const float halfH = static_cast<float>(game.resources.screenHeight) / 2 + cellSize;
+    const Vector2 center = game.run.player.position;
+    const float startX = std::floor((center.x - halfW) / cellSize) * cellSize;
+    const float startY = std::floor((center.y - halfH) / cellSize) * cellSize;
+
+    constexpr float podChance = rustbloomPodChance;
+    auto podPresence = [](float px, float py) -> float { return hashNoise(px * 0.021F + py * 0.037F); };
+
+    for (float y = startY; y < center.y + halfH; y += cellSize)
+    {
+        for (float x = startX; x < center.x + halfW; x += cellSize)
+        {
+            if (podPresence(x, y) > podChance)
+            {
+                continue;
+            }
+            const float jx = (hashNoise(x * 0.05F + y * 0.02F + 3.0F) - 0.5F) * cellSize * 0.5F;
+            const float jy = (hashNoise(x * 0.02F + y * 0.05F + 7.0F) - 0.5F) * cellSize * 0.5F;
+            const Vector2 podCenter{.x = x + cellSize / 2 + jx, .y = y + cellSize / 2 + jy};
+
+            if (podPresence(x + cellSize, y) <= podChance)
+            {
+                const Vector2 neighbor{.x = x + cellSize * 1.5F, .y = y + cellSize / 2};
+                DrawLineEx(podCenter, neighbor, 2.5F, Fade(Palette::RustbloomHaze, 0.25F));
+            }
+            if (podPresence(x, y + cellSize) <= podChance)
+            {
+                const Vector2 neighbor{.x = x + cellSize / 2, .y = y + cellSize * 1.5F};
+                DrawLineEx(podCenter, neighbor, 2.5F, Fade(Palette::RustbloomHaze, 0.25F));
+            }
+
+            const float sizeSeed = hashNoise(x * 0.043F + y * 0.017F + 9.0F);
+            const float podRadius = cellSize * (0.14F + sizeSeed * 0.06F);
+            DrawCircleV(podCenter, podRadius, Fade(Palette::RustbloomAccent, 0.3F));
+            DrawCircleV(Vector2Add(podCenter, Vector2{.x = podRadius * 0.5F, .y = podRadius * 0.3F}),
+                       podRadius * 0.6F, Fade(Palette::RustbloomHaze, 0.25F));
+
+            const float pulse = 0.5F + 0.5F * std::sin(t * 1.5F + x * 0.01F + y * 0.01F);
+            DrawCircleV(podCenter, podRadius * 0.3F, Fade(Palette::Heal, 0.3F + 0.3F * pulse));
+        }
+    }
+}
+
 void drawGameplayWorld(const Game& game)
 {
     drawBackgroundStars(game, game.run.player.position);
+    drawSolarForgeCaveBackground(game);
+    drawRustbloomBackground(game);
 
     constexpr float arenaBoundaryVisibleMargin = 2000.0F;
     if (const float distFromCenter = Vector2Length(game.run.player.position);
@@ -1086,14 +1243,16 @@ void drawGameplayWorld(const Game& game)
                           game.run.wormhole.radius);
     }
 
-    for (const auto& pocket : game.run.shadowPockets)
-    {
-        DrawCircleV(pocket.position, pocket.radius, Fade(Palette::ElementFreeze, 0.12F));
-        DrawCircleLinesV(pocket.position, pocket.radius, Fade(Palette::ElementFreeze, 0.45F));
-    }
-
     for (const auto& a : game.run.asteroids)
     {
+        if (a.isFluid)
+        {
+            const float pulse =
+                0.85F + 0.15F * std::sin(static_cast<float>(GetTime()) * 3.0F + a.position.x);
+            drawFluidBlob(a.position, a.radius * pulse, Palette::SolarForgeAccent,
+                         a.position.x * 0.037F + a.position.y * 0.019F, a.velocity);
+            continue;
+        }
         DrawCircleV(a.position, a.radius, Palette::StructMid);
         DrawCircleV(Vector2{.x = a.position.x - a.radius / 3, .y = a.position.y - a.radius / 4},
                     a.radius / 4, Palette::StructDark);
@@ -1116,64 +1275,11 @@ void drawGameplayWorld(const Game& game)
 
     for (const auto& p : game.run.pickups)
     {
-
         const float alpha =
             p.lifetime <= UpdateConstants::pickupExpiryWarning
                 ? 0.35F + 0.65F * (0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 12.0F))
                 : 1.0F;
-
-        switch (p.type)
-        {
-        case PickupType::LifeOrb:
-            DrawCircleV(p.position, 5, Fade(Palette::Accent, alpha));
-            DrawCircleLinesV(p.position, 6, Fade(Palette::Crit, 0.8F * alpha));
-            break;
-        case PickupType::Shield:
-            DrawCircleV(p.position, 6, Fade(Palette::Shield, alpha));
-            DrawCircleLinesV(p.position, 7, Fade(Palette::Haze, 0.8F * alpha));
-            break;
-        case PickupType::Elemental:
-        {
-            const Color color = elementColors.at(static_cast<size_t>(p.element));
-            DrawPoly(p.position, 4, 7, static_cast<float>(GetTime()) * 90.0F, Fade(color, alpha));
-            DrawCircleLinesV(p.position, 9, Fade(color, 0.6F * alpha));
-            break;
-        }
-        case PickupType::Regen:
-            DrawCircleV(p.position, 6, Fade(Palette::Heal, alpha));
-            DrawCircleLinesV(p.position, 7, Fade(WHITE, 0.6F * alpha));
-            break;
-        case PickupType::DashTrail:
-            DrawPoly(p.position, 3, 7, static_cast<float>(GetTime()) * 60.0F,
-                     Fade(Palette::Accent, alpha));
-            break;
-        case PickupType::MagnetPulse:
-            DrawCircleLinesV(p.position, 8, Fade(Palette::Shield, alpha));
-            DrawCircleLinesV(p.position, 5, Fade(Palette::Shield, 0.6F * alpha));
-            break;
-        case PickupType::Overcharge:
-            DrawPoly(p.position, 6, 7, static_cast<float>(GetTime()) * 120.0F,
-                     Fade(Palette::Charge, alpha));
-            break;
-        case PickupType::SecondWind:
-            DrawCircleV(p.position, 6, Fade(Palette::Crit, alpha));
-            DrawCircleLinesV(p.position, 8, Fade(Palette::Crit, 0.5F * alpha));
-            break;
-        case PickupType::Danger:
-        {
-
-            const float pulse = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 10.0F);
-            DrawPoly(p.position, 5, 9, static_cast<float>(GetTime()) * -140.0F,
-                     Fade(Palette::Void, alpha));
-            DrawPolyLines(p.position, 5, 10, static_cast<float>(GetTime()) * -140.0F,
-                          Fade(Palette::Crit, alpha * pulse));
-            break;
-        }
-        default:
-            DrawCircleV(p.position, 2.5F, Fade(Palette::Charge, alpha));
-            DrawCircleLinesV(p.position, 3.5F, Fade(Palette::Crit, 0.6F * alpha));
-            break;
-        }
+        drawPickupIcon(p.type, p.element, p.position, alpha);
     }
 
     for (const auto& boss : game.run.bosses)
@@ -1224,6 +1330,13 @@ void drawGameplayWorld(const Game& game)
         DrawLineEx(bolt.from, bolt.to, 2, Fade(Palette::Crit, bolt.timer / 0.2F));
     }
 
+    for (const auto& shot : game.run.sniperShots)
+    {
+        const float fade = shot.timer / sniperLineFlashDuration;
+        DrawLineEx(shot.from, shot.to, 3, Fade(Palette::StructLight, fade));
+        DrawLineEx(shot.from, shot.to, 1, Fade(WHITE, fade));
+    }
+
     for (const auto& wave : game.run.bossDeathShockwaves)
     {
         const float progress =
@@ -1239,7 +1352,16 @@ void drawGameplayWorld(const Game& game)
 
     for (const auto& p : game.run.bossProjectiles)
     {
-        if (p.homing)
+        if (p.isFluid)
+        {
+            drawFluidBlob(p.position, p.radius * 1.4F, p.fluidColor,
+                         p.position.x * 0.05F + p.position.y * 0.03F, p.velocity);
+        }
+        else if (p.isMeteor)
+        {
+            drawMeteorProjectile(p);
+        }
+        else if (p.homing)
         {
             drawComet(p);
         }
@@ -1550,26 +1672,89 @@ void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float rotati
         }
         for (size_t i = 0; i < verts.size(); i++)
         {
-            DrawTriangle(center, verts.at(i), verts.at((i + 1) % verts.size()), color);
+
+            DrawTriangle(center, verts.at((i + 1) % verts.size()), verts.at(i), color);
         }
         break;
     }
+    case EnemyShape::Organic:
+
+        break;
     }
 }
 
-// Deterministic pseudo-random in [0,1) from a float seed - draw code must never call
-// GetRandomValue/SetRandomSeed itself, that would desync the shared gameplay RNG (drop rolls,
-// spawn patterns, etc. all draw from the same stream).
+void drawOrganicEnemyShape(Vector2 center, float baseRadius, float seed, Color color)
+{
+
+    constexpr int32_t metalVertexCount = 5;
+    const Vector2 metalCenter = Vector2Add(
+        center, Vector2{.x = baseRadius * 0.22F * std::cos(seed * 3.1F),
+                        .y = baseRadius * 0.22F * std::sin(seed * 3.1F)});
+    std::array<Vector2, metalVertexCount> metalVerts{};
+    for (int32_t i = 0; i < metalVertexCount; i++)
+    {
+        const float angle =
+            static_cast<float>(i) * (360.0F / metalVertexCount) * DEG2RAD + seed;
+        const float r = baseRadius * (0.38F + hashNoise(seed * 2.1F + static_cast<float>(i)) * 0.16F);
+        metalVerts.at(static_cast<size_t>(i)) =
+            Vector2Add(metalCenter, Vector2{.x = std::cos(angle) * r, .y = std::sin(angle) * r});
+    }
+    for (int32_t i = 0; i < metalVertexCount; i++)
+    {
+        DrawTriangle(metalCenter, metalVerts.at(static_cast<size_t>((i + 1) % metalVertexCount)),
+                     metalVerts.at(static_cast<size_t>(i)),
+                     ColorLerp(Palette::StructMid, Palette::Void, 0.2F));
+    }
+
+    constexpr int32_t tendrilCount = 3;
+    for (int32_t i = 0; i < tendrilCount; i++)
+    {
+        const float tendrilSeed = seed * 4.3F + static_cast<float>(i) * 29.0F;
+        const float angle = hashNoise(tendrilSeed) * 2.0F * std::numbers::pi_v<float>;
+        const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
+        const Vector2 perp{.x = -dir.y, .y = dir.x};
+        const Vector2 base = Vector2Add(center, Vector2Scale(dir, baseRadius * 0.75F));
+        const Vector2 tip = Vector2Add(center, Vector2Scale(dir, baseRadius * 1.6F));
+        DrawTriangle(Vector2Add(base, Vector2Scale(perp, 3)), tip,
+                     Vector2Subtract(base, Vector2Scale(perp, 3)),
+                     ColorLerp(color, Palette::Void, 0.35F));
+    }
+
+    std::array<Vector2, static_cast<size_t>(organicVertexCount)> verts{};
+    for (int32_t i = 0; i < organicVertexCount; i++)
+    {
+        const float angle =
+            static_cast<float>(i) * (360.0F / static_cast<float>(organicVertexCount)) * DEG2RAD;
+        const float r = organicVertexRadius(baseRadius, i, seed);
+        verts.at(static_cast<size_t>(i)) =
+            Vector2Add(center, Vector2{.x = std::cos(angle) * r, .y = std::sin(angle) * r});
+    }
+    for (size_t i = 0; i < verts.size(); i++)
+    {
+
+        DrawTriangle(center, verts.at((i + 1) % verts.size()), verts.at(i), color);
+    }
+
+    const auto t = static_cast<float>(GetTime());
+    constexpr int32_t pustuleCount = 2;
+    for (int32_t i = 0; i < pustuleCount; i++)
+    {
+        const float pustuleSeed = seed * 6.7F + static_cast<float>(i) * 13.0F;
+        const float angle = hashNoise(pustuleSeed) * 2.0F * std::numbers::pi_v<float>;
+        const float dist = hashNoise(pustuleSeed + 1.0F) * baseRadius * 0.5F;
+        const Vector2 pos =
+            Vector2Add(center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+        const float pulse = 0.5F + 0.5F * std::sin(t * 3.0F + pustuleSeed);
+        DrawCircleV(pos, baseRadius * 0.13F, Fade(Palette::Heal, 0.45F + 0.4F * pulse));
+    }
+}
+
 auto hashNoise(float seed) -> float
 {
     const float v = std::sin(seed) * 43758.5453F;
     return v - std::floor(v);
 }
 
-// Per-debuff status VFX drawn on top of an already-rendered enemy/boss body - burn gets small
-// flickering flame licks (echoes the flamethrower weapon's own particle look), static gets
-// crackling zigzag bolts around the target, freeze gets a semi-transparent icy ring hugging the
-// border. Purely procedural (position/time-seeded), no persistent particle state needed.
 void drawElementalDebuffEffects(Vector2 pos, float radius, bool burning, bool shocked, bool frozen)
 {
     const auto t = static_cast<float>(GetTime());
@@ -1630,6 +1815,10 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
 {
     const auto& kind = enemyKinds.at(static_cast<size_t>(enemy.kind));
     Color color = kind.color;
+    if (enemy.fadeAlpha < 1.0F)
+    {
+        color = Fade(color, enemy.fadeAlpha);
+    }
     if (enemy.phased)
     {
         color = Fade(color, 0.35F);
@@ -1694,7 +1883,15 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     const float spin = std::fmod(static_cast<float>(GetTime()) * 20.0F +
                                      (enemy.position.x + enemy.position.y) * 0.15F,
                                  360.0F);
-    drawEnemyShape(kind.shape, enemy.position, kind.radius, spin, color);
+    if (kind.shape == EnemyShape::Organic)
+    {
+        drawOrganicEnemyShape(enemy.position, kind.radius * enemy.organicRadiusMult,
+                              enemy.organicSeed, color);
+    }
+    else
+    {
+        drawEnemyShape(kind.shape, enemy.position, kind.radius, spin, color);
+    }
     drawElementalDebuffEffects(enemy.position, kind.radius, enemy.burnDps > 0, enemy.debuffStatic,
                                enemy.debuffFreeze);
 
@@ -1808,6 +2005,144 @@ void drawBossHull(BossShape shape, Vector2 center, Vector2 size, Color color)
     }
 }
 
+void drawMeteorBossShape(Vector2 center, float radius, int32_t seed, Color baseColor)
+{
+    const auto t = static_cast<float>(GetTime());
+    const auto seedF = static_cast<float>(seed);
+
+    const float glowPulse = 0.85F + 0.15F * std::sin(t * 2.4F + seedF);
+    DrawCircleV(center, radius * 1.4F * glowPulse, Fade(Palette::ElementBurn, 0.08F));
+    DrawCircleV(center, radius * 1.18F * glowPulse, Fade(Palette::ElementBurn, 0.14F));
+
+    constexpr int32_t vertexCount = 16;
+    std::array<Vector2, vertexCount> verts{};
+    for (int32_t i = 0; i < vertexCount; i++)
+    {
+        const float angle = static_cast<float>(i) * (360.0F / vertexCount) * DEG2RAD;
+        const float noise = hashNoise(seedF * 7.3F + static_cast<float>(i) * 2.9F);
+        const float r = radius * (0.76F + noise * 0.34F);
+        verts.at(static_cast<size_t>(i)) =
+            Vector2Add(center, Vector2{.x = std::cos(angle) * r, .y = std::sin(angle) * r});
+    }
+    for (int32_t i = 0; i < vertexCount; i++)
+    {
+        DrawTriangle(center, verts.at(static_cast<size_t>((i + 1) % vertexCount)),
+                     verts.at(static_cast<size_t>(i)), ColorLerp(baseColor, Palette::Void, 0.45F));
+    }
+
+    for (int32_t i = 0; i < vertexCount; i++)
+    {
+        const Vector2 innerA = Vector2Lerp(center, verts.at(static_cast<size_t>(i)), 0.8F);
+        const Vector2 innerB =
+            Vector2Lerp(center, verts.at(static_cast<size_t>((i + 1) % vertexCount)), 0.8F);
+        DrawTriangle(center, innerB, innerA, ColorLerp(baseColor, Palette::Void, 0.22F));
+    }
+
+    constexpr int32_t craterCount = 8;
+    for (int32_t i = 0; i < craterCount; i++)
+    {
+        const float cs = seedF * 13.0F + static_cast<float>(i) * 53.0F;
+        const float craterAngle = hashNoise(cs) * 2.0F * std::numbers::pi_v<float>;
+        const float craterDist = hashNoise(cs + 3.1F) * radius * 0.62F;
+        const float craterRadius = radius * (0.07F + hashNoise(cs + 5.0F) * 0.13F);
+        const Vector2 craterPos = Vector2Add(
+            center, Vector2{.x = std::cos(craterAngle) * craterDist,
+                            .y = std::sin(craterAngle) * craterDist});
+
+        DrawCircleV(craterPos, craterRadius, ColorLerp(baseColor, Palette::Void, 0.55F));
+        DrawCircleLines(static_cast<int32_t>(craterPos.x), static_cast<int32_t>(craterPos.y),
+                        craterRadius, Fade(ColorLerp(baseColor, WHITE, 0.35F), 0.6F));
+        DrawCircleV(craterPos, craterRadius * 0.42F,
+                    Fade(ColorLerp(baseColor, Palette::Void, 0.75F), 0.85F));
+    }
+
+    constexpr int32_t flameCount = 30;
+    for (int32_t i = 0; i < flameCount; i++)
+    {
+        const float flameSeed = seedF * 5.1F + static_cast<float>(i) * 17.0F;
+        const float angle = hashNoise(flameSeed) * 2.0F * std::numbers::pi_v<float>;
+        const float dist = hashNoise(flameSeed + 1.7F) * radius * 0.92F;
+        const Vector2 base =
+            Vector2Add(center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+        const float bob = 0.5F + 0.5F * std::sin(t * 8.0F + flameSeed);
+        const Vector2 tip{.x = base.x + std::sin(t * 11.0F + flameSeed) * 3.0F,
+                          .y = base.y - (5.0F + bob * 9.0F)};
+        const Color flameColor =
+            bob > 0.6F ? Palette::ElementBurn : ColorLerp(Palette::ElementBurn, YELLOW, 0.5F);
+        DrawTriangle(Vector2{.x = base.x - 3, .y = base.y}, tip,
+                     Vector2{.x = base.x + 3, .y = base.y}, Fade(flameColor, 0.8F));
+    }
+}
+
+void drawPanelShape(Vector2 center, float radius, int32_t sides, float rotationDeg, Color baseColor,
+                    float seed)
+{
+    if (sides <= 2)
+    {
+        DrawCircleV(center, radius, baseColor);
+        DrawCircleLines(static_cast<int32_t>(center.x), static_cast<int32_t>(center.y), radius,
+                        Fade(Palette::Void, 0.6F));
+    }
+    else
+    {
+        DrawPoly(center, sides, radius, rotationDeg, baseColor);
+        DrawPolyLines(center, sides, radius, rotationDeg, Fade(Palette::Void, 0.6F));
+    }
+
+    constexpr int32_t seamCount = 5;
+    for (int32_t i = 0; i < seamCount; i++)
+    {
+        const float seamSeed = seed * 11.0F + static_cast<float>(i) * 17.0F;
+        const float angle = hashNoise(seamSeed) * 2.0F * std::numbers::pi_v<float>;
+        const float len = radius * (0.5F + hashNoise(seamSeed + 3.0F) * 0.5F);
+        const float offsetDist = hashNoise(seamSeed + 6.0F) * radius * 0.6F;
+        const Vector2 base = Vector2Add(
+            center, Vector2{.x = std::cos(angle + 1.5708F) * offsetDist,
+                            .y = std::sin(angle + 1.5708F) * offsetDist});
+        const Vector2 end =
+            Vector2Add(base, Vector2{.x = std::cos(angle) * len, .y = std::sin(angle) * len});
+        DrawLineEx(base, end, 2.0F, Fade(Palette::Void, 0.5F));
+    }
+
+    constexpr int32_t rivetCount = 3;
+    for (int32_t i = 0; i < rivetCount; i++)
+    {
+        const float rivetSeed = seed * 19.0F + static_cast<float>(i) * 29.0F;
+        const float angle = hashNoise(rivetSeed) * 2.0F * std::numbers::pi_v<float>;
+        const float dist = hashNoise(rivetSeed + 1.0F) * radius * 0.6F;
+        const Vector2 pos =
+            Vector2Add(center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+        DrawRectangle(static_cast<int32_t>(pos.x - 2), static_cast<int32_t>(pos.y - 3), 4, 6,
+                      Fade(Palette::Void, 0.7F));
+    }
+}
+
+void drawPanelHex(Vector2 center, float radius, float rotationDeg, Color baseColor, float seed)
+{
+    drawPanelShape(center, radius, 6, rotationDeg, baseColor, seed);
+}
+
+void drawWreckwormSegmentShape(Vector2 center, float radius, float seed, Color baseColor, bool armor)
+{
+    drawPanelHex(center, radius, seed * 40.0F, baseColor, seed);
+    if (armor)
+    {
+        return;
+    }
+    const auto t = static_cast<float>(GetTime());
+    constexpr int32_t pustuleCount = 2;
+    for (int32_t i = 0; i < pustuleCount; i++)
+    {
+        const float pustuleSeed = seed * 6.3F + static_cast<float>(i) * 15.0F;
+        const float angle = hashNoise(pustuleSeed) * 2.0F * std::numbers::pi_v<float>;
+        const float dist = hashNoise(pustuleSeed + 1.0F) * radius * 0.5F;
+        const Vector2 pos =
+            Vector2Add(center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+        const float pulse = 0.5F + 0.5F * std::sin(t * 3.0F + pustuleSeed);
+        DrawCircleV(pos, radius * 0.18F, Fade(Palette::Heal, 0.35F + 0.35F * pulse));
+    }
+}
+
 void drawBoss(const Game& game, const Boss& boss)
 {
     const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
@@ -1833,7 +2168,26 @@ void drawBoss(const Game& game, const Boss& boss)
         ufoColor = ColorLerp(ufoColor, Palette::ElementStatic, 0.4F * flicker);
     }
 
-    drawBossHull(boss.shape, bossCenter, boss.size, ufoColor);
+    if (boss.isSlagmaw)
+    {
+        drawMeteorBossShape(bossCenter, boss.size.x / 2, boss.instanceId,
+                            Fade(ufoColor, boss.ghostFadeAlpha));
+    }
+    else if (boss.isWreckwormHead)
+    {
+        const Vector2 faceDir = Vector2Subtract(game.run.player.position, bossCenter);
+        drawFluidBlob(bossCenter, boss.size.x / 2, ufoColor, static_cast<float>(boss.instanceId),
+                     faceDir);
+    }
+    else if (boss.isWreckwormSegment)
+    {
+        drawWreckwormSegmentShape(bossCenter, boss.size.x / 2, static_cast<float>(boss.segmentIndex + 1),
+                                  ufoColor, boss.isArmorSegment);
+    }
+    else
+    {
+        drawBossHull(boss.shape, bossCenter, boss.size, ufoColor);
+    }
     drawElementalDebuffEffects(bossCenter, std::max(boss.size.x, boss.size.y) / 2, boss.burnDps > 0,
                                boss.debuffStatic, boss.debuffFreeze);
 
@@ -2050,9 +2404,7 @@ void drawOrbitBlades(const Game& game)
             break;
         }
         case WeaponType::Flamethrower:
-            // Drawn as fading particle puffs (see game.run.flameParticles, spawned by
-            // updateFlamethrower) rather than a flat cone shape here - rendered alongside the
-            // dash trail particles below.
+
             break;
         case WeaponType::Shock:
         {
@@ -2155,6 +2507,71 @@ void drawComet(const BossProjectile& projectile)
     DrawCircleV(projectile.position, projectile.radius * 0.6F, Palette::BossHoming);
 }
 
+void drawMeteorProjectile(const BossProjectile& projectile)
+{
+    const float speed = Vector2Length(projectile.velocity);
+    Vector2 tailDir{.x = 0, .y = -1};
+    if (speed > 0)
+    {
+        tailDir = Vector2Scale(projectile.velocity, -1 / speed);
+    }
+
+    constexpr int segments = 6;
+    for (int i = segments; i >= 1; i--)
+    {
+        const float frac = static_cast<float>(i) / segments;
+        const Vector2 segPos = Vector2Add(
+            projectile.position, Vector2Scale(tailDir, projectile.radius * 2.2F * static_cast<float>(i)));
+        const Color flame =
+            i % 2 == 0 ? Palette::ElementBurn : ColorLerp(Palette::ElementBurn, YELLOW, 0.5F);
+        DrawCircleV(segPos, projectile.radius * (1 - frac * 0.5F), Fade(flame, 0.55F * (1 - frac * 0.6F)));
+    }
+
+    DrawCircleV(projectile.position, projectile.radius * 1.15F, Fade(Palette::ElementBurn, 0.35F));
+    DrawCircleV(projectile.position, projectile.radius,
+               ColorLerp(Palette::SolarForgeAccent, Palette::Void, 0.4F));
+    DrawCircleLines(static_cast<int32_t>(projectile.position.x),
+                    static_cast<int32_t>(projectile.position.y), projectile.radius,
+                    Fade(ColorLerp(Palette::SolarForgeAccent, WHITE, 0.3F), 0.5F));
+}
+
+void drawFluidBlob(Vector2 center, float radius, Color color, float seed, Vector2 trailDir)
+{
+    const float dirLen = Vector2Length(trailDir);
+    const Vector2 dir = dirLen > 0.01F ? Vector2Scale(trailDir, 1.0F / dirLen) : Vector2{.x = 0, .y = -1};
+    const Vector2 perp{.x = -dir.y, .y = dir.x};
+
+    DrawCircleV(center, radius, color);
+
+    constexpr int32_t notchCount = 5;
+    for (int32_t i = 0; i < notchCount; i++)
+    {
+        const float frac = static_cast<float>(i) / static_cast<float>(notchCount - 1) - 0.5F;
+        const float notchSeed = seed * 9.0F + static_cast<float>(i) * 7.0F;
+        const float notchRadius = radius * (0.22F + hashNoise(notchSeed) * 0.3F);
+        const Vector2 edge = Vector2Add(
+            center, Vector2Add(Vector2Scale(dir, -radius * 0.75F), Vector2Scale(perp, frac * radius * 1.7F)));
+        DrawCircleV(edge, notchRadius, ColorLerp(color, Palette::Void, 0.6F));
+    }
+
+    DrawCircleV(Vector2Add(center, Vector2Scale(perp, -radius * 0.3F)), radius * 0.22F, Fade(WHITE, 0.55F));
+    DrawCircleV(Vector2Add(center, Vector2{.x = radius * 0.15F, .y = -radius * 0.15F}), radius * 0.12F,
+               Fade(WHITE, 0.4F));
+
+    constexpr int32_t dripCount = 3;
+    for (int32_t i = 0; i < dripCount; i++)
+    {
+        const float dripSeed = seed * 5.0F + static_cast<float>(i) * 11.0F;
+        const float dist =
+            radius * (1.3F + static_cast<float>(i) * 0.6F + hashNoise(dripSeed) * 0.3F);
+        const float side = (hashNoise(dripSeed + 1.0F) - 0.5F) * radius * 0.8F;
+        const Vector2 dripPos =
+            Vector2Add(center, Vector2Add(Vector2Scale(dir, -dist), Vector2Scale(perp, side)));
+        DrawCircleV(dripPos, radius * (0.14F - static_cast<float>(i) * 0.02F),
+                   Fade(color, 0.6F - static_cast<float>(i) * 0.15F));
+    }
+}
+
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius)
 {
     DrawCircleV(position, radius, Fade(Palette::Shield, 0.25F));
@@ -2183,6 +2600,28 @@ void drawBossHealthBars(const Game& game)
     constexpr int32_t barGap = 8;
     const int32_t barX = (scaledScreenWidth - barWidth) / 2;
     int32_t barY = scaledScreenHeight - 70;
+
+    if (currentBiome(game.run.waveNumber) == Biome::SolarForge)
+    {
+        const float heatFrac =
+            std::clamp(game.run.solarForgeHeatMeter / solarForgeMeltThreshold, 0.0F, 1.0F);
+        const bool melting = game.run.solarForgeHeatMeter > solarForgeMeltThreshold;
+        DrawRectangle(barX, barY, barWidth, barHeight, Fade(Palette::StructMid, 0.5F));
+        const Color fireColor = ColorLerp(Palette::ElementBurn, Palette::Crit, heatFrac);
+        DrawRectangle(barX, barY, static_cast<int32_t>(static_cast<float>(barWidth) * heatFrac),
+                      barHeight, fireColor);
+        DrawRectangleLines(barX, barY, barWidth, barHeight, Palette::StructDark);
+        if (melting)
+        {
+            constexpr const char* meltingLabel = "MELTING";
+            const auto textWidth =
+                static_cast<int32_t>(MeasureTextEx(game.resources.font, meltingLabel, 16, 1).x);
+            const float pulse = 0.6F + 0.4F * std::sin(static_cast<float>(GetTime()) * 10.0F);
+            drawText(game, meltingLabel, barX + (barWidth - textWidth) / 2, barY + 1, 16,
+                    Fade(Palette::StructLight, pulse));
+        }
+        barY -= barHeight + barGap;
+    }
 
     for (const auto& boss : game.run.bosses)
     {
@@ -2234,10 +2673,6 @@ void drawHUD(const Game& game)
 
     int32_t y = 82 + std::max(nerveBarHeight, meterHeight) + 6;
     drawChargePips(game, 10, y);
-    y += 24;
-    drawDebuffIndicator(game, 10, y);
-    y += 24;
-    drawActiveBuffs(game, 10, y);
 
     constexpr int32_t abilitySlotCount = ItemConstants::maxAbilitySlots;
     constexpr int32_t abilityBoxSize = 28;
@@ -2247,7 +2682,9 @@ void drawHUD(const Game& game)
         static_cast<int32_t>(static_cast<float>(game.resources.screenWidth) / hudScale(game));
     const auto scaledScreenHeight =
         static_cast<int32_t>(static_cast<float>(game.resources.screenHeight) / hudScale(game));
-    drawAbilitySlots(game, scaledScreenWidth - abilitySlotsWidth - 10, 10);
+    const int32_t abilitySlotsX = scaledScreenWidth - abilitySlotsWidth - 10;
+    drawAbilitySlots(game, abilitySlotsX, 10);
+    drawStatusRow(game, abilitySlotsX, 10 + abilityBoxSize + 10);
 
     drawText(game,
              "Move: WASD | Dash: L-Click | Shield: R-Click | Burst: Space | Pause: Esc | F11: "
@@ -2411,26 +2848,56 @@ void drawChargePips(const Game& game, int32_t x, int32_t y)
     }
 }
 
-void drawDebuffIndicator(const Game& game, int32_t x, int32_t y)
+enum class StatusIconKind : std::uint8_t
 {
-    const bool suppressed = std::any_of(
-        game.run.eliteHazards.begin(), game.run.eliteHazards.end(), [](const EliteHazard& hazard)
-        { return hazard.active && hazard.role == EliteHazardRole::Suppressor; });
-    if (!suppressed)
-    {
-        return;
-    }
+    Dot,
+    Weapon,
+    Exclaim
+};
 
-    DrawCircleV(Vector2{.x = static_cast<float>(x) + 7, .y = static_cast<float>(y) + 9}, 7,
-                Palette::Shield);
-    drawText(game, "!", x + 4, y + 1, 14, Palette::Void);
-    drawText(game, "SUPPRESSED: weapon cooldowns +40%", x + 20, y, 16, Palette::Shield);
+struct StatusEntry
+{
+    StatusIconKind iconKind;
+    Color color;
+    WeaponType weaponType = WeaponType::Forward;
+    float fracRemaining = -1;
+    std::string label;
+};
+
+void drawStatusRing(Vector2 center, float radius, float frac, Color color)
+{
+
+    constexpr float ringThickness = 2.0F;
+    DrawRing(center, radius, radius + ringThickness, 0, 360, 24, Fade(Palette::StructDark, 0.7F));
+    if (frac > 0)
+    {
+        const float endAngle = -90.0F + 360.0F * std::clamp(frac, 0.0F, 1.0F);
+        DrawRing(center, radius, radius + ringThickness, -90.0F, endAngle, 24, color);
+    }
 }
 
-void drawActiveBuffs(const Game& game, int32_t x, int32_t y)
+void drawStatusIcon(const Game& game, const StatusEntry& entry, Vector2 center, float radius)
+{
+    switch (entry.iconKind)
+    {
+    case StatusIconKind::Dot:
+        DrawCircleV(center, radius, entry.color);
+        break;
+    case StatusIconKind::Weapon:
+        drawWeaponIcon(entry.weaponType, center, radius, entry.color);
+        break;
+    case StatusIconKind::Exclaim:
+        DrawCircleV(center, radius, entry.color);
+        drawText(game, "!", static_cast<int32_t>(center.x) - 3,
+                 static_cast<int32_t>(center.y) - 7, 14, Palette::Void);
+        break;
+    }
+}
+
+void drawStatusRow(const Game& game, int32_t x, int32_t y)
 {
     const auto& player = game.run.player;
-    int32_t cursorX = x;
+    std::vector<StatusEntry> entries;
 
     for (size_t e = 0; e < static_cast<size_t>(ElementType::Count); e++)
     {
@@ -2439,74 +2906,327 @@ void drawActiveBuffs(const Game& game, int32_t x, int32_t y)
         {
             continue;
         }
-        const Color color = elementColors.at(e);
-        DrawCircleV(Vector2{.x = static_cast<float>(cursorX) + 7, .y = static_cast<float>(y) + 9},
-                    7, color);
-        const std::string label = std::format("{} {:.0f}s", elementNames.at(e), std::ceil(timer));
-        drawText(game, label.c_str(), cursorX + 18, y, 16, color);
-        cursorX += 18 + static_cast<int32_t>(label.size()) * 9 + 14;
+        entries.push_back(
+            StatusEntry{.iconKind = StatusIconKind::Dot,
+                       .color = elementColors.at(e),
+                       .fracRemaining = timer / pickupEffectDuration,
+                       .label = std::format("{} {:.0f}s", elementNames.at(e), std::ceil(timer))});
     }
 
     if (player.regenTimer > 0)
     {
-        DrawCircleV(Vector2{.x = static_cast<float>(cursorX) + 7, .y = static_cast<float>(y) + 9},
-                    7, Palette::Accent);
-        const std::string label = std::format("Regen {:.0f}s", std::ceil(player.regenTimer));
-        drawText(game, label.c_str(), cursorX + 18, y, 16, Palette::Accent);
-        cursorX += 18 + static_cast<int32_t>(label.size()) * 9 + 14;
+        entries.push_back(
+            StatusEntry{.iconKind = StatusIconKind::Dot,
+                       .color = Palette::Accent,
+                       .fracRemaining = player.regenTimer / pickupEffectDuration,
+                       .label = std::format("Regen {:.0f}s", std::ceil(player.regenTimer))});
     }
 
     if (player.overchargeTimer > 0)
     {
-        DrawCircleV(Vector2{.x = static_cast<float>(cursorX) + 7, .y = static_cast<float>(y) + 9},
-                    7, Palette::Charge);
-        const std::string label =
-            std::format("Overcharge {:.0f}s", std::ceil(player.overchargeTimer));
-        drawText(game, label.c_str(), cursorX + 18, y, 16, Palette::Charge);
-        cursorX += 18 + static_cast<int32_t>(label.size()) * 9 + 14;
+        entries.push_back(StatusEntry{
+            .iconKind = StatusIconKind::Dot,
+            .color = Palette::Charge,
+            .fracRemaining = player.overchargeTimer / overchargeDuration,
+            .label = std::format("Overcharge {:.0f}s", std::ceil(player.overchargeTimer))});
     }
 
     if (player.secondWindReady)
     {
-        DrawCircleV(Vector2{.x = static_cast<float>(cursorX) + 7, .y = static_cast<float>(y) + 9},
-                    7, Palette::Crit);
-        drawText(game, "Second Wind", cursorX + 18, y, 16, Palette::Crit);
-        cursorX += 18 + 11 * 9 + 14;
+        entries.push_back(StatusEntry{.iconKind = StatusIconKind::Dot,
+                                      .color = Palette::Crit,
+                                      .fracRemaining = -1,
+                                      .label = "Second Wind ready"});
     }
 
     if (player.dashTrailTimer > 0)
     {
-        DrawCircleV(Vector2{.x = static_cast<float>(cursorX) + 7, .y = static_cast<float>(y) + 9},
-                    7, Palette::Shield);
-        const std::string label =
-            std::format("Dash Trail {:.0f}s", std::ceil(player.dashTrailTimer));
-        drawText(game, label.c_str(), cursorX + 18, y, 16, Palette::Shield);
-        cursorX += 18 + static_cast<int32_t>(label.size()) * 9 + 14;
+        entries.push_back(StatusEntry{
+            .iconKind = StatusIconKind::Dot,
+            .color = Palette::Shield,
+            .fracRemaining = player.dashTrailTimer / pickupEffectDuration,
+            .label = std::format("Dash Trail {:.0f}s", std::ceil(player.dashTrailTimer))});
     }
 
     if (player.overdriveTimer > 0)
     {
-        DrawCircleV(Vector2{.x = static_cast<float>(cursorX) + 7, .y = static_cast<float>(y) + 9},
-                    7, Palette::Crit);
-        const std::string label =
-            std::format("Overdrive {:.0f}s", std::ceil(player.overdriveTimer));
-        drawText(game, label.c_str(), cursorX + 18, y, 16, Palette::Crit);
-        cursorX += 18 + static_cast<int32_t>(label.size()) * 9 + 14;
+        entries.push_back(StatusEntry{
+            .iconKind = StatusIconKind::Dot,
+            .color = Palette::Crit,
+            .fracRemaining = player.overdriveTimer / overdriveDuration,
+            .label = std::format("Overdrive {:.0f}s", std::ceil(player.overdriveTimer))});
     }
 
     if (game.run.weaponDowngrade.has_value())
     {
         const auto& downgrade = *game.run.weaponDowngrade;
-        const Vector2 iconCenter{.x = static_cast<float>(cursorX) + 9,
-                                 .y = static_cast<float>(y) + 9};
-        drawWeaponIcon(downgrade.type, iconCenter, 7, Palette::Accent);
-        DrawTriangle(Vector2{.x = iconCenter.x - 3, .y = iconCenter.y + 8},
-                    Vector2{.x = iconCenter.x + 3, .y = iconCenter.y + 8},
-                    Vector2{.x = iconCenter.x, .y = iconCenter.y + 13}, Palette::Accent);
-        const std::string label =
-            std::format("{} stolen {:.0f}s", weaponDisplayName(downgrade.type),
-                        std::ceil(downgrade.timer));
-        drawText(game, label.c_str(), cursorX + 24, y, 16, Palette::Accent);
+        entries.push_back(StatusEntry{
+            .iconKind = StatusIconKind::Weapon,
+            .color = Palette::Accent,
+            .weaponType = downgrade.type,
+            .fracRemaining = downgrade.timer / dangerDowngradeDuration,
+            .label = std::format("{} stolen {:.0f}s", weaponDisplayName(downgrade.type),
+                                 std::ceil(downgrade.timer))});
+    }
+
+    const bool suppressed = std::any_of(
+        game.run.eliteHazards.begin(), game.run.eliteHazards.end(), [](const EliteHazard& hazard)
+        { return hazard.active && hazard.role == EliteHazardRole::Suppressor; });
+    if (suppressed)
+    {
+        entries.push_back(StatusEntry{.iconKind = StatusIconKind::Exclaim,
+                                      .color = Palette::Shield,
+                                      .fracRemaining = -1,
+                                      .label = "Suppressed: weapon cooldowns +40%"});
+    }
+
+    if (entries.empty())
+    {
+        return;
+    }
+
+    constexpr float iconRadius = 8.0F;
+    constexpr float iconGap = 24.0F;
+    const Vector2 mouse = mouseUIPos(game);
+    std::optional<size_t> hoveredIdx;
+
+    for (size_t i = 0; i < entries.size(); i++)
+    {
+        const Vector2 center{.x = static_cast<float>(x) + iconRadius +
+                                  static_cast<float>(i) * iconGap,
+                             .y = static_cast<float>(y) + iconRadius};
+        const auto& entry = entries.at(i);
+        if (entry.fracRemaining >= 0)
+        {
+            drawStatusRing(center, iconRadius, entry.fracRemaining, entry.color);
+        }
+        drawStatusIcon(game, entry, center, iconRadius * 0.72F);
+
+        if (CheckCollisionPointCircle(mouse, center, iconRadius + 4))
+        {
+            hoveredIdx = i;
+        }
+    }
+
+    if (hoveredIdx.has_value())
+    {
+        const auto& entry = entries.at(*hoveredIdx);
+        const Vector2 center{.x = static_cast<float>(x) + iconRadius +
+                                  static_cast<float>(*hoveredIdx) * iconGap,
+                             .y = static_cast<float>(y) + iconRadius};
+        constexpr int32_t tipFontSize = 14;
+        const int32_t boxWidth = measureText(game, entry.label.c_str(), tipFontSize) + 14;
+        const auto tipX = static_cast<int32_t>(center.x) - boxWidth / 2;
+        const auto tipY = static_cast<int32_t>(center.y) + static_cast<int32_t>(iconRadius) + 6;
+
+        DrawRectangle(tipX, tipY, boxWidth, 22, Fade(Palette::Void, 0.9F));
+        DrawRectangleLines(tipX, tipY, boxWidth, 22, entry.color);
+        drawText(game, entry.label.c_str(), tipX + 7, tipY + 4, tipFontSize, Palette::StructLight);
+    }
+}
+
+void drawBrowserParticleDemo(int32_t style, Vector2 center)
+{
+    const auto t = static_cast<float>(GetTime());
+    switch (style)
+    {
+    case 0:
+        for (int32_t i = 0; i < 10; i++)
+        {
+            const float seed = static_cast<float>(i) * 17.0F;
+            const float angle = std::fmod(seed + t * 1.5F, 2.0F * std::numbers::pi_v<float>);
+            const float bob = 0.5F + 0.5F * std::sin(t * 9.0F + seed);
+            const Vector2 base{.x = center.x + std::cos(angle) * 40,
+                               .y = center.y + std::sin(angle) * 40 * 0.5F + 40};
+            const Vector2 tip{.x = base.x + std::sin(t * 14.0F + seed) * 4,
+                              .y = base.y - (12.0F + bob * 20.0F)};
+            const Color flameColor =
+                bob > 0.6F ? Palette::ElementBurn : ColorLerp(Palette::ElementBurn, YELLOW, 0.5F);
+            DrawTriangle(Vector2{.x = base.x - 4, .y = base.y}, tip,
+                        Vector2{.x = base.x + 4, .y = base.y}, Fade(flameColor, 0.75F));
+        }
+        break;
+    case 1:
+
+        for (int32_t i = 0; i < 8; i++)
+        {
+            const float phase = static_cast<float>(i) * 0.35F;
+            const float fade = 1.0F - std::fmod(t * 0.7F + phase, 1.0F);
+            const Vector2 pos{.x = center.x - (1.0F - fade) * 90.0F + 45,
+                              .y = center.y + std::sin(t * 3 + phase * 6) * 12};
+            const float flicker =
+                0.75F + 0.25F * std::sin(t * 24.0F + pos.x * 0.1F + pos.y * 0.1F);
+            constexpr float dashTrailRadiusDemo = 10.0F;
+            DrawCircleV(pos, dashTrailRadiusDemo * fade,
+                       Fade(Palette::Accent, 0.18F * fade * flicker));
+            DrawCircleLines(static_cast<int32_t>(pos.x), static_cast<int32_t>(pos.y),
+                            dashTrailRadiusDemo * fade * 0.65F, Fade(Palette::Crit, 0.5F * fade));
+            DrawCircleV(pos, dashTrailRadiusDemo * fade * 0.22F,
+                       Fade(WHITE, 0.6F * fade * flicker));
+        }
+        break;
+    case 2:
+    default:
+        for (int32_t i = 0; i < 16; i++)
+        {
+            const float angle = static_cast<float>(i) * (360.0F / 16.0F) * DEG2RAD;
+            const float life = std::fmod(t * 1.2F + static_cast<float>(i) * 0.05F, 1.0F);
+            const Vector2 pos{.x = center.x + std::cos(angle) * life * 70,
+                              .y = center.y + std::sin(angle) * life * 70};
+            const Color debrisColor = i % 2 == 0 ? Palette::Accent : Palette::Crit;
+            DrawCircleV(pos, 4 * (1 - life), Fade(debrisColor, 1 - life));
+        }
+        break;
+    }
+}
+
+void drawSandboxBrowser(const Game& game)
+{
+    for (int32_t i = 0; i < browserCategoryCount; i++)
+    {
+        const Rectangle rect = sandboxBrowserCategoryButtonRect(game, i);
+        if (i == game.browserCategoryIndex)
+        {
+            GuiSetState(STATE_FOCUSED);
+        }
+        GuiButton(rect, std::string(browserCategoryLabel(i)).c_str());
+        GuiSetState(STATE_NORMAL);
+    }
+
+    const Rectangle preview = sandboxBrowserPreviewRect(game);
+    DrawRectangleRec(preview, Fade(Palette::StructDark, 0.6F));
+    DrawRectangleLinesEx(preview, 2, Palette::StructLight);
+    const Vector2 center{.x = preview.x + preview.width / 2, .y = preview.y + preview.height / 2};
+
+    switch (game.browserCategoryIndex)
+    {
+    case 0:
+    {
+        const auto& kind = enemyKinds.at(static_cast<size_t>(game.sandboxKindIndex));
+        Enemy previewEnemy{.kind = game.sandboxKindIndex,
+                           .position = center,
+                           .velocity = Vector2{},
+                           .health = kind.health,
+                           .active = true,
+                           .stateTimer = 1,
+                           .charging = false,
+                           .telegraphing = false,
+                           .phased = false,
+                           .orbitAngle = 0,
+                           .orbitDist = 0,
+                           .orbitCenterCurrent = center,
+                           .isElite = false,
+                           .hitByDash = false,
+                           .hitFlashTimer = 0};
+        drawEnemy(game, previewEnemy, false);
+        break;
+    }
+    case 1:
+    {
+        const auto& type = bossTypes.at(static_cast<size_t>(game.browserBossTypeIndex));
+        constexpr float previewBossSize = 110.0F;
+        Boss previewBoss{
+            .position = Vector2{.x = center.x - previewBossSize / 2,
+                               .y = center.y - previewBossSize / 2},
+            .size = Vector2{.x = previewBossSize, .y = previewBossSize},
+            .color = type.color,
+            .baseColor = type.color,
+            .health = 100,
+            .maxHealth = 100,
+            .state = BossState::IDLE,
+            .shape = type.shape};
+        drawBoss(game, previewBoss);
+        break;
+    }
+    case 2:
+    {
+        const auto shipClass = static_cast<ShipClass>(game.browserShipIndex);
+        drawShipHull(shipClass, center, 20, 0, ships.at(static_cast<size_t>(game.browserShipIndex)).color);
+        break;
+    }
+    case 3:
+    {
+        const auto option = sandboxPickupPreview(game.sandboxPickupIndex);
+        drawPickupIcon(option.type, option.element, center, 1.0F);
+        break;
+    }
+    case 4:
+        drawWeaponIcon(static_cast<WeaponType>(game.browserWeaponIndex), center, 26,
+                       Palette::Accent);
+        break;
+    case 5:
+        drawBrowserParticleDemo(game.browserParticleIndex, center);
+        break;
+    default:
+        break;
+    }
+
+    windowText(game, browserCurrentName(game).c_str(),
+              static_cast<int32_t>(center.x), static_cast<int32_t>(preview.y + preview.height + 30),
+              22, Palette::Crit);
+
+    if (const std::string details = browserCurrentDetails(game); !details.empty())
+    {
+        windowText(game, details.c_str(), static_cast<int32_t>(center.x),
+                  static_cast<int32_t>(preview.y + preview.height + 62), 16, Palette::StructLight);
+    }
+
+    GuiButton(sandboxBrowserPrevButtonRect(game), "<");
+    GuiButton(sandboxBrowserNextButtonRect(game), ">");
+}
+
+void drawPickupIcon(PickupType type, ElementType element, Vector2 position, float alpha)
+{
+    switch (type)
+    {
+    case PickupType::LifeOrb:
+        DrawCircleV(position, 5, Fade(Palette::Accent, alpha));
+        DrawCircleLinesV(position, 6, Fade(Palette::Crit, 0.8F * alpha));
+        break;
+    case PickupType::Shield:
+        DrawCircleV(position, 6, Fade(Palette::Shield, alpha));
+        DrawCircleLinesV(position, 7, Fade(Palette::Haze, 0.8F * alpha));
+        break;
+    case PickupType::Elemental:
+    {
+        const Color color = elementColors.at(static_cast<size_t>(element));
+        DrawPoly(position, 4, 7, static_cast<float>(GetTime()) * 90.0F, Fade(color, alpha));
+        DrawCircleLinesV(position, 9, Fade(color, 0.6F * alpha));
+        break;
+    }
+    case PickupType::Regen:
+        DrawCircleV(position, 6, Fade(Palette::Heal, alpha));
+        DrawCircleLinesV(position, 7, Fade(WHITE, 0.6F * alpha));
+        break;
+    case PickupType::DashTrail:
+        DrawPoly(position, 3, 7, static_cast<float>(GetTime()) * 60.0F,
+                 Fade(Palette::Accent, alpha));
+        break;
+    case PickupType::MagnetPulse:
+        DrawCircleLinesV(position, 8, Fade(Palette::Shield, alpha));
+        DrawCircleLinesV(position, 5, Fade(Palette::Shield, 0.6F * alpha));
+        break;
+    case PickupType::Overcharge:
+        DrawPoly(position, 6, 7, static_cast<float>(GetTime()) * 120.0F,
+                 Fade(Palette::Charge, alpha));
+        break;
+    case PickupType::SecondWind:
+        DrawCircleV(position, 6, Fade(Palette::Crit, alpha));
+        DrawCircleLinesV(position, 8, Fade(Palette::Crit, 0.5F * alpha));
+        break;
+    case PickupType::Danger:
+    {
+        const float pulse = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 10.0F);
+        DrawPoly(position, 5, 9, static_cast<float>(GetTime()) * -140.0F,
+                 Fade(Palette::Void, alpha));
+        DrawPolyLines(position, 5, 10, static_cast<float>(GetTime()) * -140.0F,
+                      Fade(Palette::Crit, alpha * pulse));
+        break;
+    }
+    default:
+        DrawCircleV(position, 2.5F, Fade(Palette::Charge, alpha));
+        DrawCircleLinesV(position, 3.5F, Fade(Palette::Crit, 0.6F * alpha));
+        break;
     }
 }
 
@@ -2520,6 +3240,15 @@ void drawSandboxMenu(const Game& game)
 {
     applyGuiScale(game);
     windowText(game, "SANDBOX", game.resources.windowWidth / 2, 80, 34, Palette::Accent);
+
+    GuiButton(sandboxBrowserModeToggleRect(game), game.sandboxBrowserMode ? "Actions" : "Browser");
+    GuiButton(sandboxMenuCloseButtonRect(game), "Close [Esc]");
+
+    if (game.sandboxBrowserMode)
+    {
+        drawSandboxBrowser(game);
+        return;
+    }
 
     const auto& steppers = sandboxMenuSteppers();
     for (int32_t i = 0; i < static_cast<int32_t>(steppers.size()); i++)
@@ -2541,8 +3270,6 @@ void drawSandboxMenu(const Game& game)
     {
         GuiButton(sandboxMenuButtonRect(game, i), buttons.at(static_cast<size_t>(i)).label(game).c_str());
     }
-
-    GuiButton(sandboxMenuCloseButtonRect(game), "Close [Esc]");
 }
 
 }

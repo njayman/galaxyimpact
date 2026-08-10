@@ -28,6 +28,8 @@ struct Sounds
     Sound nerveCharge;
     Sound nerveRelease;
     Sound nerveFizzle;
+    Sound rockBreak;
+    Sound squishHit;
 };
 
 auto LoadSounds() -> Sounds;
