@@ -42,6 +42,7 @@ struct ShipDef
     float orbitSpinMult;
     float bulletSpeedMult;
     float beamLengthMult;
+    float forwardFireRateMult;
 };
 
 constexpr std::array<ShipDef, static_cast<size_t>(ShipClass::Count)> ships{
@@ -61,9 +62,11 @@ constexpr std::array<ShipDef, static_cast<size_t>(ShipClass::Count)> ships{
             .defaultWeapon = WeaponType::Orbit,
             .orbitSpinMult = 2.2F,
             .bulletSpeedMult = 1.0F,
-            .beamLengthMult = 1.0F},
+            .beamLengthMult = 1.0F,
+            .forwardFireRateMult = 1.0F},
     ShipDef{.name = "Ranger",
-            .description = "All-rounder. Dash both pushes and damages. Faster bullets.",
+            .description =
+                "All-rounder. Dash both pushes and damages. Faster bullets, faster forward fire rate.",
             .color = Palette::Accent,
             .radius = 15,
             .speed = 5,
@@ -76,7 +79,8 @@ constexpr std::array<ShipDef, static_cast<size_t>(ShipClass::Count)> ships{
             .defaultWeapon = WeaponType::Forward,
             .orbitSpinMult = 1.0F,
             .bulletSpeedMult = 1.4F,
-            .beamLengthMult = 1.0F},
+            .beamLengthMult = 1.0F,
+            .forwardFireRateMult = 2.0F},
     ShipDef{.name = "Interceptor",
             .description =
                 "Light frame. Dash cuts through everything in its path and reaches further. "
@@ -93,7 +97,8 @@ constexpr std::array<ShipDef, static_cast<size_t>(ShipClass::Count)> ships{
             .defaultWeapon = WeaponType::Beam,
             .orbitSpinMult = 1.0F,
             .bulletSpeedMult = 1.0F,
-            .beamLengthMult = 1.5F},
+            .beamLengthMult = 1.5F,
+            .forwardFireRateMult = 1.0F},
 };
 
 inline auto currentShip(const Game& game) -> const ShipDef&

@@ -50,6 +50,10 @@ void sandboxSpawnSignatureBoss(Game& game)
     {
         spawnSlagmaw(game, game.run.waveNumber);
     }
+    else if (currentBiome(game.run.waveNumber) == Biome::Punctum)
+    {
+        spawnKraken(game, game.run.waveNumber);
+    }
 }
 
 void sandboxClearBoard(Game& game)
@@ -84,6 +88,12 @@ void sandboxToggleDeath(Game& game) { game.sandboxDeathEnabled = !game.sandboxDe
 void sandboxToggleNaturalSpawn(Game& game)
 {
     game.sandboxNaturalSpawnEnabled = !game.sandboxNaturalSpawnEnabled;
+}
+
+void sandboxArmKillBox(Game& game)
+{
+    game.sandboxKillBoxArmed = true;
+    game.sandboxKillBoxTimer = 3.0F;
 }
 
 void sandboxCycleShip(Game& game, int32_t dir)
@@ -200,6 +210,12 @@ auto sandboxMenuButtons() -> const std::vector<SandboxMenuButton>&
                                 game.sandboxNaturalSpawnEnabled ? "ON" : "OFF");
          },
          sandboxToggleNaturalSpawn},
+        {[](const Game& game)
+         {
+             return std::format("Kill Box: {}",
+                                game.sandboxKillBoxArmed ? "ARMED" : "OFF");
+         },
+         sandboxArmKillBox},
     };
     return buttons;
 }
@@ -536,6 +552,8 @@ void enterSandbox(Game& game)
     game.sandboxBossAttackIndex = 0;
     game.sandboxPickupIndex = 0;
     game.sandboxNaturalSpawnEnabled = false;
+    game.sandboxKillBoxArmed = false;
+    game.sandboxKillBoxTimer = 0;
     game.sandboxBrowserMode = false;
     game.browserCategoryIndex = 0;
     game.browserBossTypeIndex = 0;

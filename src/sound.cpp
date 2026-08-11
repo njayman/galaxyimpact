@@ -445,6 +445,14 @@ auto generateExplosionSfx() -> std::vector<float>
     return out;
 }
 
+auto generateEnemyDeathSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.1F), 0.0F);
+    addKick(out, 0.0F, 0.22F, 130, 55, 0.03F, 0.05F);
+    addNoise(out, 0.0F, 0.03F, 0.015F);
+    return out;
+}
+
 auto generateRockBreakSfx() -> std::vector<float>
 {
 
@@ -462,6 +470,15 @@ auto generateSquishHitSfx() -> std::vector<float>
     addKick(out, 0.0F, 0.2F, 220, 90, 0.06F, 0.08F);
     addNoise(out, 0.0F, 0.14F, 0.05F);
     addTone(out, 0.01F, 140.0F, 0.1F, 0.07F);
+    return out;
+}
+
+auto generateThunderSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(1.4F), 0.0F);
+    addKick(out, 0.0F, 0.35F, 90, 24, 0.5F, 0.9F);
+    addNoise(out, 0.0F, 0.3F, 0.9F);
+    addTone(out, 0.05F, 42.0F, 0.18F, 0.8F);
     return out;
 }
 
@@ -605,6 +622,8 @@ auto LoadSounds() -> Sounds
     sounds.nerveFizzle = loadSoundFromSamples(generateNerveFizzleSfx());
     sounds.rockBreak = loadSoundFromSamples(generateRockBreakSfx());
     sounds.squishHit = loadSoundFromSamples(generateSquishHitSfx());
+    sounds.thunder = loadSoundFromSamples(generateThunderSfx());
+    sounds.enemyDeath = loadSoundFromSamples(generateEnemyDeathSfx());
     return sounds;
 }
 

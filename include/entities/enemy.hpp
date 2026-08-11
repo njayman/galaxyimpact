@@ -52,7 +52,8 @@ enum class EnemyShape : std::uint8_t
     Octagon,
     Ring,
     Star,
-    Organic
+    Organic,
+    Cluster
 };
 
 const float eliteChance = 0.06;
@@ -80,13 +81,12 @@ class Enemy
     float orbitDamageAccum;
     bool beamContact;
     float beamDamageAccum;
+    bool droneContact;
+    float droneDamageAccum;
     bool debuffStatic;
     bool debuffFreeze;
-    bool debuffConfuse;
     float burnDps;
     float burnDamageAccum;
-    float confuseWanderTimer;
-    Vector2 confuseWanderDir;
 
     float organicSeed = 0;
 
@@ -122,6 +122,7 @@ class EliteHazard
     float orbitDamageAccum;
     bool beamContact;
     float beamDamageAccum;
+    bool hitByDash = false;
 };
 
 struct EnemyKind
@@ -156,8 +157,6 @@ struct EnemyKind
     bool pulseInsteadOfSpawn = false;
     int pulseDamage = 0;
     float pulseRadius = 0;
-    bool contactAppliesConfuse = false;
-    float confuseTelegraphDuration = 0;
     bool burnImmune = false;
 };
 
@@ -169,7 +168,7 @@ constexpr int enemyKindHiveNode = 24;
 
 constexpr int enemyKindMeteorChunk = 33;
 
-constexpr std::array<EnemyKind, 34> enemyKinds{
+constexpr std::array<EnemyKind, 35> enemyKinds{
     EnemyKind{.name = "Drifter",
               .radius = 14,
               .health = 10,
@@ -438,9 +437,7 @@ constexpr std::array<EnemyKind, 34> enemyKinds{
               .shape = EnemyShape::Organic,
               .minWave = 26,
               .biomeExclusive = true,
-              .biome = Biome::Rustbloom,
-              .contactAppliesConfuse = true,
-              .confuseTelegraphDuration = 0.4},
+              .biome = Biome::Rustbloom},
     EnemyKind{.name = "Husk Sentinel",
               .radius = 16,
               .health = 22,
@@ -583,11 +580,23 @@ constexpr std::array<EnemyKind, 34> enemyKinds{
     EnemyKind{.name = "Meteor Chunk",
               .radius = 22,
               .health = 26,
-              .speed = 0.3,
+              .speed = 0.9,
               .contactDamage = 2,
               .score = 16,
               .pattern = EnemyPattern::Chase,
               .color = Palette::SolarForgeAccent,
               .shape = EnemyShape::Hexagon,
               .minWave = 9999},
+    EnemyKind{.name = "Fused Wreck",
+              .radius = 38,
+              .health = 260,
+              .speed = 0.35,
+              .contactDamage = 4,
+              .score = 45,
+              .pattern = EnemyPattern::Chase,
+              .color = Palette::PunctumAccent,
+              .shape = EnemyShape::Cluster,
+              .minWave = 76,
+              .biomeExclusive = true,
+              .biome = Biome::Punctum},
 };

@@ -9,6 +9,7 @@ constexpr float frameScale = UpdateConstants::frameScale;
 constexpr float projectileSpeed = 10;
 constexpr float projectileSize = 7;
 constexpr int32_t bossRamDamage = 50;
+constexpr float shieldDashBossShakeCooldown = 1.0F;
 
 constexpr int32_t instakillDamage = 999999;
 constexpr float blackHolePull = 2;
@@ -25,6 +26,14 @@ constexpr float dashDuration = 0.18F;
 constexpr int32_t dashDamage = 15;
 constexpr float dashPushDistance = 60.0F;
 
+constexpr float holdChunkBaseDuration = 1.0F;
+constexpr float holdChunkPerLevel = 0.03F;
+constexpr float dashChunkCap = 1.5F;
+constexpr float comboClickWindow = 0.15F;
+constexpr int32_t comboBaseCost = 2;
+constexpr float parryStunDuration = 2.0F;
+constexpr float deflectedBulletSpeedMult = 1.2F;
+
 constexpr float continuousDpsMultiplier = 2.1F;
 constexpr float orbitBladeHitRadius = 10.0F;
 
@@ -32,18 +41,21 @@ constexpr float beamDamageMult = 1.0F;
 
 constexpr float orbitProjectileSpeed = 11.0F;
 constexpr float orbitProjectileRadius = 7.0F;
-constexpr float orbitLaunchInterval = 2.2F;
 constexpr float orbitRegrowDuration = 0.35F;
 constexpr float nerveSpiralSpinSpeed = 14.0F;
 constexpr float cameraDespawnMargin = 80.0F;
 constexpr float freezeSlowMult = 0.5F;
-constexpr float confuseWanderInterval = 1.0F;
 
 constexpr float baseBurnDps = 3.0F;
 
 constexpr float pickupEffectDuration = 60.0F;
 constexpr float enemyHealthMult = 1.2F;
 constexpr float enemyDamageMult = 1.15F;
+
+constexpr float dpsHealthScaleReference = 55.0F;
+constexpr float dpsHealthScaleCap = 3.0F;
+
+constexpr double sfxThrottleInterval = 0.045;
 constexpr float regenRate = 0.4F;
 constexpr float overchargeDuration = 8.0F;
 constexpr float overdriveDuration = 8.0F;
@@ -66,6 +78,7 @@ constexpr int32_t rareBonusCategoryCount =
     6;
 constexpr float dashKillChargeRefund = 0.6F;
 constexpr float shieldKillChargeRefund = 0.6F;
+constexpr float shieldDashKillGraceDuration = 1.0F;
 constexpr float bossBodyLingerLimit = 1.0F;
 constexpr float damageMeterHoldDuration = 1.5F;
 
@@ -74,7 +87,6 @@ constexpr float enemyChargeDashDuration = UpdateConstants::enemyChargeDashDurati
 
 constexpr float xpPickupLifetime = 10.0F;
 constexpr float bonusPickupLifetime = 18.0F;
-constexpr float shieldBaseDuration = 1.2F;
 constexpr float entityDespawnRadius = 1400;
 constexpr float asteroidDespawnRadius = 900;
 constexpr float turretFireRange = 700;
@@ -88,6 +100,7 @@ constexpr float chargeFeedDrainRate = 12.0F;
 constexpr float chargeFeedRegenMult = 3.0F;
 constexpr float nerveBurstLength = 900.0F;
 constexpr int32_t nerveBurstDamage = 260;
+constexpr float nerveConeHalfAngleDeg = 32.0F;
 constexpr float maxHealthPerLevel = 0.4F;
 constexpr float pickupRadiusPerLevel = 1.5F;
 constexpr float postCapDamageBonusPerLevel = 0.05F;
@@ -150,13 +163,32 @@ constexpr float beltbreakerPlateShieldDashShieldDuration = 2.5F;
 constexpr int32_t bossHpPerTier = 500;
 
 constexpr float wreckwormSegmentSpacing = 80.0F;
+constexpr float wreckwormChaseSpeedMult = 0.75F;
 
-constexpr float wreckwormChainFollowSpeed = 9.0F;
 constexpr float wreckwormBurrowChargeDuration = 0.55F;
 constexpr float wreckwormCoilClampDuration = 2.6F;
 constexpr float wreckwormCoilClampStartRadius = 260.0F;
 constexpr float wreckwormCoilClampEndRadius = 40.0F;
 constexpr float wreckwormCoilClampGapDeg = 90.0F;
+constexpr float wreckwormCoilClampAssembleDuration = 1.5F;
+constexpr float wreckwormCoilClampReleaseDuration = 1.5F;
+constexpr float wreckwormCoilClampTotalDuration = wreckwormCoilClampAssembleDuration +
+                                                  wreckwormCoilClampDuration +
+                                                  wreckwormCoilClampReleaseDuration;
+
+constexpr float wreckwormDetachDuration = 0.35F;
+constexpr float wreckwormDetachSpeed = 900.0F;
+
+constexpr float wreckwormTailWrapCoilInDuration = 1.2F;
+constexpr float wreckwormTailWrapChaseDuration = 2.5F;
+constexpr float wreckwormTailWrapReleaseDuration = 1.0F;
+constexpr float wreckwormTailWrapDuration = wreckwormTailWrapCoilInDuration +
+                                            wreckwormTailWrapChaseDuration +
+                                            wreckwormTailWrapReleaseDuration;
+constexpr float wreckwormTailWrapRadius = 150.0F;
+constexpr float wreckwormTailWrapSpinSpeedDeg = 90.0F;
+constexpr float wreckwormTailWrapMoveSpeed = 260.0F;
+constexpr float wreckwormTailWrapCoilSpeedDeg = 160.0F;
 
 constexpr float wreckwormExposedLullDuration = 1.5F;
 constexpr float wreckwormMoltSpeedBoost = 0.15F;
@@ -172,8 +204,8 @@ constexpr float wreckwormSegmentVolleyProjSpeed = 7.0F;
 constexpr float meteorHellSpawnDistMin = 500.0F;
 constexpr float meteorHellSpawnDistMax = 700.0F;
 constexpr float meteorHellSpawnInterval = 1.0F;
-constexpr int32_t meteorHellSpawnPerBatchMin = 3;
-constexpr int32_t meteorHellSpawnPerBatchMax = 4;
+constexpr int32_t meteorHellSpawnPerBatchMin = 6;
+constexpr int32_t meteorHellSpawnPerBatchMax = 8;
 constexpr float meteorHellProjSpeed = 2.2F;
 constexpr float meteorHellHealthMult = 1.6F;
 
@@ -194,7 +226,7 @@ constexpr float slagmawMoveSpeedMult = 0.32F;
 constexpr float ghostFadeDuration = 2.2F;
 constexpr float ghostTeleportMargin = 120.0F;
 
-constexpr int32_t meteorSwarmSpawnCount = 4;
+constexpr int32_t meteorSwarmSpawnCount = 16;
 
 constexpr float caveNoiseScaleCoarse = 380.0F;
 constexpr float caveNoiseScaleFine = 60.0F;
@@ -208,8 +240,8 @@ constexpr float solarForgeHeatDecayRate = 2.5F;
 constexpr float solarForgeMeltTickInterval = 0.5F;
 constexpr int32_t solarForgeMeltDamage = 2;
 
-constexpr float fluidContactTickInterval = 0.5F;
-constexpr int32_t fluidContactDamage = 3;
+constexpr float solarForgeFluidBurnDps = 6.0F;
+constexpr float solarForgeFluidBurnRefreshDuration = 1.0F;
 
 constexpr float orbitAsteroidRetargetSpeed = 240.0F;
 
@@ -270,12 +302,17 @@ constexpr float gravityWellDuration = 2.0F;
 constexpr float gravityWellFanSpinMult = 7.0F;
 
 constexpr std::array<float, static_cast<size_t>(WeaponType::Count)> weaponBaseCooldown{
-    0.38F, 0.85F, 1.0F, 0.7F, 0.6F, 1.5F, 0.0F, 0.0F, 0.0F, 0.9F, 1.8F, 1.0F, 6.0F, 0.0F};
+    0.38F, 0.85F, 1.0F, 0.7F, 0.6F, 1.5F, 0.0F, 0.0F, 0.0F, 0.9F, 1.8F, 1.0F, 6.0F, 0.0F, 2.0F};
 
 constexpr float droneMeleeRange = 60.0F;
 constexpr float droneAttackIntervalBase = 0.6F;
 constexpr float laserDroneRangeBase = 220.0F;
 constexpr float droneOrbitRadius = 70.0F;
+constexpr float droneContactRadius = 16.0F;
+constexpr float droneContactDpsMult = 0.5F;
+constexpr float droneShotInterval = 0.9F;
+constexpr float droneShotSpeed = 13.0F;
+constexpr float droneShotDamageMult = 1.4F;
 constexpr float turretLife = 8.0F;
 
 constexpr float turretFireInterval = 0.7F;
@@ -302,3 +339,139 @@ constexpr float flamethrowerDamageMult = 2.5F;
 
 constexpr float damageShakeDuration = 0.12F;
 constexpr int bossMoveCount = 4;
+
+constexpr float punctumSpawnIntervalMult = 3.0F;
+constexpr int punctumSpawnCountDivisor = 2;
+constexpr float punctumEnemyHealthMult = 1.8F;
+
+constexpr float punctumPullSpeed = 2.6F;
+constexpr float punctumPullAngleDeg = 205.0F;
+
+constexpr float punctumThunderIntervalMin = 7.0F;
+constexpr float punctumThunderIntervalMax = 11.0F;
+constexpr float punctumThunderFlashDuration = 0.28F;
+constexpr int32_t punctumThunderSpeedupWaveA = 87;
+constexpr int32_t punctumThunderSpeedupWaveB = 97;
+
+constexpr float punctumTrapHalfWidth = static_cast<float>(GameConstants::defaultWindowWidth);
+constexpr float punctumTrapHalfHeight = static_cast<float>(GameConstants::defaultWindowHeight);
+constexpr float punctumTrapIdlePullSpeed = 0.08F;
+constexpr float punctumTrapSpiralInwardSpeed = 1.4F;
+constexpr float punctumTrapSpiralSwirlSpeed = 1.1F;
+constexpr float punctumTrapConsumeRadius = 40.0F;
+
+constexpr float krakenSize = 520.0F;
+constexpr float krakenTentacleCheckInterval = 5.0F;
+constexpr float krakenTentacleTriggerChance = 0.5F;
+constexpr float krakenTentacleEmergeDuration = 0.4F;
+constexpr float krakenTentacleSwipeDuration = 0.8F;
+constexpr float krakenTentacleRetreatDuration = 0.35F;
+constexpr float krakenTentacleStaggerRetreatDuration = 0.5F;
+constexpr float krakenTentacleCooldownDuration = 15.0F;
+constexpr float krakenTentacleReach = 260.0F;
+constexpr float krakenTentacleSwipeArcDeg = 140.0F;
+constexpr float krakenTentaclePortalRadius = 34.0F;
+constexpr float krakenTentacleHitRadius = 26.0F;
+constexpr int32_t krakenTentaclePlayerDamage = 2;
+constexpr int32_t krakenTentacleParryDamage = 180;
+
+constexpr float krakenLimbOpenDuration = 0.7F;
+constexpr float krakenLimbActiveDuration = 10.0F;
+constexpr float krakenLimbRetreatDuration = 0.6F;
+constexpr float krakenLimbCooldownDuration = 4.0F;
+constexpr float krakenLimbGrabInterval = 2.2F;
+constexpr float krakenLimbNearReach = 170.0F;
+constexpr float krakenLimbHurlSpeed = 9.0F;
+constexpr int32_t krakenLimbHurlDamage = 3;
+constexpr float krakenLimbPortalOffset = 90.0F;
+constexpr float krakenLimbLeanBackDuration = 0.3F;
+constexpr float krakenLimbThrowDuration = 0.35F;
+constexpr float krakenLimbSizeMult = 2.0F;
+
+constexpr int hiveNodeDeathSpawnCount = 5;
+
+constexpr int maxActiveRangedEnemies = 2;
+
+constexpr float banishedSize = 640.0F;
+
+constexpr float banishedNearReach = 220.0F;
+constexpr float banishedFarPortalDist = 420.0F;
+constexpr float banishedTentacleWindup = 0.6F;
+constexpr float banishedTentacleStrike = 0.5F;
+constexpr float banishedTentacleRetreat = 0.4F;
+constexpr float banishedTentacleCooldownMin = 2.0F;
+constexpr float banishedTentacleCooldownMax = 4.5F;
+constexpr float banishedTentacleHitRadius = 24.0F;
+constexpr int32_t banishedTentacleDamage = 4;
+constexpr float banishedGrabChance = 0.35F;
+constexpr float banishedGrabDuration = 4.0F;
+constexpr float banishedGrabRadius = 130.0F;
+constexpr float banishedGrabAngularSpeed = 3.2F;
+constexpr float banishedGrabChipInterval = 0.6F;
+constexpr int32_t banishedGrabChipDamage = 2;
+constexpr float banishedGrabEscapeDot = -0.4F;
+
+constexpr float banishedEyeChargeDuration = 5.0F;
+constexpr float banishedEyeCooldownAfterFire = 3.0F;
+constexpr int32_t banishedEyeBurstDamageDivisor = 6;
+constexpr int32_t banishedEyeShieldDashDamageDivisor = 12;
+
+constexpr float banishedFleeSpeed = 2.4F;
+constexpr float banishedEyeFireDuration = 1.0F;
+constexpr float banishedBeamDps = 6.0F;
+
+constexpr float krakenBreakDuration = 1.2F;
+constexpr float krakenFleeDuration = 1.8F;
+constexpr float krakenDialogueDuration = 2.5F;
+constexpr float krakenFleeSpeed = 700.0F;
+
+constexpr float krakenLimbGrabAnimDuration = 1.5F;
+
+constexpr float krakenSummonIntervalE1 = 9.0F;
+constexpr int32_t krakenSummonCountE1 = 8;
+constexpr float krakenSummonIntervalE2 = 12.0F;
+constexpr int32_t krakenSummonCountE2 = 3;
+constexpr float krakenSummonHealthMultE2 = 2.5F;
+constexpr float krakenSnakeSpawnDelay = 4.0F;
+constexpr float krakenSnakeHealthMult = 0.35F;
+constexpr int32_t krakenSnakeSegmentCount = 6;
+
+constexpr float endingDriftSpeed = 6.0F;
+
+constexpr float bossDeathBlinkDuration = 0.5F;
+constexpr float bossDeathCrackDuration = 0.7F;
+constexpr float bossDeathGatherDuration = 0.6F;
+constexpr float bossDeathAnimDuration =
+    bossDeathBlinkDuration + bossDeathCrackDuration + bossDeathGatherDuration;
+
+constexpr int32_t slagmawBreakDrifterCount = 14;
+constexpr float slagmawBrokenDrifterHealthMult = 10.0F;
+
+constexpr float wreckwormDashSpeedMult = 0.4F;
+constexpr float wreckwormDashRushGapDuration = 0.5F;
+constexpr float wreckwormDashRushOffscreenMargin = 150.0F;
+constexpr float wreckwormDashRepositionSpeed = 900.0F;
+
+constexpr auto wreckwormDashRushCount(int32_t wave) -> int32_t
+{
+    if (wave >= 50)
+    {
+        return 12;
+    }
+    if (wave >= 40)
+    {
+        return 8;
+    }
+    return 4;
+}
+
+constexpr float wreckwormTrailSampleDist = 4.0F;
+
+constexpr int32_t wreckwormCloudBreathCount = 5;
+constexpr float wreckwormCloudRadiusMin = 55.0F;
+constexpr float wreckwormCloudRadiusMax = 90.0F;
+constexpr float wreckwormCloudSpawnSpread = 140.0F;
+constexpr float wreckwormCloudDriftSpeed = 45.0F;
+constexpr float wreckwormCloudLifespan = 14.0F;
+constexpr float wreckwormCloudBurnDps = 8.0F;
+constexpr float wreckwormCloudBurnRefreshDuration = 1.0F;

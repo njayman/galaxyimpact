@@ -46,6 +46,7 @@ FetchContent_MakeAvailable(raygui)
 
 set(GALAXYIMPACT_SOURCES
     src/achievements.cpp
+    src/bestiary.cpp
     src/democonfig.cpp
     src/draw.cpp
     src/entities/boss.cpp

@@ -20,25 +20,54 @@ auto enemyDamage(const Game& game, int32_t base) -> int32_t
     return static_cast<int32_t>(static_cast<float>(base) * enemyDamageMult * waveEnemyScale(game));
 }
 
+auto activeRangedEnemyCount(const Game& game) -> int
+{
+    int count = 0;
+    for (const auto& enemy : game.run.enemies)
+    {
+        if (enemy.active && enemyKinds.at(static_cast<size_t>(enemy.kind)).pattern == EnemyPattern::Turret)
+        {
+            count++;
+        }
+    }
+    return count;
+}
+
 void spawnEnemy(Game& game)
 {
 
     constexpr int biomeExclusiveWeight = 4;
+    const Biome biome = currentBiome(game.run.waveNumber);
+    const bool rangedSlotAvailable = activeRangedEnemyCount(game) < maxActiveRangedEnemies;
 
     std::vector<int> eligible;
     eligible.reserve(enemyKinds.size() * static_cast<size_t>(biomeExclusiveWeight));
     for (size_t i = 0; i < enemyKinds.size(); i++)
     {
-        const auto& candidate = enemyKinds.at(i);
-        const bool biomeOk =
-            !candidate.biomeExclusive || candidate.biome == currentBiome(game.run.waveNumber);
-        if (candidate.minWave <= game.run.waveNumber && biomeOk)
+        if (enemyKinds.at(i).pattern == EnemyPattern::Turret && !rangedSlotAvailable)
         {
-            const int weight = candidate.biomeExclusive ? biomeExclusiveWeight : 1;
-            for (int w = 0; w < weight; w++)
+            continue;
+        }
+        const auto& candidate = enemyKinds.at(i);
+        if (candidate.minWave > game.run.waveNumber)
+        {
+            continue;
+        }
+        if (!candidate.biomeExclusive)
+        {
+            eligible.push_back(static_cast<int>(i));
+            continue;
+        }
+        if (candidate.biome == biome)
+        {
+            for (int w = 0; w < biomeExclusiveWeight; w++)
             {
                 eligible.push_back(static_cast<int>(i));
             }
+        }
+        else if (biome == Biome::Punctum)
+        {
+            eligible.push_back(static_cast<int>(i));
         }
     }
     if (eligible.empty())
@@ -70,7 +99,11 @@ void spawnEnemyAt(Game& game, int kindIndex, Vector2 pos)
     const bool elite = GetRandomValue(0, 999) < static_cast<int32_t>(eliteChance * 1000);
 
     auto health = static_cast<int32_t>(static_cast<float>(kind.health) * enemyHealthMult *
-                                       waveEnemyScale(game));
+                                       enemyHealthScale(game));
+    if (currentBiome(game.run.waveNumber) == Biome::Punctum)
+    {
+        health = static_cast<int32_t>(static_cast<float>(health) * punctumEnemyHealthMult);
+    }
     if (elite)
     {
         health *= 2;
@@ -191,9 +224,6 @@ void applyElementDebuff(Enemy& enemy, ElementType element, float burnDps)
     case ElementType::Freeze:
         enemy.debuffFreeze = true;
         break;
-    case ElementType::Confuse:
-        enemy.debuffConfuse = true;
-        break;
     case ElementType::Burn:
         if (enemy.burnDps <= 0 && !enemyKinds.at(static_cast<size_t>(enemy.kind)).burnImmune)
         {
@@ -258,14 +288,18 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
     }
 
     game.run.enemies.at(index).active = false;
+    tryComboRefund(game);
+    recordEnemyKilled(game, game.run.enemies.at(index).kind);
 
     if (game.run.enemies.at(index).kind == enemyKindHiveNode)
     {
-        game.run.asteroids.push_back(Asteroid{.position = game.run.enemies.at(index).position,
-                                              .velocity = Vector2{},
-                                              .radius = asteroidRadius(AsteroidTier::Medium),
-                                              .tier = AsteroidTier::Medium,
-                                              .active = true});
+        const Vector2 deathPos = game.run.enemies.at(index).position;
+        for (int i = 0; i < hiveNodeDeathSpawnCount; i++)
+        {
+            const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+            const Vector2 offset{.x = std::cos(angle) * 20, .y = std::sin(angle) * 20};
+            spawnEnemyAt(game, enemyKindSporeSwarmling, Vector2Add(deathPos, offset));
+        }
     }
 
     int32_t score = kind.score;
@@ -280,7 +314,7 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
         spawnKillExplosion(game, game.run.enemies.at(index).position, kind.color, 8, 1.0F);
     }
     game.run.score += score;
-    playSFX(game, game.resources.sounds.explosion);
+    playSFX(game, game.resources.sounds.enemyDeath);
     gainNerve(game);
 
     spawnPickup(game, game.run.enemies.at(index).position, score, PickupType::XP);
@@ -384,61 +418,6 @@ void updateEnemies(Game& game, float deltaTime)
         if (enemy.debuffStatic)
         {
 
-        }
-        else if (enemy.debuffConfuse)
-        {
-            enemy.confuseWanderTimer -= deltaTime;
-            if (enemy.confuseWanderTimer <= 0)
-            {
-                const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-                enemy.confuseWanderDir = Vector2{.x = std::cos(angle), .y = std::sin(angle)};
-                enemy.confuseWanderTimer = confuseWanderInterval;
-            }
-            if (kind.pattern != EnemyPattern::Stationary)
-            {
-                enemy.position = Vector2Add(
-                    enemy.position, Vector2Scale(enemy.confuseWanderDir,
-                                                 kind.speed * speedMod * deltaTime * frameScale));
-            }
-
-            if (kind.pattern == EnemyPattern::Turret)
-            {
-                enemy.stateTimer -= deltaTime;
-                if (enemy.stateTimer <= 0 &&
-                    Vector2Distance(game.run.player.position, enemy.position) < turretFireRange)
-                {
-                    enemy.stateTimer = kind.fireInterval / speedMod;
-
-                    std::vector<Vector2> otherTargets;
-                    for (const auto& other : game.run.enemies)
-                    {
-                        if (other.active && !other.phased && &other != &enemy)
-                        {
-                            otherTargets.push_back(other.position);
-                        }
-                    }
-
-                    if (!otherTargets.empty())
-                    {
-                        const Vector2 targetPos = otherTargets.at(static_cast<size_t>(
-                            GetRandomValue(0, static_cast<int32_t>(otherTargets.size() - 1))));
-                        const Vector2 dir =
-                            Vector2Normalize(Vector2Subtract(targetPos, enemy.position));
-                        const auto turretProjectileHealth = static_cast<int32_t>(
-                            std::max(1.0F, static_cast<float>(baseProjectileHealth) *
-                                               enemyHealthMult * waveEnemyScale(game)));
-                        game.run.bossProjectiles.push_back(
-                            BossProjectile{.position = enemy.position,
-                                           .velocity = Vector2Scale(dir, kind.projectileSpeed),
-                                           .radius = 6,
-                                           .homing = false,
-                                           .active = true,
-                                           .fromPlayer = false,
-                                           .damage = crossfireProjectileDamage,
-                                           .health = turretProjectileHealth});
-                    }
-                }
-            }
         }
         else
         {
@@ -593,7 +572,7 @@ void updateEnemies(Game& game, float deltaTime)
                         Vector2Normalize(Vector2Subtract(game.run.player.position, enemy.position));
                     const auto turretProjectileHealth = static_cast<int32_t>(
                         std::max(1.0F, static_cast<float>(baseProjectileHealth) * enemyHealthMult *
-                                           waveEnemyScale(game)));
+                                           enemyHealthScale(game)));
                     game.run.bossProjectiles.push_back(BossProjectile{
                         .position = enemy.position,
                         .velocity = Vector2Scale(dir, kind.projectileSpeed),
@@ -718,6 +697,10 @@ void updateEnemies(Game& game, float deltaTime)
                     std::max(0.0F, game.run.player.chargeRegenTimer - dashKillChargeRefund);
                 recordDashKill(game, enemy.kind);
                 recordDashOrNerveKill(game);
+                if (game.run.player.shieldDashing)
+                {
+                    game.run.player.shieldDashKill = true;
+                }
             }
             continue;
         }
@@ -746,10 +729,6 @@ void updateEnemies(Game& game, float deltaTime)
             else
             {
                 damagePlayer(game, enemyDamage(game, kind.contactDamage));
-                if (kind.contactAppliesConfuse && confusePulseActive(kind.confuseTelegraphDuration))
-                {
-                    game.run.player.confusedTimer = 1.5F;
-                }
             }
         }
     }

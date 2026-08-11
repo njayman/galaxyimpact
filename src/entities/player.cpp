@@ -81,6 +81,10 @@ void updateNerve(Game& game, float deltaTime)
 void updateNerveBurstInput(Game& game)
 {
     auto& player = game.run.player;
+    if (game.run.inBanishedRealm)
+    {
+        player.nerve = UpdateConstants::nerveMax;
+    }
     if (!player.nerveCharging && IsKeyPressed(KEY_SPACE) &&
         player.nerve >= UpdateConstants::nerveMax)
     {
@@ -93,6 +97,11 @@ void updateNerveBurstInput(Game& game)
 void damagePlayer(Game& game, int32_t amount)
 {
     if (game.sandbox && !game.sandboxDeathEnabled)
+    {
+        return;
+    }
+
+    if (game.run.player.invulnerable)
     {
         return;
     }
@@ -247,18 +256,8 @@ void updatePlayerMovement(Game& game, float deltaTime)
     {
         game.run.player.slowTimer -= deltaTime;
     }
-    if (game.run.player.confusedTimer > 0)
-    {
-        game.run.player.confusedTimer -= deltaTime;
-    }
-
     if (game.run.player.dashing)
     {
-        game.run.player.dashTimer -= deltaTime;
-        if (game.run.player.dashTimer <= 0)
-        {
-            game.run.player.dashing = false;
-        }
         game.run.player.position =
             Vector2Add(game.run.player.position,
                        Vector2Scale(game.run.player.dashVelocity, deltaTime * frameScale));
@@ -298,9 +297,14 @@ void updatePlayerMovement(Game& game, float deltaTime)
             moveDelta.y += effectiveSpeed;
         }
 
-        if (game.run.player.confusedTimer > 0)
+        if (game.run.punctumTrapActive && !game.run.inBanishedRealm && Vector2Length(moveDelta) == 0)
         {
-            moveDelta = Vector2Scale(moveDelta, -1.0F);
+            const Vector2 toCenter =
+                Vector2Subtract(game.run.blackhole.position, game.run.player.position);
+            if (Vector2Length(toCenter) > 1.0F)
+            {
+                moveDelta = Vector2Scale(Vector2Normalize(toCenter), punctumTrapIdlePullSpeed);
+            }
         }
 
         game.run.player.position =
@@ -332,7 +336,31 @@ void updatePlayerMovement(Game& game, float deltaTime)
 
     game.run.player.velocity = Vector2Subtract(game.run.player.position, startPosition);
 
-    if (const float dist = Vector2Length(game.run.player.position); dist > GameConstants::arenaHalf)
+    if (game.run.inBanishedRealm)
+    {
+        // ponytail: no bounds inside the Banished realm, it's meant to feel infinite
+    }
+    else if (game.run.punctumTrapActive)
+    {
+        if (game.run.player.position.x > punctumTrapHalfWidth)
+        {
+            game.run.player.position.x = -punctumTrapHalfWidth;
+        }
+        else if (game.run.player.position.x < -punctumTrapHalfWidth)
+        {
+            game.run.player.position.x = punctumTrapHalfWidth;
+        }
+        if (game.run.player.position.y > punctumTrapHalfHeight)
+        {
+            game.run.player.position.y = -punctumTrapHalfHeight;
+        }
+        else if (game.run.player.position.y < -punctumTrapHalfHeight)
+        {
+            game.run.player.position.y = punctumTrapHalfHeight;
+        }
+    }
+    else if (const float dist = Vector2Length(game.run.player.position);
+            dist > GameConstants::arenaHalf)
     {
         game.run.player.position =
             Vector2Scale(Vector2Normalize(game.run.player.position), GameConstants::arenaHalf);
@@ -345,13 +373,47 @@ void updatePlayerMovement(Game& game, float deltaTime)
                                  .y = boss.position.y,
                                  .width = boss.size.x,
                                  .height = boss.size.y};
-        if (boss.health <= 0 ||
+        if ((boss.health <= 0 && !boss.isBanished) ||
             !CheckCollisionCircleRec(game.run.player.position, game.run.player.radius, bossRect))
         {
             continue;
         }
 
         touchingAnyBoss = true;
+
+        if (boss.isBanished)
+        {
+            if (game.run.player.dashing && !boss.hitByDash)
+            {
+                boss.hitByDash = true;
+                if (boss.banishedDefeated)
+                {
+                    if (game.run.player.shieldActive)
+                    {
+                        boss.health = -999999;
+                        triggerBossShieldDashShake(game);
+                        game.resources.achievements.infiniteModeUnlocked = true;
+                        saveAchievements(game.resources.achievements);
+                        game.state = GameState::ENDING;
+                        game.run.player.position =
+                            Vector2{.x = static_cast<float>(game.resources.windowWidth) * 0.75F,
+                                    .y = static_cast<float>(game.resources.windowHeight) * 0.6F};
+                    }
+                }
+                else if (boss.banishedStage == 1 && !boss.banishedEyeChargeBurstUsed)
+                {
+                    damageBanishedEyeBurst(game, boss, banishedEyeBurstDamageDivisor);
+                }
+            }
+            continue;
+        }
+
+        if (!game.run.player.dashing && game.run.player.shieldActive && boss.parryStunTimer <= 0)
+        {
+            boss.parryStunTimer = parryStunDuration;
+            tryComboRefund(game);
+            triggerBossShieldDashShake(game);
+        }
 
         if (game.run.player.dashing && !boss.hitByDash)
         {
@@ -370,7 +432,7 @@ void updatePlayerMovement(Game& game, float deltaTime)
                     static_cast<float>(game.run.player.shieldActive ? bossRamDamage * 2
                                                                     : bossRamDamage) *
                     quirkMult * currentShip(game).damageMult * coreBonusMult);
-                damageBoss(game, boss, ramDamage);
+                damageBoss(game, boss, ramDamage, true, true);
                 if (game.run.player.shieldActive)
                 {
                     game.run.player.chargeRegenTimer =
@@ -379,12 +441,15 @@ void updatePlayerMovement(Game& game, float deltaTime)
             }
 
             const bool plateShieldDash = boss.isBeltbreakerPlate && game.run.player.shieldActive;
+            const bool segmentShieldDash =
+                boss.isWreckwormSegment && boss.wreckwormDetached && game.run.player.shieldActive;
+            const bool bonusShieldDash = plateShieldDash || segmentShieldDash;
 
             if (quirk != DashQuirk::Damage)
             {
                 const Vector2 pushDir = Vector2Normalize(game.run.player.dashVelocity);
                 const float pushDist =
-                    plateShieldDash ? beltbreakerPlateShieldDashPushDistance : dashPushDistance;
+                    bonusShieldDash ? beltbreakerPlateShieldDashPushDistance : dashPushDistance;
                 boss.position = Vector2Add(boss.position, Vector2Scale(pushDir, pushDist));
             }
 
@@ -393,7 +458,10 @@ void updatePlayerMovement(Game& game, float deltaTime)
                 boss.plateAttached = false;
                 boss.plateReturning = false;
                 boss.plateExcursionTimer = 0;
+            }
 
+            if (bonusShieldDash)
+            {
                 game.run.player.charges =
                     std::min(UpdateConstants::maxCharges, game.run.player.charges + 1);
                 game.run.player.shieldActive = true;
@@ -401,12 +469,61 @@ void updatePlayerMovement(Game& game, float deltaTime)
                     std::max(game.run.player.shieldTimer, beltbreakerPlateShieldDashShieldDuration);
             }
 
-            triggerShake(game, 14, 0.4F);
-            triggerHitPause(game, 0.12F);
+            if (game.run.player.shieldActive)
+            {
+                triggerBossShieldDashShake(game);
+                boss.parryStunTimer = parryStunDuration;
+                tryComboRefund(game);
+            }
         }
     }
 
-    if (touchingAnyBoss && !game.run.player.dashing)
+    for (size_t hi = 0; hi < game.run.eliteHazards.size(); hi++)
+    {
+        auto& hazard = game.run.eliteHazards.at(hi);
+        if (!hazard.active ||
+            !CheckCollisionCircles(game.run.player.position, game.run.player.radius,
+                                   hazard.position, EliteHazardConstants::radius))
+        {
+            continue;
+        }
+
+        if (game.run.player.dashing && !hazard.hitByDash)
+        {
+            hazard.hitByDash = true;
+            const DashQuirk quirk = currentShip(game).dashQuirk;
+
+            if (quirk != DashQuirk::Push)
+            {
+                const auto ramDamage = static_cast<int32_t>(
+                    static_cast<float>(game.run.player.shieldActive ? bossRamDamage * 2
+                                                                    : bossRamDamage) *
+                    (quirk == DashQuirk::Hybrid ? 0.5F : 1.0F) * currentShip(game).damageMult);
+                damageEliteHazard(game, hi, ramDamage);
+                if (game.run.player.shieldActive)
+                {
+                    game.run.player.chargeRegenTimer =
+                        std::max(0.0F, game.run.player.chargeRegenTimer - shieldKillChargeRefund);
+                }
+            }
+
+            if (quirk != DashQuirk::Damage)
+            {
+                const Vector2 pushDir = Vector2Normalize(game.run.player.dashVelocity);
+                hazard.position = Vector2Add(hazard.position, Vector2Scale(pushDir, dashPushDistance));
+            }
+
+            if (game.run.player.shieldActive)
+            {
+                game.run.player.charges =
+                    std::min(UpdateConstants::maxCharges, game.run.player.charges + 1);
+                game.run.player.shieldTimer =
+                    std::max(game.run.player.shieldTimer, beltbreakerPlateShieldDashShieldDuration);
+            }
+        }
+    }
+
+    if (touchingAnyBoss && !game.run.player.dashing && !game.run.player.shieldActive)
     {
         game.run.player.bossBodyTimer += deltaTime;
         if (game.run.player.bossBodyTimer >= bossBodyLingerLimit)
@@ -432,17 +549,26 @@ void updateShieldAndBarrier(Game& game, float deltaTime)
     {
         game.run.player.shieldCooldownTimer -= deltaTime;
     }
+}
 
-    if (game.run.player.shieldActive)
+void tryComboRefund(Game& game)
+{
+    if (game.run.player.comboActive && game.run.player.comboRefundEligible)
     {
-        game.run.player.shieldTimer -= deltaTime;
-
-        if (game.run.player.shieldTimer <= 0)
-        {
-            game.run.player.shieldActive = false;
-            game.run.player.shieldCooldownTimer = UpdateConstants::shieldCooldownDuration;
-        }
+        game.run.player.comboRefundEligible = false;
+        game.run.player.charges = std::min(UpdateConstants::maxCharges, game.run.player.charges + 1);
     }
+}
+
+auto dashChunkDuration(const Game& game) -> float
+{
+    return std::min(dashDuration + static_cast<float>(game.run.level - 1) * holdChunkPerLevel,
+                    dashChunkCap);
+}
+
+auto chunkDuration(const Game& game) -> float
+{
+    return holdChunkBaseDuration + static_cast<float>(game.run.level - 1) * holdChunkPerLevel;
 }
 
 auto chargeRegenDuration(const Game& game) -> float
@@ -465,47 +591,213 @@ void updateAbilityCharges(Game& game, float deltaTime)
         }
     }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !game.run.player.dashing)
-    {
-        if (game.run.player.charges > 0 || game.run.player.overdriveTimer > 0)
-        {
-            if (game.run.player.overdriveTimer <= 0)
-            {
-                game.run.player.charges--;
-            }
+    auto& player = game.run.player;
+    const float chunk = chunkDuration(game);
+    const float dashChunk = dashChunkDuration(game);
+    const bool infiniteCharges = game.run.inBanishedRealm;
 
-            game.run.player.dashing = true;
-            game.run.player.dashTimer = dashDuration;
-            game.run.player.dashVelocity =
+    const auto resetDashHitFlags = [&]()
+    {
+        for (auto& enemy : game.run.enemies)
+        {
+            enemy.hitByDash = false;
+        }
+        for (auto& boss : game.run.bosses)
+        {
+            boss.hitByDash = false;
+        }
+        for (auto& hazard : game.run.eliteHazards)
+        {
+            hazard.hitByDash = false;
+        }
+    };
+
+    const bool comboTrigger =
+        !player.dashing && !player.shieldActive &&
+        (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE) ||
+         (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+          (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) ||
+           static_cast<float>(GetTime()) - player.lastShieldClickTime <= comboClickWindow)) ||
+         (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) &&
+          (IsMouseButtonDown(MOUSE_BUTTON_LEFT) ||
+           static_cast<float>(GetTime()) - player.lastDashClickTime <= comboClickWindow)));
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    {
+        player.lastDashClickTime = static_cast<float>(GetTime());
+    }
+    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))
+    {
+        player.lastShieldClickTime = static_cast<float>(GetTime());
+    }
+
+    if (comboTrigger &&
+        (infiniteCharges || player.charges >= comboBaseCost || player.overdriveTimer > 0))
+    {
+        if (!infiniteCharges && player.overdriveTimer <= 0)
+        {
+            player.charges = std::max(0, player.charges - comboBaseCost);
+        }
+        player.comboActive = true;
+        player.comboRefundEligible = true;
+        player.dashing = true;
+        player.shieldActive = true;
+        player.invulnerable = true;
+        player.dashTimer = dashChunk;
+        player.shieldTimer = dashChunk;
+        player.dashVelocity =
+            Vector2Scale(aimAtMouse(game), dashSpeed * currentShip(game).dashDistanceMult);
+        resetDashHitFlags();
+    }
+    else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !player.dashing && !player.comboActive)
+    {
+        if (infiniteCharges || player.charges > 0 || player.overdriveTimer > 0)
+        {
+            if (!infiniteCharges && player.overdriveTimer <= 0)
+            {
+                player.charges--;
+            }
+            player.dashing = true;
+            player.dashTimer = dashChunk;
+            player.dashVelocity =
                 Vector2Scale(aimAtMouse(game), dashSpeed * currentShip(game).dashDistanceMult);
-
-            for (auto& enemy : game.run.enemies)
-            {
-                enemy.hitByDash = false;
-            }
-            for (auto& boss : game.run.bosses)
-            {
-                boss.hitByDash = false;
-            }
+            resetDashHitFlags();
         }
     }
-
-    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && !game.run.player.shieldActive)
+    else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && !player.shieldActive && !player.comboActive)
     {
-        if (game.run.player.charges > 0 || game.run.player.overdriveTimer > 0)
+        if (infiniteCharges || player.charges > 0 || player.overdriveTimer > 0)
         {
-            if (game.run.player.overdriveTimer <= 0)
+            if (!infiniteCharges && player.overdriveTimer <= 0)
             {
-                game.run.player.charges--;
+                player.charges--;
             }
-
-            game.run.player.shieldActive = true;
-            game.run.player.shieldTimer =
-                shieldBaseDuration + static_cast<float>(game.run.skillLevels.at(
-                                         static_cast<size_t>(SkillType::Barrier))) *
-                                         0.4F;
+            player.shieldActive = true;
+            player.shieldTimer = chunk;
         }
     }
+
+    if (player.comboActive)
+    {
+        const bool stillHeld = IsMouseButtonDown(MOUSE_BUTTON_LEFT) ||
+                               IsMouseButtonDown(MOUSE_BUTTON_RIGHT) ||
+                               IsMouseButtonDown(MOUSE_BUTTON_MIDDLE);
+        if (!stillHeld)
+        {
+            player.comboActive = false;
+            player.dashing = false;
+            player.shieldActive = false;
+            player.invulnerable = false;
+            player.shieldCooldownTimer = UpdateConstants::shieldCooldownDuration;
+        }
+        else
+        {
+            player.dashVelocity =
+                Vector2Scale(aimAtMouse(game), dashSpeed * currentShip(game).dashDistanceMult);
+            player.dashTimer -= deltaTime;
+            if (player.dashTimer <= 0)
+            {
+                if (infiniteCharges || player.charges > 0 || player.overdriveTimer > 0)
+                {
+                    if (!infiniteCharges && player.overdriveTimer <= 0)
+                    {
+                        player.charges--;
+                    }
+                    player.dashTimer = dashChunk;
+                    player.shieldTimer = dashChunk;
+                    resetDashHitFlags();
+                }
+                else
+                {
+                    player.comboActive = false;
+                    player.dashing = false;
+                    player.shieldActive = false;
+                    player.invulnerable = false;
+                    player.shieldCooldownTimer = UpdateConstants::shieldCooldownDuration;
+                }
+            }
+            else
+            {
+                player.shieldTimer = player.dashTimer;
+            }
+        }
+    }
+    else
+    {
+        const bool dashWasActive = player.dashing;
+
+        if (player.dashing)
+        {
+            if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+            {
+                player.dashing = false;
+            }
+            else
+            {
+                player.dashVelocity = Vector2Scale(aimAtMouse(game),
+                                                   dashSpeed * currentShip(game).dashDistanceMult);
+                player.dashTimer -= deltaTime;
+                if (player.dashTimer <= 0)
+                {
+                    if (infiniteCharges || player.charges > 0 || player.overdriveTimer > 0)
+                    {
+                        if (!infiniteCharges && player.overdriveTimer <= 0)
+                        {
+                            player.charges--;
+                        }
+                        player.dashTimer = dashChunk;
+                        resetDashHitFlags();
+                    }
+                    else
+                    {
+                        player.dashing = false;
+                    }
+                }
+            }
+        }
+
+        if (dashWasActive && !player.dashing && player.shieldDashKill)
+        {
+            player.shieldDashKill = false;
+            player.shieldDashGraceTimer = shieldDashKillGraceDuration;
+            player.shieldActive = true;
+        }
+
+        if (player.shieldDashGraceTimer > 0)
+        {
+            player.shieldActive = true;
+            player.shieldDashGraceTimer -= deltaTime;
+            if (player.shieldDashGraceTimer <= 0)
+            {
+                player.shieldDashGraceTimer = 0;
+                player.shieldActive = false;
+                player.shieldCooldownTimer = UpdateConstants::shieldCooldownDuration;
+            }
+        }
+        else if (player.shieldActive)
+        {
+            player.shieldTimer -= deltaTime;
+            if (player.shieldTimer <= 0)
+            {
+                const bool stillHeld = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
+                if (stillHeld && (infiniteCharges || player.charges > 0 || player.overdriveTimer > 0))
+                {
+                    if (!infiniteCharges && player.overdriveTimer <= 0)
+                    {
+                        player.charges--;
+                    }
+                    player.shieldTimer = chunk;
+                }
+                else
+                {
+                    player.shieldActive = false;
+                    player.shieldCooldownTimer = UpdateConstants::shieldCooldownDuration;
+                }
+            }
+        }
+    }
+
+    player.shieldDashing = player.dashing && player.shieldActive;
 
     updateNerveBurstInput(game);
 }
@@ -553,6 +845,25 @@ void updatePlayerBuffs(Game& game, float deltaTime)
     {
         player.regenTimer = std::max(0.0F, player.regenTimer - deltaTime);
         player.health = std::min(player.maxHealth, player.health + player.regenRate * deltaTime);
+    }
+
+    if (player.burnRefreshTimer > 0)
+    {
+        player.burnRefreshTimer -= deltaTime;
+        if (player.burnRefreshTimer <= 0)
+        {
+            player.burnDps = 0;
+        }
+    }
+    if (player.burnDps > 0 && player.health > 0)
+    {
+        player.burnDamageAccum += player.burnDps * deltaTime;
+        if (player.burnDamageAccum >= 1.0F)
+        {
+            const auto tick = static_cast<int32_t>(player.burnDamageAccum);
+            damagePlayer(game, tick);
+            player.burnDamageAccum -= static_cast<float>(tick);
+        }
     }
 
     if (player.overchargeTimer > 0)

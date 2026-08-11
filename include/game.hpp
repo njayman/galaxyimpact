@@ -1,6 +1,7 @@
 #pragma once
 
 #include "achievements.hpp"
+#include "bestiary.hpp"
 #include "entities/boss.hpp"
 #include "entities/enemy.hpp"
 #include "entities/item.hpp"
@@ -42,7 +43,9 @@ enum class GameState : std::uint8_t
     LEVEL_UP,
     SETTINGS,
     ACHIEVEMENTS,
-    SANDBOX_MENU
+    BESTIARY,
+    SANDBOX_MENU,
+    ENDING
 };
 
 struct GameResources
@@ -61,6 +64,7 @@ struct GameResources
     std::vector<int32_t> highScores;
     std::shared_ptr<highscore::Repository> highScoreRepo;
     Achievements achievements;
+    Bestiary bestiary;
 };
 
 struct GameplayState
@@ -86,6 +90,7 @@ struct GameplayState
     DamageMeter damageMeterDisplay;
     float damageMeterHoldTimer;
     std::vector<BossDeathShockwave> bossDeathShockwaves;
+    std::vector<GasHazard> gasHazards;
     BlackHole blackhole;
     Wormhole wormhole;
     std::vector<Star> stars;
@@ -106,7 +111,6 @@ struct GameplayState
     float enemySpawnTimer;
     float solarForgeHeatMeter;
     float solarForgeHeatTickTimer;
-    float fluidContactTickTimer;
     float organicMergeTimer;
     int xp;
     int level;
@@ -125,6 +129,18 @@ struct GameplayState
     Vector2 nerveBurstFlashEnd;
     std::string achievementToast;
     float achievementToastTimer;
+    float punctumThunderTimer;
+    float punctumThunderFlashTimer;
+    Vector2 punctumThunderBoltOrigin;
+    float punctumThunderBoltSeed;
+    float shieldDashShakeCooldownTimer;
+    bool punctumTrapActive;
+    bool inBanishedRealm;
+
+    int32_t bossCutscenePhase;
+    float bossCutsceneTimer;
+    Vector2 krakenFleePos;
+
 };
 
 struct Game
@@ -145,6 +161,8 @@ struct Game
     int sandboxBossAttackIndex;
     int sandboxPickupIndex;
     bool sandboxNaturalSpawnEnabled;
+    bool sandboxKillBoxArmed;
+    float sandboxKillBoxTimer;
 
     bool sandboxBrowserMode;
     int browserCategoryIndex;

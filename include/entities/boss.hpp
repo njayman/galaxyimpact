@@ -53,15 +53,20 @@ enum class BossAttack : std::uint8_t
 
     MeteorSwarm,
 
+    DashRush,
+    CloudBreath,
+    TailWrap,
+
     Count
 };
 
 constexpr int bossAttackCount = static_cast<int>(BossAttack::Count);
 
 constexpr std::array<std::string_view, bossAttackCount> bossAttackNames{
-    "Beam",          "Spread",         "Slam",     "WormholeBeam", "ChargeDash",
-    "SummonAdds",    "ShockwaveStomp", "Barrage",  "GravityWell",  "HomingBarrage",
-    "PlateHurl",     "BurrowCharge",   "CoilClamp", "MeteorHell",   "MeteorSwarm"};
+    "Beam",          "Spread",         "Slam",       "WormholeBeam", "ChargeDash",
+    "SummonAdds",    "ShockwaveStomp", "Barrage",    "GravityWell",  "HomingBarrage",
+    "PlateHurl",     "BurrowCharge",   "CoilClamp",  "MeteorHell",   "MeteorSwarm",
+    "DashRush",      "CloudBreath",    "TailWrap"};
 
 class Boss
 {
@@ -90,6 +95,7 @@ class Boss
     float strafePhase;
     float hitFlashTimer;
     BossShape shape;
+    int32_t typeIndex = -1;
     bool orbitContact;
     float orbitDamageAccum;
     bool beamContact;
@@ -127,6 +133,12 @@ class Boss
 
     float wreckwormSpeedMult = 1.0F;
 
+    std::vector<Vector2> wreckwormTrail;
+    bool wreckwormRepositioning = false;
+    bool wreckwormDetached = false;
+    Vector2 wreckwormPrevPosition{};
+    Vector2 wreckwormVelocity{};
+
     std::vector<float> moltThresholds;
 
     float coilClampGapDeg = 0;
@@ -138,17 +150,70 @@ class Boss
     bool isArmorSegment = false;
     float segmentVolleyTimer = 0;
 
-    float wreckwormPrevPlayerDist = -1.0F;
-
     bool isSlagmaw = false;
+
+    bool isKraken = false;
+    int32_t krakenEncounter = 0;
+    float tentacleCheckTimer = 5.0F;
+    int32_t tentaclePhase = 0;
+    float tentacleStateTimer = 0;
+    float tentacleCooldownTimer = 0;
+    Vector2 tentaclePortalPos{};
+    float tentacleSwipeStartAngle = 0;
+    float tentacleSwipeEndAngle = 0;
+    bool tentacleHitPlayerThisSwipe = false;
+
+    static constexpr int32_t krakenLimbSlots = 2;
+    std::array<int32_t, krakenLimbSlots> limbPod{-1, -1};
+    std::array<int32_t, krakenLimbSlots> limbPhase{0, 0};
+    std::array<float, krakenLimbSlots> limbTimer{0, 0};
+    std::array<float, krakenLimbSlots> limbCooldown{0, 0};
+    std::array<float, krakenLimbSlots> limbGrabTimer{0, 0};
+    std::array<Vector2, krakenLimbSlots> limbGrabTarget{};
+    std::array<Vector2, krakenLimbSlots> limbPortalPos{};
+    std::array<float, krakenLimbSlots> limbGrabAnimTimer{};
+    std::array<int32_t, krakenLimbSlots> limbGrabbedKind{-1, -1};
+    std::array<int32_t, krakenLimbSlots> limbThrowPhase{0, 0};
+    std::array<float, krakenLimbSlots> limbThrowTimer{0, 0};
+
+    float krakenSummonTimer = 0;
+    bool krakenSnakeSummoned = false;
+
+    bool krakenSnakeVariant = false;
 
     float ghostFadeAlpha = 1.0F;
 
     bool debuffStatic = false;
     bool debuffFreeze = false;
-    bool debuffConfuse = false;
     float burnDps = 0;
     float burnDamageAccum = 0;
+
+    float deathAnimTimer = -1.0F;
+
+    bool slagmawBreaksIntoDrifters = false;
+    bool slagmawBreaksIntoHalves = false;
+
+    float parryStunTimer = 0;
+
+    bool isBanished = false;
+    static constexpr int32_t banishedTentacleCount = 12;
+    std::array<bool, banishedTentacleCount> banishedStaggered{};
+    std::array<int32_t, banishedTentacleCount> banishedPhase{};
+    std::array<float, banishedTentacleCount> banishedTimer{};
+    std::array<float, banishedTentacleCount> banishedCooldown{};
+    std::array<bool, banishedTentacleCount> banishedIsFar{};
+    std::array<bool, banishedTentacleCount> banishedGrabbing{};
+    std::array<Vector2, banishedTentacleCount> banishedAnchor{};
+    std::array<Vector2, banishedTentacleCount> banishedTip{};
+    std::array<float, banishedTentacleCount> banishedTentacleHitFlash{};
+
+    int32_t banishedStage = 0;
+    bool banishedEyeCharging = false;
+    float banishedEyeTimer = 0;
+    bool banishedEyeChargeBurstUsed = false;
+    Vector2 banishedEyePos{};
+
+    bool banishedDefeated = false;
 };
 
 struct BossType
@@ -284,6 +349,8 @@ class BossProjectile
     Color fluidColor = Palette::RustbloomAccent;
 
     int32_t ricochetRemaining = 0;
+
+    int32_t visualEnemyKind = -1;
 };
 
 class BossDeathShockwave
@@ -292,4 +359,15 @@ class BossDeathShockwave
     float timer;
     Vector2 position;
     bool hit;
+};
+
+class GasHazard
+{
+  public:
+    Vector2 position{};
+    float radius = 0;
+    float seed = 0;
+    float life = 0;
+    bool active = true;
+    bool isFire = false;
 };

@@ -147,6 +147,7 @@ auto InitGame() -> Game
 
     game.resources.settings = loadSettings();
     game.resources.achievements = loadAchievements();
+    game.resources.bestiary = loadBestiary();
 
     game.resources.bgm = loadBGM();
     PlayMusicStream(game.resources.bgm.base);
@@ -241,6 +242,7 @@ void resetRun(Game& game)
 
     game.run.asteroids.reserve(static_cast<size_t>(maxAsteroid));
     game.run.bossProjectiles.clear();
+    game.run.gasHazards.clear();
     game.run.enemies.clear();
 
     game.run.enemies.reserve(static_cast<size_t>(UpdateConstants::maxEnemies));
@@ -279,7 +281,9 @@ void resetRun(Game& game)
     game.run.enemySpawnTimer = 1.0F;
     game.run.solarForgeHeatMeter = 0;
     game.run.solarForgeHeatTickTimer = 0;
-    game.run.fluidContactTickTimer = 0;
+    game.run.player.burnDps = 0;
+    game.run.player.burnDamageAccum = 0;
+    game.run.player.burnRefreshTimer = 0;
     game.run.organicMergeTimer = organicMergeCheckInterval;
 
     game.run.xp = 0;
@@ -300,5 +304,15 @@ void resetRun(Game& game)
     game.run.scoreRecorded = false;
     game.run.achievementToast.clear();
     game.run.achievementToastTimer = 0;
+    game.run.punctumThunderTimer = static_cast<float>(GetRandomValue(
+                                       static_cast<int32_t>(punctumThunderIntervalMin * 10),
+                                       static_cast<int32_t>(punctumThunderIntervalMax * 10))) /
+                                   10.0F;
+    game.run.punctumThunderFlashTimer = 0;
+    game.run.punctumTrapActive = false;
+    game.run.inBanishedRealm = false;
+    game.run.bossCutscenePhase = 0;
+    game.run.bossCutsceneTimer = 0;
+    game.run.krakenFleePos = Vector2{};
     game.state = GameState::GAMEPLAY;
 }

@@ -23,7 +23,6 @@ class Player
     float blackHoleCoreTimer;
     float bossBodyTimer;
     float slowTimer;
-    float confusedTimer;
     int charges;
     float chargeRegenTimer;
     bool dashing;
@@ -43,6 +42,27 @@ class Player
     bool secondWindReady;
 
     float overdriveTimer;
+
+    float burnDps = 0;
+    float burnDamageAccum = 0;
+    float burnRefreshTimer = 0;
+
+    bool grabbed = false;
+    int32_t grabbingTentacle = -1;
+    Vector2 grabCenter{};
+    float grabAngle = 0;
+    float grabRadius = 0;
+    float grabChipTimer = 0;
+
+    bool comboActive = false;
+    bool comboRefundEligible = false;
+    bool invulnerable = false;
+    float lastDashClickTime = -100.0F;
+    float lastShieldClickTime = -100.0F;
+
+    bool shieldDashing = false;
+    bool shieldDashKill = false;
+    float shieldDashGraceTimer = 0;
 };
 
 class Bullet
@@ -58,21 +78,22 @@ class Bullet
     int ricochetRemaining = 0;
     float splashRadius = 0;
     DamageSource source = DamageSource::Forward;
+    bool ricochetThenPhase = false;
+    bool phasing = false;
 };
 
 class FollowerDrone
 {
   public:
     Vector2 position;
-    float orbitAngle;
     float attackTimer;
+    float shotTimer;
 };
 
 class LaserDrone
 {
   public:
     Vector2 position;
-    float orbitAngle;
     float attackTimer;
     float beamFlashTimer;
     Vector2 beamTarget;

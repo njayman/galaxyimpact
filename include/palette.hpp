@@ -25,7 +25,6 @@ constexpr Color BossBeam{.r = 90, .g = 150, .b = 165, .a = 255};
 constexpr Color ElementStatic{.r = 225, .g = 240, .b = 255, .a = 255};
 constexpr Color ElementFreeze{.r = 90, .g = 210, .b = 230, .a = 255};
 constexpr Color ElementBurn{.r = 230, .g = 120, .b = 40, .a = 255};
-constexpr Color ElementConfuse{.r = 190, .g = 90, .b = 200, .a = 255};
 
 constexpr Color Heal{.r = 110, .g = 200, .b = 120, .a = 255};
 

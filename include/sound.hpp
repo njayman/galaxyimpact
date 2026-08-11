@@ -30,6 +30,8 @@ struct Sounds
     Sound nerveFizzle;
     Sound rockBreak;
     Sound squishHit;
+    Sound thunder;
+    Sound enemyDeath;
 };
 
 auto LoadSounds() -> Sounds;

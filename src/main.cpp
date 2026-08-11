@@ -68,7 +68,8 @@ auto main(int argc, char* argv[]) -> int
             syncScreenSize(game);
         }
 
-        const float deltaTime = GetFrameTime();
+        constexpr float maxDeltaTime = 1.0F / 20.0F;
+        const float deltaTime = std::min(GetFrameTime(), maxDeltaTime);
 
         shouldExit = UpdateGame(game, deltaTime);
 
@@ -98,6 +99,7 @@ auto main(int argc, char* argv[]) -> int
     UnloadSound(game.resources.sounds.nerveCharge);
     UnloadSound(game.resources.sounds.nerveRelease);
     UnloadSound(game.resources.sounds.nerveFizzle);
+    UnloadSound(game.resources.sounds.enemyDeath);
     game.resources.pixelTarget.reset();
     game.resources.worldTarget.reset();
     UnloadFont(game.resources.font);

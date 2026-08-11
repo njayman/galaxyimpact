@@ -149,6 +149,7 @@ void breakAsteroid(Game& game, const Asteroid& asteroid)
                                      .velocity = velocity,
                                      .radius = asteroidRadius(childTier),
                                      .tier = childTier,
-                                     .active = true});
+                                     .active = true,
+                                     .isFluid = asteroid.isFluid});
     }
 }

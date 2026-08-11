@@ -37,7 +37,6 @@ enum class ElementType : std::uint8_t
     Static,
     Freeze,
     Burn,
-    Confuse,
 
     Count
 };
@@ -64,10 +63,10 @@ class Pickup
 };
 
 constexpr std::array<std::string_view, static_cast<size_t>(ElementType::Count)> elementNames{
-    "Static", "Freeze", "Burn", "Confuse"};
+    "Static", "Freeze", "Burn"};
 
 constexpr std::array<Color, static_cast<size_t>(ElementType::Count)> elementColors{
-    Palette::ElementStatic, Palette::ElementFreeze, Palette::ElementBurn, Palette::ElementConfuse};
+    Palette::ElementStatic, Palette::ElementFreeze, Palette::ElementBurn};
 
 constexpr std::array<std::string_view, static_cast<size_t>(ElementMechanism::Count)>
     elementMechanismNames{"Infusion", "Nova"};
@@ -80,7 +79,7 @@ struct PickupCatalogEntry
     std::string_view name;
 };
 
-constexpr std::array<PickupCatalogEntry, 16> pickupCatalog{
+constexpr std::array<PickupCatalogEntry, 14> pickupCatalog{
     PickupCatalogEntry{PickupType::LifeOrb, ElementType::Static, ElementMechanism::Infusion,
                        "Life Orb"},
     PickupCatalogEntry{PickupType::Shield, ElementType::Static, ElementMechanism::Infusion,
@@ -108,10 +107,6 @@ constexpr std::array<PickupCatalogEntry, 16> pickupCatalog{
                        "Burn Infusion"},
     PickupCatalogEntry{PickupType::Elemental, ElementType::Burn, ElementMechanism::Nova,
                        "Burn Nova"},
-    PickupCatalogEntry{PickupType::Elemental, ElementType::Confuse, ElementMechanism::Infusion,
-                       "Confuse Infusion"},
-    PickupCatalogEntry{PickupType::Elemental, ElementType::Confuse, ElementMechanism::Nova,
-                       "Confuse Nova"},
 };
 
 enum class WeaponType : std::uint8_t
