@@ -79,6 +79,13 @@ constexpr int32_t rareBonusCategoryCount =
 constexpr float dashKillChargeRefund = 0.6F;
 constexpr float shieldKillChargeRefund = 0.6F;
 constexpr float shieldDashKillGraceDuration = 1.0F;
+
+constexpr int32_t blackHoleDustCount = 500;
+constexpr int32_t blackHoleDustArmCount = 7;
+constexpr float blackHoleDustCoreFraction = 0.22F;
+constexpr float blackHoleDustTwistStrength = 4.0F;
+constexpr float blackHoleDustInwardSpeedMin = 0.05F;
+constexpr float blackHoleDustInwardSpeedMax = 0.22F;
 constexpr float bossBodyLingerLimit = 1.0F;
 constexpr float damageMeterHoldDuration = 1.5F;
 

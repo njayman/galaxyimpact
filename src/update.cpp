@@ -812,6 +812,7 @@ void updateGameplay(Game& game, float deltaTime)
     updatePlayerBuffs(game, deltaTime);
     updateWaveSpawner(game, deltaTime);
     updateBlackHole(game, deltaTime);
+    updateBlackHoleDust(game, deltaTime);
     updateWormhole(game, deltaTime);
     updateEliteHazards(game, deltaTime);
 
@@ -4847,7 +4848,8 @@ void updateBlackHole(Game& game, float deltaTime)
 
     game.run.blackhole.timer -= deltaTime;
 
-    if (!game.sandbox && !game.run.blackhole.active && game.run.blackhole.timer <= 0)
+    if ((!game.sandbox || game.sandboxNaturalSpawnEnabled) && !game.run.blackhole.active &&
+        game.run.blackhole.timer <= 0)
     {
         spawnBlackHole(game);
     }
@@ -4868,6 +4870,32 @@ void updateBlackHole(Game& game, float deltaTime)
             const Vector2 drift = Vector2Scale(Vector2Normalize(toPlayer), blackHoleChaseSpeed);
             game.run.blackhole.position = Vector2Add(game.run.blackhole.position,
                                                      Vector2Scale(drift, deltaTime * frameScale));
+        }
+    }
+}
+
+void updateBlackHoleDust(Game& game, float deltaTime)
+{
+    if (!game.run.blackhole.active)
+    {
+        return;
+    }
+
+    for (auto& dust : game.run.blackHoleDust)
+    {
+        const float speed = blackHoleDustInwardSpeedMin +
+                            (blackHoleDustInwardSpeedMax - blackHoleDustInwardSpeedMin) *
+                                (1.0F - dust.radiusFrac);
+        dust.radiusFrac -= speed * deltaTime;
+
+        if (dust.radiusFrac <= blackHoleDustCoreFraction)
+        {
+            dust.radiusFrac = 1.0F;
+            dust.armPeakAngle = static_cast<float>(GetRandomValue(0, blackHoleDustArmCount - 1)) /
+                                    static_cast<float>(blackHoleDustArmCount) * 2.0F *
+                                    std::numbers::pi_v<float>;
+            dust.jitter = static_cast<float>(GetRandomValue(-1000, 1000)) / 1000.0F * 0.25F;
+            dust.brightness = static_cast<float>(GetRandomValue(60, 100)) / 100.0F;
         }
     }
 }

@@ -92,6 +92,7 @@ struct GameplayState
     std::vector<BossDeathShockwave> bossDeathShockwaves;
     std::vector<GasHazard> gasHazards;
     BlackHole blackhole;
+    std::vector<BlackHoleDustParticle> blackHoleDust;
     Wormhole wormhole;
     std::vector<Star> stars;
     std::vector<BgParticle> bgParticles;

@@ -1445,24 +1445,29 @@ void drawPunctumLightning(const Game& game)
     }
 }
 
-void drawBlackHoleSpiral(Vector2 center, float radius, Color color)
+void drawBlackHoleGradient(Vector2 center, float radius)
+{
+    constexpr float coreFraction = 0.22F;
+    constexpr int32_t edgeSteps = 4;
+    const float coreRadius = radius * coreFraction;
+
+    DrawCircleV(center, coreRadius, BLACK);
+    for (int32_t g = edgeSteps; g >= 1; g--)
+    {
+        const float t = static_cast<float>(g) / static_cast<float>(edgeSteps);
+        DrawCircleV(center, coreRadius + coreRadius * 0.15F * t, Fade(BLACK, t * 0.4F));
+    }
+}
+
+// ponytail: kept as a backup look (spiral arm lines radiating past the disc) in case the
+// twirl-texture version below isn't what's wanted; not currently called.
+[[maybe_unused]] void drawBlackHoleSpiralArmsBackup(Vector2 center, float radius, Color color)
 {
     constexpr int32_t armCount = 9;
     constexpr int32_t segments = 14;
     const float rotation = static_cast<float>(GetTime()) * 6.0F;
 
-    constexpr int32_t gradientSteps = 16;
-    constexpr float solidCoreFraction = 0.7F;
-    for (int32_t g = gradientSteps; g >= 1; g--)
-    {
-        const float t = static_cast<float>(g) / static_cast<float>(gradientSteps);
-        const float alpha = t <= solidCoreFraction
-                                ? 1.0F
-                                : std::clamp(1.0F - (t - solidCoreFraction) /
-                                                        (1.0F - solidCoreFraction),
-                                            0.0F, 1.0F);
-        DrawCircleV(center, radius * t, Fade(BLACK, alpha));
-    }
+    drawBlackHoleGradient(center, radius);
 
     for (int32_t i = 0; i < armCount; i++)
     {
@@ -1482,6 +1487,34 @@ void drawBlackHoleSpiral(Vector2 center, float radius, Color color)
             DrawLineEx(prev, p, 2.2F, Fade(color, 0.55F * (1.0F - t * 0.3F)));
             prev = p;
         }
+    }
+}
+
+void drawBlackHoleTwirl(Vector2 center, float radius, Color color,
+                        const std::vector<BlackHoleDustParticle>& dust)
+{
+    drawBlackHoleGradient(center, radius);
+
+    constexpr int32_t ringDotCount = 140;
+    constexpr float ringWidth = 0.05F;
+    for (int32_t i = 0; i < ringDotCount; i++)
+    {
+        const float u = static_cast<float>(GetRandomValue(0, 1000)) / 1000.0F;
+        const float r = blackHoleDustCoreFraction + ringWidth * u;
+        const float angle = static_cast<float>(GetRandomValue(0, 36000)) / 100.0F * DEG2RAD;
+        const Vector2 p = Vector2Add(
+            center, Vector2{.x = std::cos(angle) * r * radius, .y = std::sin(angle) * r * radius});
+        const auto brightness = static_cast<float>(GetRandomValue(70, 100)) / 100.0F;
+        DrawCircleV(p, 1.4F, Fade(WHITE, brightness));
+    }
+
+    for (const auto& d : dust)
+    {
+        const float twist = blackHoleDustTwistStrength * (1.0F - d.radiusFrac);
+        const float angle = d.armPeakAngle + d.jitter - twist;
+        const Vector2 p = Vector2Add(center, Vector2{.x = std::cos(angle) * d.radiusFrac * radius,
+                                                      .y = std::sin(angle) * d.radiusFrac * radius});
+        DrawCircleV(p, 1.4F, Fade(color, d.brightness));
     }
 }
 
@@ -1507,8 +1540,8 @@ void drawGameplayWorld(const Game& game)
 
     if (game.run.blackhole.active)
     {
-        drawBlackHoleSpiral(game.run.blackhole.position, game.run.blackhole.influenceRadius,
-                            Palette::StructMid);
+        drawBlackHoleTwirl(game.run.blackhole.position, game.run.blackhole.influenceRadius,
+                            Palette::Haze, game.run.blackHoleDust);
     }
 
     if (game.run.bossCutscenePhase == 2)

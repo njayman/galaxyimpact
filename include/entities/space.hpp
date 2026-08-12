@@ -70,6 +70,15 @@ class BlackHole
     float timer;
 };
 
+class BlackHoleDustParticle
+{
+  public:
+    float radiusFrac;
+    float armPeakAngle;
+    float jitter;
+    float brightness;
+};
+
 enum class WormholeFacing : std::uint8_t
 {
     East,
