@@ -698,39 +698,77 @@ auto updateBossCutscene(Game& game, float deltaTime) -> bool
         return false;
     }
 
+    Boss* kraken = nullptr;
+    for (auto& candidate : game.run.bosses)
+    {
+        if (candidate.isKraken && candidate.krakenEncounter >= 3)
+        {
+            kraken = &candidate;
+            break;
+        }
+    }
+    if (kraken == nullptr)
+    {
+        game.run.bossCutscenePhase = 0;
+        return false;
+    }
+
     game.run.bossCutsceneTimer -= deltaTime;
+
+    if (game.run.bossCutscenePhase <= 3)
+    {
+        kraken->deathAnimTimer -= deltaTime;
+        if (kraken->deathAnimTimer <= 0)
+        {
+            kraken->deathAnimTimer = bossDeathAnimDuration;
+        }
+    }
+
+    const Vector2 bossCenter{.x = kraken->position.x + kraken->size.x / 2,
+                             .y = kraken->position.y + kraken->size.y / 2};
 
     if (game.run.bossCutscenePhase == 1)
     {
-        if (game.run.bossCutsceneTimer <= 0)
+        const Vector2 toPlayer = Vector2Subtract(game.run.player.position, bossCenter);
+        const float dist = Vector2Length(toPlayer);
+        if (dist > krakenOutroApproachStopDistance)
+        {
+            kraken->position = Vector2Add(
+                kraken->position,
+                Vector2Scale(Vector2Normalize(toPlayer), krakenOutroApproachSpeed * deltaTime));
+        }
+        if (game.run.bossCutsceneTimer <= 0 || dist <= krakenOutroApproachStopDistance)
         {
             game.run.bossCutscenePhase = 2;
-            game.run.bossCutsceneTimer = krakenFleeDuration;
-            game.run.punctumTrapActive = true;
+            game.run.bossCutsceneTimer = krakenOutroSummonDuration;
+            const Vector2 sideDir =
+                Vector2Normalize(Vector2Subtract(bossCenter, game.run.player.position));
+            game.run.krakenFleePos =
+                Vector2Add(game.run.player.position, Vector2Scale(sideDir, krakenOutroSideOffset));
         }
         return true;
     }
 
     if (game.run.bossCutscenePhase == 2)
     {
-        const Vector2 toCenter = Vector2Subtract(Vector2{}, game.run.krakenFleePos);
-        const float dist = Vector2Length(toCenter);
-        if (dist > 4.0F)
+        const Vector2 toSpot = Vector2Subtract(game.run.krakenFleePos, bossCenter);
+        if (Vector2Length(toSpot) > 4.0F)
         {
-            game.run.krakenFleePos = Vector2Add(
-                game.run.krakenFleePos,
-                Vector2Scale(Vector2Normalize(toCenter), krakenFleeSpeed * deltaTime));
+            kraken->position = Vector2Add(
+                kraken->position,
+                Vector2Scale(Vector2Normalize(toSpot), krakenOutroApproachSpeed * deltaTime));
         }
-        if (game.run.bossCutsceneTimer <= 0 || dist <= 4.0F)
+        if (game.run.bossCutsceneTimer <= 0)
         {
             game.run.bossCutscenePhase = 3;
-            game.run.bossCutsceneTimer = krakenDialogueDuration;
-            game.run.blackhole.position = Vector2{};
+            game.run.bossCutsceneTimer = krakenOutroHoldDuration;
+            game.run.blackhole.position = game.run.krakenFleePos;
             game.run.blackhole.radius = 60;
             game.run.blackhole.influenceRadius = 260;
             game.run.blackhole.active = true;
-            game.run.achievementToast = "Follow, if you dare.";
-            game.run.achievementToastTimer = krakenDialogueDuration;
+            game.run.punctumTrapActive = true;
+            game.run.achievementToast = "Follow me, if you dare.";
+            game.run.achievementToastTimer = krakenOutroHoldDuration;
             game.run.enemies.clear();
             game.run.eliteHazards.clear();
             game.run.asteroids.clear();
@@ -739,11 +777,42 @@ auto updateBossCutscene(Game& game, float deltaTime) -> bool
         return true;
     }
 
-    if (game.run.bossCutscenePhase == 3 && game.run.bossCutsceneTimer <= 0)
+    if (game.run.bossCutscenePhase == 3)
     {
-        game.run.bossCutscenePhase = 0;
-        game.run.player.position = Vector2{.x = 400, .y = 0};
+        if (game.run.bossCutsceneTimer <= 0)
+        {
+            game.run.bossCutscenePhase = 4;
+            game.run.bossCutsceneTimer = krakenOutroTwirlDuration;
+        }
+        return true;
     }
+
+    if (game.run.bossCutscenePhase == 4)
+    {
+        const Vector2 toCenter = Vector2Subtract(game.run.blackhole.position, bossCenter);
+        if (Vector2Length(toCenter) > 2.0F)
+        {
+            kraken->position = Vector2Add(
+                kraken->position,
+                Vector2Scale(Vector2Normalize(toCenter),
+                            krakenOutroApproachSpeed * krakenOutroTwirlSpeedMult * deltaTime));
+        }
+
+        if (game.run.bossCutsceneTimer <= 0)
+        {
+            const Vector2 finalCenter{.x = kraken->position.x + kraken->size.x / 2,
+                                      .y = kraken->position.y + kraken->size.y / 2};
+            game.run.score += 1000;
+            recordBossKilled(game, *kraken);
+            game.run.xp += static_cast<int>(static_cast<float>(game.run.xpToNext) * megaBossXpMult);
+            spawnRareBonusPickup(game, finalCenter);
+            spawnRareDangerPickup(game, finalCenter);
+            std::erase_if(game.run.bosses, [](const Boss& b) { return b.isKraken; });
+            game.run.bossCutscenePhase = 0;
+        }
+        return true;
+    }
+
     return true;
 }
 
@@ -855,6 +924,19 @@ void updateGameplay(Game& game, float deltaTime)
 
     for (auto& boss : game.run.bosses)
     {
+        if (boss.retreating)
+        {
+            const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
+                                     .y = boss.position.y + boss.size.y / 2};
+            const Vector2 away = Vector2Subtract(bossCenter, game.run.player.position);
+            const float dist = Vector2Length(away);
+            const Vector2 dir =
+                dist > 1.0F ? Vector2Scale(away, 1.0F / dist) : Vector2{.x = 1, .y = 0};
+            boss.position =
+                Vector2Add(boss.position, Vector2Scale(dir, krakenRetreatSpeed * deltaTime));
+            continue;
+        }
+
         if (boss.deathAnimTimer >= 0)
         {
             continue;
@@ -931,6 +1013,24 @@ void updateGameplay(Game& game, float deltaTime)
         const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
                                  .y = boss.position.y + boss.size.y / 2};
 
+        if (boss.isKraken)
+        {
+            if (boss.krakenEncounter < 3)
+            {
+                boss.retreating = true;
+                boss.health = 1;
+            }
+            else if (game.run.bossCutscenePhase == 0)
+            {
+                boss.health = 1;
+                boss.deathAnimTimer = bossDeathAnimDuration;
+                boss.color = Palette::StructDark;
+                game.run.bossCutscenePhase = 1;
+                game.run.bossCutsceneTimer = krakenOutroApproachDuration;
+            }
+            continue;
+        }
+
         if (boss.isBeltbreakerPlate || boss.isWreckwormSegment)
         {
             boss.health = 0;
@@ -1005,13 +1105,6 @@ void updateGameplay(Game& game, float deltaTime)
             game.run.achievementToastTimer = 4.0F;
         }
 
-        if (boss.isFinalBoss && !game.run.punctumTrapActive && game.run.bossCutscenePhase == 0)
-        {
-            game.run.bossCutscenePhase = 1;
-            game.run.bossCutsceneTimer = krakenBreakDuration;
-            game.run.krakenFleePos = bossCenter;
-        }
-
         if (boss.slagmawBreaksIntoDrifters)
         {
             spawnSlagmawDrifterBreak(game, bossCenter);
@@ -1029,10 +1122,21 @@ void updateGameplay(Game& game, float deltaTime)
     {
         game.resources.bgm.calmTimer = bossKillCalmDuration;
     }
+    const size_t bossCountBeforeErase = game.run.bosses.size();
     std::erase_if(game.run.bosses,
-                  [](const Boss& boss) { return boss.health <= 0 && boss.deathAnimTimer <= 0; });
+                  [&game](const Boss& boss)
+                  {
+                      if (boss.retreating)
+                      {
+                          const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
+                                                   .y = boss.position.y + boss.size.y / 2};
+                          return Vector2Distance(bossCenter, game.run.player.position) >
+                                 krakenRetreatDespawnDistance;
+                      }
+                      return boss.health <= 0 && boss.deathAnimTimer <= 0;
+                  });
 
-    if (anyBossKilledThisFrame && game.run.bosses.empty())
+    if (game.run.bosses.size() < bossCountBeforeErase && game.run.bosses.empty())
     {
         game.run.waveTimer = 0;
     }
@@ -4644,6 +4748,11 @@ void updateBgParticles(Game& game)
                             .y = std::sin(punctumPullAngleDeg * DEG2RAD) * punctumPullSpeed}
                   : Vector2{};
     const Vector2 tileCenter{.x = tileW / 2, .y = tileH / 2};
+    const Vector2 spiralTarget =
+        spiraling && game.run.blackhole.active
+            ? Vector2Add(tileCenter,
+                        Vector2Subtract(game.run.blackhole.position, game.run.player.position))
+            : tileCenter;
 
     const auto driftFor = [&](Vector2 pos) -> Vector2
     {
@@ -4651,7 +4760,7 @@ void updateBgParticles(Game& game)
         {
             return fixedPull;
         }
-        const Vector2 toCenter = Vector2Subtract(tileCenter, pos);
+        const Vector2 toCenter = Vector2Subtract(spiralTarget, pos);
         if (Vector2Length(toCenter) < 1.0F)
         {
             return Vector2{};
@@ -4670,7 +4779,7 @@ void updateBgParticles(Game& game)
 
     for (auto& p : game.run.bgParticles)
     {
-        if (spiraling && Vector2Distance(p.position, tileCenter) <= punctumTrapConsumeRadius)
+        if (spiraling && Vector2Distance(p.position, spiralTarget) <= punctumTrapConsumeRadius)
         {
             p.position = respawnAtEdge();
             continue;
@@ -4700,7 +4809,7 @@ void updateBgParticles(Game& game)
     {
         for (auto& s : game.run.stars)
         {
-            if (spiraling && Vector2Distance(s.position, tileCenter) <= punctumTrapConsumeRadius)
+            if (spiraling && Vector2Distance(s.position, spiralTarget) <= punctumTrapConsumeRadius)
             {
                 s.position = respawnAtEdge();
                 continue;

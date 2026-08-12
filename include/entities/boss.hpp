@@ -154,6 +154,7 @@ class Boss
 
     bool isKraken = false;
     int32_t krakenEncounter = 0;
+    bool retreating = false;
     float tentacleCheckTimer = 5.0F;
     int32_t tentaclePhase = 0;
     float tentacleStateTimer = 0;

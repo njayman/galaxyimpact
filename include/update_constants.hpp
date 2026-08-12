@@ -427,10 +427,17 @@ constexpr float banishedFleeSpeed = 2.4F;
 constexpr float banishedEyeFireDuration = 1.0F;
 constexpr float banishedBeamDps = 6.0F;
 
-constexpr float krakenBreakDuration = 1.2F;
-constexpr float krakenFleeDuration = 1.8F;
-constexpr float krakenDialogueDuration = 2.5F;
-constexpr float krakenFleeSpeed = 700.0F;
+constexpr float krakenRetreatSpeed = 900.0F;
+constexpr float krakenRetreatDespawnDistance = 1400.0F;
+
+constexpr float krakenOutroApproachDuration = 2.5F;
+constexpr float krakenOutroSummonDuration = 1.5F;
+constexpr float krakenOutroHoldDuration = 4.0F;
+constexpr float krakenOutroTwirlDuration = 2.0F;
+constexpr float krakenOutroApproachSpeed = 260.0F;
+constexpr float krakenOutroApproachStopDistance = 220.0F;
+constexpr float krakenOutroSideOffset = 260.0F;
+constexpr float krakenOutroTwirlSpeedMult = 1.4F;
 
 constexpr float krakenLimbGrabAnimDuration = 1.5F;
 

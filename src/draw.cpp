@@ -1545,11 +1545,6 @@ void drawGameplayWorld(const Game& game)
                             Palette::Haze, game.run.blackHoleDust);
     }
 
-    if (game.run.bossCutscenePhase == 2)
-    {
-        drawKrakenShape(game.run.krakenFleePos, 90.0F, 7.0F, Palette::PunctumHaze);
-    }
-
     if (game.run.wormhole.active)
     {
         drawWormholeMouth(game.run.wormhole.positionA, game.run.wormhole.facingA,
@@ -2638,6 +2633,16 @@ void drawBoss(const Game& game, const Boss& boss)
     {
         drawWreckwormSegmentShape(bossCenter, boss.size.x / 2, static_cast<float>(boss.segmentIndex + 1),
                                   ufoColor, boss.isArmorSegment);
+    }
+    else if (boss.isKraken && boss.krakenEncounter >= 3 && game.run.bossCutscenePhase == 4)
+    {
+        const float progress =
+            std::clamp(1.0F - game.run.bossCutsceneTimer / krakenOutroTwirlDuration, 0.0F, 1.0F);
+        const float shrink = std::max(0.04F, 1.0F - progress);
+        const Color shadowColor = ColorLerp(ufoColor, BLACK, progress);
+        const float twirlSeed =
+            static_cast<float>(boss.instanceId) + progress * 40.0F + static_cast<float>(GetTime()) * 4.0F;
+        drawKrakenShape(bossCenter, boss.size.x / 2 * shrink, twirlSeed, shadowColor);
     }
     else if (boss.isKraken)
     {
