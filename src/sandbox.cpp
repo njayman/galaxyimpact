@@ -30,9 +30,8 @@ void sandboxSpawnSelectedEnemy(Game& game)
 {
     const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
     const auto dist = static_cast<float>(GetRandomValue(200, 320));
-    const Vector2 pos =
-        Vector2Add(game.run.player.position,
-                   Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+    const Vector2 pos = Vector2Add(game.run.player.position, Vector2{.x = std::cos(angle) * dist,
+                                                                     .y = std::sin(angle) * dist});
     spawnEnemyAt(game, game.sandboxKindIndex, pos);
 }
 
@@ -125,14 +124,7 @@ void sandboxForceAttackNearestBoss(Game& game)
 
 void sandboxCycleWave(Game& game, int32_t dir)
 {
-    if (dir > 0)
-    {
-        game.run.waveNumber++;
-    }
-    else if (game.run.waveNumber > 1)
-    {
-        game.run.waveNumber--;
-    }
+    game.run.waveNumber = std::max(1, game.run.waveNumber + dir);
 }
 
 void sandboxDropSelectedPickup(Game& game)
@@ -156,8 +148,7 @@ constexpr int32_t buttonHeight = 42;
 constexpr int32_t buttonGapX = 14;
 constexpr int32_t buttonGapY = 10;
 constexpr int32_t buttonCols = 3;
-constexpr int32_t buttonTopY =
-    stepperTopY + stepperCount * (stepperRowHeight + stepperRowGap) + 40;
+constexpr int32_t buttonTopY = stepperTopY + stepperCount * (stepperRowHeight + stepperRowGap) + 40;
 
 constexpr int32_t modeToggleWidth = 160;
 constexpr int32_t modeToggleHeight = 40;
@@ -211,10 +202,7 @@ auto sandboxMenuButtons() -> const std::vector<SandboxMenuButton>&
          },
          sandboxToggleNaturalSpawn},
         {[](const Game& game)
-         {
-             return std::format("Kill Box: {}",
-                                game.sandboxKillBoxArmed ? "ARMED" : "OFF");
-         },
+         { return std::format("Kill Box: {}", game.sandboxKillBoxArmed ? "ARMED" : "OFF"); },
          sandboxArmKillBox},
     };
     return buttons;
@@ -223,8 +211,7 @@ auto sandboxMenuButtons() -> const std::vector<SandboxMenuButton>&
 auto sandboxMenuSteppers() -> const std::vector<SandboxMenuStepper>&
 {
     static const std::vector<SandboxMenuStepper> steppers{
-        {"Enemy Kind",
-         [](const Game& game)
+        {"Enemy Kind", [](const Game& game)
          { return std::string(enemyKinds.at(static_cast<size_t>(game.sandboxKindIndex)).name); },
          [](Game& game)
          {
@@ -237,7 +224,8 @@ auto sandboxMenuSteppers() -> const std::vector<SandboxMenuStepper>&
              game.sandboxKindIndex = (game.sandboxKindIndex + 1) % count;
          }},
         {"Boss Attack",
-         [](const Game& game) {
+         [](const Game& game)
+         {
              return std::string(
                  bossAttackNames.at(static_cast<size_t>(game.sandboxBossAttackIndex)));
          },
@@ -247,9 +235,7 @@ auto sandboxMenuSteppers() -> const std::vector<SandboxMenuStepper>&
                  (game.sandboxBossAttackIndex - 1 + bossAttackCount) % bossAttackCount;
          },
          [](Game& game)
-         {
-             game.sandboxBossAttackIndex = (game.sandboxBossAttackIndex + 1) % bossAttackCount;
-         }},
+         { game.sandboxBossAttackIndex = (game.sandboxBossAttackIndex + 1) % bossAttackCount; }},
         {"Wave",
          [](const Game& game)
          {
@@ -265,9 +251,9 @@ auto sandboxMenuSteppers() -> const std::vector<SandboxMenuStepper>&
          [](const Game& game) { return std::string(sandboxPickupName(game.sandboxPickupIndex)); },
          [](Game& game)
          {
-             game.sandboxPickupIndex = (game.sandboxPickupIndex - 1 +
-                                        static_cast<int32_t>(sandboxPickupCount)) %
-                                       static_cast<int32_t>(sandboxPickupCount);
+             game.sandboxPickupIndex =
+                 (game.sandboxPickupIndex - 1 + static_cast<int32_t>(sandboxPickupCount)) %
+                 static_cast<int32_t>(sandboxPickupCount);
          },
          [](Game& game)
          {
@@ -285,9 +271,8 @@ auto sandboxStepperRowRect(const Game& game, int32_t index) -> Rectangle
         .x = static_cast<float>(game.resources.windowWidth) / 2 -
              static_cast<float>(SandboxMenuLayout::stepperRowWidth) * scale / 2,
         .y = (static_cast<float>(SandboxMenuLayout::stepperTopY) +
-              static_cast<float>(index) *
-                  static_cast<float>(SandboxMenuLayout::stepperRowHeight +
-                                     SandboxMenuLayout::stepperRowGap)) *
+              static_cast<float>(index) * static_cast<float>(SandboxMenuLayout::stepperRowHeight +
+                                                             SandboxMenuLayout::stepperRowGap)) *
              scale,
         .width = static_cast<float>(SandboxMenuLayout::stepperRowWidth) * scale,
         .height = static_cast<float>(SandboxMenuLayout::stepperRowHeight) * scale};
@@ -297,9 +282,10 @@ auto sandboxStepperMinusRect(const Game& game, int32_t index) -> Rectangle
 {
     const Rectangle row = sandboxStepperRowRect(game, index);
     const float scale = guiUiScale(game);
-    return Rectangle{.x = row.x, .y = row.y,
-                      .width = static_cast<float>(SandboxMenuLayout::stepperMinusWidth) * scale,
-                      .height = row.height};
+    return Rectangle{.x = row.x,
+                     .y = row.y,
+                     .width = static_cast<float>(SandboxMenuLayout::stepperMinusWidth) * scale,
+                     .height = row.height};
 }
 
 auto sandboxStepperPlusRect(const Game& game, int32_t index) -> Rectangle
@@ -307,8 +293,8 @@ auto sandboxStepperPlusRect(const Game& game, int32_t index) -> Rectangle
     const Rectangle row = sandboxStepperRowRect(game, index);
     const float scale = guiUiScale(game);
     const float plusW = static_cast<float>(SandboxMenuLayout::stepperPlusWidth) * scale;
-    return Rectangle{.x = row.x + row.width - plusW, .y = row.y, .width = plusW,
-                      .height = row.height};
+    return Rectangle{
+        .x = row.x + row.width - plusW, .y = row.y, .width = plusW, .height = row.height};
 }
 
 auto sandboxStepperValueRect(const Game& game, int32_t index) -> Rectangle
@@ -317,8 +303,8 @@ auto sandboxStepperValueRect(const Game& game, int32_t index) -> Rectangle
     const float scale = guiUiScale(game);
     const float minusW = static_cast<float>(SandboxMenuLayout::stepperMinusWidth) * scale;
     const float plusW = static_cast<float>(SandboxMenuLayout::stepperPlusWidth) * scale;
-    return Rectangle{.x = row.x + minusW, .y = row.y, .width = row.width - minusW - plusW,
-                      .height = row.height};
+    return Rectangle{
+        .x = row.x + minusW, .y = row.y, .width = row.width - minusW - plusW, .height = row.height};
 }
 
 auto sandboxMenuButtonRect(const Game& game, int32_t index) -> Rectangle
@@ -329,25 +315,27 @@ auto sandboxMenuButtonRect(const Game& game, int32_t index) -> Rectangle
     const auto totalWidth =
         static_cast<float>(SandboxMenuLayout::buttonCols * SandboxMenuLayout::buttonWidth +
                            (SandboxMenuLayout::buttonCols - 1) * SandboxMenuLayout::buttonGapX);
-    const float startX = static_cast<float>(game.resources.windowWidth) / 2 - totalWidth * scale / 2;
-    return Rectangle{
-        .x = startX + static_cast<float>(col) *
-                          static_cast<float>(SandboxMenuLayout::buttonWidth +
-                                             SandboxMenuLayout::buttonGapX) *
+    const float startX =
+        static_cast<float>(game.resources.windowWidth) / 2 - totalWidth * scale / 2;
+    return Rectangle{.x = startX + static_cast<float>(col) *
+                                       static_cast<float>(SandboxMenuLayout::buttonWidth +
+                                                          SandboxMenuLayout::buttonGapX) *
+                                       scale,
+                     .y = static_cast<float>(SandboxMenuLayout::buttonTopY +
+                                             row * (SandboxMenuLayout::buttonHeight +
+                                                    SandboxMenuLayout::buttonGapY)) *
                           scale,
-        .y = static_cast<float>(SandboxMenuLayout::buttonTopY +
-                                row * (SandboxMenuLayout::buttonHeight +
-                                       SandboxMenuLayout::buttonGapY)) *
-             scale,
-        .width = static_cast<float>(SandboxMenuLayout::buttonWidth) * scale,
-        .height = static_cast<float>(SandboxMenuLayout::buttonHeight) * scale};
+                     .width = static_cast<float>(SandboxMenuLayout::buttonWidth) * scale,
+                     .height = static_cast<float>(SandboxMenuLayout::buttonHeight) * scale};
 }
 
 auto sandboxMenuCloseButtonRect(const Game& game) -> Rectangle
 {
     const float scale = guiUiScale(game);
     return Rectangle{.x = static_cast<float>(game.resources.windowWidth) - 160 * scale - 20 * scale,
-                      .y = 20 * scale, .width = 160 * scale, .height = 40 * scale};
+                     .y = 20 * scale,
+                     .width = 160 * scale,
+                     .height = 40 * scale};
 }
 
 auto sandboxToggleIndicatorRect(const Game& game) -> Rectangle
@@ -446,8 +434,7 @@ auto browserCurrentName(const Game& game) -> std::string
     case 3:
         return std::string(sandboxPickupName(game.sandboxPickupIndex));
     case 4:
-        return std::string(
-            weaponDisplayName(static_cast<WeaponType>(game.browserWeaponIndex)));
+        return std::string(weaponDisplayName(static_cast<WeaponType>(game.browserWeaponIndex)));
     case 5:
         return std::string(browserParticleStyleName(game.browserParticleIndex));
     default:
@@ -487,9 +474,10 @@ void browserCycleItem(Game& game, int32_t dir)
 auto sandboxBrowserModeToggleRect(const Game& game) -> Rectangle
 {
     const float scale = guiUiScale(game);
-    return Rectangle{.x = 20 * scale, .y = 20 * scale,
-                      .width = static_cast<float>(SandboxMenuLayout::modeToggleWidth) * scale,
-                      .height = static_cast<float>(SandboxMenuLayout::modeToggleHeight) * scale};
+    return Rectangle{.x = 20 * scale,
+                     .y = 20 * scale,
+                     .width = static_cast<float>(SandboxMenuLayout::modeToggleWidth) * scale,
+                     .height = static_cast<float>(SandboxMenuLayout::modeToggleHeight) * scale};
 }
 
 auto sandboxBrowserCategoryButtonRect(const Game& game, int32_t index) -> Rectangle
@@ -498,15 +486,15 @@ auto sandboxBrowserCategoryButtonRect(const Game& game, int32_t index) -> Rectan
     const auto totalWidth =
         static_cast<float>(browserCategoryCount * SandboxMenuLayout::categoryTabWidth +
                            (browserCategoryCount - 1) * SandboxMenuLayout::categoryTabGap);
-    const float startX = static_cast<float>(game.resources.windowWidth) / 2 - totalWidth * scale / 2;
-    return Rectangle{
-        .x = startX + static_cast<float>(index) *
-                          static_cast<float>(SandboxMenuLayout::categoryTabWidth +
-                                             SandboxMenuLayout::categoryTabGap) *
-                          scale,
-        .y = static_cast<float>(SandboxMenuLayout::categoryTabTopY) * scale,
-        .width = static_cast<float>(SandboxMenuLayout::categoryTabWidth) * scale,
-        .height = static_cast<float>(SandboxMenuLayout::categoryTabHeight) * scale};
+    const float startX =
+        static_cast<float>(game.resources.windowWidth) / 2 - totalWidth * scale / 2;
+    return Rectangle{.x = startX + static_cast<float>(index) *
+                                       static_cast<float>(SandboxMenuLayout::categoryTabWidth +
+                                                          SandboxMenuLayout::categoryTabGap) *
+                                       scale,
+                     .y = static_cast<float>(SandboxMenuLayout::categoryTabTopY) * scale,
+                     .width = static_cast<float>(SandboxMenuLayout::categoryTabWidth) * scale,
+                     .height = static_cast<float>(SandboxMenuLayout::categoryTabHeight) * scale};
 }
 
 auto sandboxBrowserPreviewRect(const Game& game) -> Rectangle
@@ -514,21 +502,22 @@ auto sandboxBrowserPreviewRect(const Game& game) -> Rectangle
     const float scale = guiUiScale(game);
     return Rectangle{.x = static_cast<float>(game.resources.windowWidth) / 2 -
                           static_cast<float>(SandboxMenuLayout::previewWidth) * scale / 2,
-                      .y = static_cast<float>(SandboxMenuLayout::previewTopY) * scale,
-                      .width = static_cast<float>(SandboxMenuLayout::previewWidth) * scale,
-                      .height = static_cast<float>(SandboxMenuLayout::previewHeight) * scale};
+                     .y = static_cast<float>(SandboxMenuLayout::previewTopY) * scale,
+                     .width = static_cast<float>(SandboxMenuLayout::previewWidth) * scale,
+                     .height = static_cast<float>(SandboxMenuLayout::previewHeight) * scale};
 }
 
 auto sandboxBrowserPrevButtonRect(const Game& game) -> Rectangle
 {
     const Rectangle preview = sandboxBrowserPreviewRect(game);
     const float scale = guiUiScale(game);
-    return Rectangle{.x = preview.x - static_cast<float>(SandboxMenuLayout::arrowButtonWidth) * scale -
+    return Rectangle{.x = preview.x -
+                          static_cast<float>(SandboxMenuLayout::arrowButtonWidth) * scale -
                           10 * scale,
-                      .y = preview.y + preview.height / 2 -
+                     .y = preview.y + preview.height / 2 -
                           static_cast<float>(SandboxMenuLayout::arrowButtonHeight) * scale / 2,
-                      .width = static_cast<float>(SandboxMenuLayout::arrowButtonWidth) * scale,
-                      .height = static_cast<float>(SandboxMenuLayout::arrowButtonHeight) * scale};
+                     .width = static_cast<float>(SandboxMenuLayout::arrowButtonWidth) * scale,
+                     .height = static_cast<float>(SandboxMenuLayout::arrowButtonHeight) * scale};
 }
 
 auto sandboxBrowserNextButtonRect(const Game& game) -> Rectangle
@@ -536,10 +525,10 @@ auto sandboxBrowserNextButtonRect(const Game& game) -> Rectangle
     const Rectangle preview = sandboxBrowserPreviewRect(game);
     const float scale = guiUiScale(game);
     return Rectangle{.x = preview.x + preview.width + 10 * scale,
-                      .y = preview.y + preview.height / 2 -
+                     .y = preview.y + preview.height / 2 -
                           static_cast<float>(SandboxMenuLayout::arrowButtonHeight) * scale / 2,
-                      .width = static_cast<float>(SandboxMenuLayout::arrowButtonWidth) * scale,
-                      .height = static_cast<float>(SandboxMenuLayout::arrowButtonHeight) * scale};
+                     .width = static_cast<float>(SandboxMenuLayout::arrowButtonWidth) * scale,
+                     .height = static_cast<float>(SandboxMenuLayout::arrowButtonHeight) * scale};
 }
 
 void enterSandbox(Game& game)
@@ -655,11 +644,13 @@ void updateSandboxInput(Game& game)
 
     if (IsKeyPressed(KEY_EQUAL))
     {
-        sandboxCycleWave(game, 1);
+        const int32_t step = IsKeyDown(KEY_LEFT_SHIFT) ? 10 : 1;
+        sandboxCycleWave(game, step);
     }
     if (IsKeyPressed(KEY_MINUS))
     {
-        sandboxCycleWave(game, -1);
+        const int32_t step = IsKeyDown(KEY_LEFT_SHIFT) ? 10 : 1;
+        sandboxCycleWave(game, -step);
     }
 
     if (IsKeyPressed(KEY_N))
@@ -777,6 +768,12 @@ void updateSandboxMenuInput(Game& game)
     }
 }
 
-auto sandboxPickupName(int32_t index) -> std::string_view { return sandboxPickupOption(index).name; }
+auto sandboxPickupName(int32_t index) -> std::string_view
+{
+    return sandboxPickupOption(index).name;
+}
 
-auto sandboxPickupPreview(int32_t index) -> PickupCatalogEntry { return sandboxPickupOption(index); }
+auto sandboxPickupPreview(int32_t index) -> PickupCatalogEntry
+{
+    return sandboxPickupOption(index);
+}
