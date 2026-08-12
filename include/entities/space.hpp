@@ -68,6 +68,7 @@ class BlackHole
     float influenceRadius;
     bool active;
     float timer;
+    bool isKrakenPortal = false;
 };
 
 class BlackHoleDustParticle
@@ -79,6 +80,7 @@ class BlackHoleDustParticle
     float brightness;
     bool accelerating;
     float fixedSpeed;
+    Color color;
 };
 
 enum class WormholeFacing : std::uint8_t

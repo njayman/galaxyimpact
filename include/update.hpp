@@ -191,7 +191,7 @@ void updateProjectiles(Game& game, float deltaTime);
 void filterDeadEntities(Game& game);
 void updateBgParticles(Game& game);
 void updateBlackHole(Game& game, float deltaTime);
-auto spawnBlackHoleDustParticle() -> BlackHoleDustParticle;
+auto spawnBlackHoleDustParticle(bool punctumColors) -> BlackHoleDustParticle;
 void updateBlackHoleDust(Game& game, float deltaTime);
 void updateWormhole(Game& game, float deltaTime);
 auto applyWormholeTransit(const Game& game, Vector2& position, Vector2& velocity,

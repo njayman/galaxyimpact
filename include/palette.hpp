@@ -1,6 +1,7 @@
 #pragma once
 
 #include "raylib.h"
+#include <array>
 
 namespace Palette
 {
@@ -39,4 +40,7 @@ constexpr Color SolarForgeAccent{.r = 225, .g = 15, .b = 15, .a = 255};
 constexpr Color PunctumVoid{.r = 6, .g = 6, .b = 10, .a = 255};
 constexpr Color PunctumHaze{.r = 200, .g = 150, .b = 230, .a = 255};
 constexpr Color PunctumAccent{.r = 230, .g = 200, .b = 60, .a = 255};
+
+constexpr std::array<Color, 3> AmbientDustColors{StructMid, Haze, AccentDim};
+constexpr std::array<Color, 2> PunctumDustColors{PunctumHaze, PunctumAccent};
 }

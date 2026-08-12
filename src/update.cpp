@@ -766,6 +766,7 @@ auto updateBossCutscene(Game& game, float deltaTime) -> bool
             game.run.blackhole.radius = 60;
             game.run.blackhole.influenceRadius = 260;
             game.run.blackhole.active = true;
+            game.run.blackhole.isKrakenPortal = true;
             game.run.punctumTrapActive = true;
             game.run.achievementToast = "Follow me, if you dare.";
             game.run.achievementToastTimer = krakenOutroHoldDuration;
@@ -4747,12 +4748,38 @@ void updateBgParticles(Game& game)
         inPunctum ? Vector2{.x = std::cos(punctumPullAngleDeg * DEG2RAD) * punctumPullSpeed,
                             .y = std::sin(punctumPullAngleDeg * DEG2RAD) * punctumPullSpeed}
                   : Vector2{};
-    const Vector2 tileCenter{.x = tileW / 2, .y = tileH / 2};
-    const Vector2 spiralTarget =
-        spiraling && game.run.blackhole.active
-            ? Vector2Add(tileCenter,
-                        Vector2Subtract(game.run.blackhole.position, game.run.player.position))
-            : tileCenter;
+    // A particle's stored .position is a LOCAL tile coordinate in [0,tileW)x[0,tileH);
+    // its actual on-screen position each frame comes from tiledWorldPos(player.position, pos, ...),
+    // which wraps (pos - player.position) into the nearest copy of the tile. To pull particles
+    // toward a specific WORLD point (the black hole), we need to compare/adjust that same wrapped
+    // delta-from-player, not the raw local coordinate directly.
+    const auto localDeltaFromPlayer = [&](Vector2 pos) -> Vector2
+    {
+        float dx = std::fmod(pos.x - game.run.player.position.x, tileW);
+        if (dx > tileW / 2)
+        {
+            dx -= tileW;
+        }
+        else if (dx < -tileW / 2)
+        {
+            dx += tileW;
+        }
+        float dy = std::fmod(pos.y - game.run.player.position.y, tileH);
+        if (dy > tileH / 2)
+        {
+            dy -= tileH;
+        }
+        else if (dy < -tileH / 2)
+        {
+            dy += tileH;
+        }
+        return Vector2{.x = dx, .y = dy};
+    };
+
+    const Vector2 desiredDelta = spiraling && game.run.blackhole.active
+                                    ? Vector2Subtract(game.run.blackhole.position,
+                                                      game.run.player.position)
+                                    : Vector2{};
 
     const auto driftFor = [&](Vector2 pos) -> Vector2
     {
@@ -4760,7 +4787,7 @@ void updateBgParticles(Game& game)
         {
             return fixedPull;
         }
-        const Vector2 toCenter = Vector2Subtract(spiralTarget, pos);
+        const Vector2 toCenter = Vector2Subtract(desiredDelta, localDeltaFromPlayer(pos));
         if (Vector2Length(toCenter) < 1.0F)
         {
             return Vector2{};
@@ -4779,7 +4806,9 @@ void updateBgParticles(Game& game)
 
     for (auto& p : game.run.bgParticles)
     {
-        if (spiraling && Vector2Distance(p.position, spiralTarget) <= punctumTrapConsumeRadius)
+        if (spiraling &&
+            Vector2Length(Vector2Subtract(desiredDelta, localDeltaFromPlayer(p.position))) <=
+                punctumTrapConsumeRadius)
         {
             p.position = respawnAtEdge();
             continue;
@@ -4809,7 +4838,9 @@ void updateBgParticles(Game& game)
     {
         for (auto& s : game.run.stars)
         {
-            if (spiraling && Vector2Distance(s.position, spiralTarget) <= punctumTrapConsumeRadius)
+            if (spiraling &&
+                Vector2Length(Vector2Subtract(desiredDelta, localDeltaFromPlayer(s.position))) <=
+                    punctumTrapConsumeRadius)
             {
                 s.position = respawnAtEdge();
                 continue;
@@ -4945,6 +4976,7 @@ void spawnBlackHole(Game& game)
     game.run.blackhole.radius = 25;
     game.run.blackhole.influenceRadius = 140;
     game.run.blackhole.active = true;
+    game.run.blackhole.isKrakenPortal = false;
     game.run.blackhole.timer = static_cast<float>(GetRandomValue(60, 100)) / 10.0F;
 }
 
@@ -4983,8 +5015,15 @@ void updateBlackHole(Game& game, float deltaTime)
     }
 }
 
-auto spawnBlackHoleDustParticle() -> BlackHoleDustParticle
+auto spawnBlackHoleDustParticle(bool punctumColors) -> BlackHoleDustParticle
 {
+    const Color color =
+        punctumColors
+            ? Palette::PunctumDustColors.at(static_cast<size_t>(
+                  GetRandomValue(0, static_cast<int32_t>(Palette::PunctumDustColors.size() - 1))))
+            : Palette::AmbientDustColors.at(static_cast<size_t>(
+                  GetRandomValue(0, static_cast<int32_t>(Palette::AmbientDustColors.size() - 1))));
+
     return BlackHoleDustParticle{
         .radiusFrac = 1.0F,
         .armPeakAngle = static_cast<float>(GetRandomValue(0, blackHoleDustArmCount - 1)) /
@@ -4995,7 +5034,8 @@ auto spawnBlackHoleDustParticle() -> BlackHoleDustParticle
         .accelerating = GetRandomValue(0, 1) == 0,
         .fixedSpeed = blackHoleDustInwardSpeedMin +
                      (blackHoleDustInwardSpeedMax - blackHoleDustInwardSpeedMin) *
-                         static_cast<float>(GetRandomValue(0, 1000)) / 1000.0F};
+                         static_cast<float>(GetRandomValue(0, 1000)) / 1000.0F,
+        .color = color};
 }
 
 void updateBlackHoleDust(Game& game, float deltaTime)
@@ -5016,7 +5056,7 @@ void updateBlackHoleDust(Game& game, float deltaTime)
 
         if (dust.radiusFrac <= blackHoleDustCoreFraction)
         {
-            dust = spawnBlackHoleDustParticle();
+            dust = spawnBlackHoleDustParticle(game.run.blackhole.isKrakenPortal);
         }
     }
 }

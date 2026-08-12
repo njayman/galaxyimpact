@@ -1490,8 +1490,7 @@ void drawBlackHoleGradient(Vector2 center, float radius)
     }
 }
 
-void drawBlackHoleTwirl(Vector2 center, float radius, Color color,
-                        const std::vector<BlackHoleDustParticle>& dust)
+void drawBlackHoleTwirl(Vector2 center, float radius, const std::vector<BlackHoleDustParticle>& dust)
 {
     drawBlackHoleGradient(center, radius);
 
@@ -1515,7 +1514,7 @@ void drawBlackHoleTwirl(Vector2 center, float radius, Color color,
         const Vector2 p = Vector2Add(center, Vector2{.x = std::cos(angle) * d.radiusFrac * radius,
                                                       .y = std::sin(angle) * d.radiusFrac * radius});
         const float dotSize = 0.7F + 0.9F * (1.0F - d.radiusFrac);
-        DrawCircleV(p, dotSize, Fade(color, d.brightness));
+        DrawCircleV(p, dotSize, Fade(d.color, d.brightness));
     }
 }
 
@@ -1542,7 +1541,7 @@ void drawGameplayWorld(const Game& game)
     if (game.run.blackhole.active)
     {
         drawBlackHoleTwirl(game.run.blackhole.position, game.run.blackhole.influenceRadius,
-                            Palette::Haze, game.run.blackHoleDust);
+                            game.run.blackHoleDust);
     }
 
     if (game.run.wormhole.active)

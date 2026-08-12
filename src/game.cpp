@@ -112,11 +112,12 @@ auto InitGame() -> Game
             .radius = static_cast<float>(GetRandomValue(10, 20)) / 10.0F};
     }
 
-    const std::array<Color, 3> bgColors{Fade(Palette::StructMid, 0.15F), Fade(Palette::Haze, 0.1F),
-                                        Fade(Palette::AccentDim, 0.08F)};
+    const std::array<float, 3> bgColorAlpha{0.15F, 0.1F, 0.08F};
     game.run.bgParticles.resize(25);
     for (auto& particle : game.run.bgParticles)
     {
+        const auto colorIndex = static_cast<size_t>(
+            GetRandomValue(0, static_cast<int32_t>(Palette::AmbientDustColors.size() - 1)));
         particle = BgParticle{
             .position =
                 Vector2{.x = static_cast<float>(GetRandomValue(0, game.resources.screenWidth)),
@@ -124,8 +125,7 @@ auto InitGame() -> Game
             .velocity = Vector2{.x = static_cast<float>(GetRandomValue(-4, 4)) / 10.0F,
                                 .y = static_cast<float>(GetRandomValue(-4, 4)) / 10.0F},
             .radius = static_cast<float>(GetRandomValue(15, 40)) / 10.0F,
-            .color = bgColors.at(
-                static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(bgColors.size() - 1))))};
+            .color = Fade(Palette::AmbientDustColors.at(colorIndex), bgColorAlpha.at(colorIndex))};
     }
 
     game.run.borderStars.resize(400);
@@ -279,7 +279,7 @@ void resetRun(Game& game)
     game.run.blackHoleDust.resize(blackHoleDustCount);
     for (auto& dust : game.run.blackHoleDust)
     {
-        dust = spawnBlackHoleDustParticle();
+        dust = spawnBlackHoleDustParticle(false);
         dust.radiusFrac = static_cast<float>(GetRandomValue(220, 1000)) / 1000.0F;
     }
     game.run.wormhole = Wormhole{};
