@@ -3837,20 +3837,7 @@ auto drawDamageMeter(const Game& game, int32_t x, int32_t y) -> int32_t
     drawText(game, totalText.c_str(), x, y, 18,
              meter.total > 0 ? Palette::Crit : Palette::StructMid);
 
-    int32_t lineY = y + 22;
-    for (size_t i = 0; i < damageSourceNames.size(); i++)
-    {
-        const int32_t amount = meter.bySource.at(i);
-        if (amount <= 0)
-        {
-            continue;
-        }
-        const std::string line = std::format("{}: {}", damageSourceNames.at(i), amount);
-        drawText(game, line.c_str(), x, lineY, 14, Palette::StructLight);
-        lineY += 16;
-    }
-
-    return lineY - y;
+    return 22;
 }
 
 void drawChargePips(const Game& game, int32_t x, int32_t y)
