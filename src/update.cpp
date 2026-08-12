@@ -719,7 +719,7 @@ auto updateBanishedEntryCutscene(Game& game, float deltaTime) -> bool
             game.run.bgParticles.clear();
             game.run.stars.clear();
             game.run.player.position = Vector2{};
-            game.run.achievementToast = "It was never a ship.";
+            game.run.achievementToast = "I am the banished one. I am your doom.";
             game.run.achievementToastTimer = banishedRemainsDuration + banishedBreakApartDuration;
             game.run.bossCutscenePhase = 11;
             game.run.bossCutsceneTimer = banishedRemainsDuration;
