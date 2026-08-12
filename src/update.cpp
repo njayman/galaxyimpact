@@ -691,11 +691,76 @@ void spawnKillExplosion(Game& game, Vector2 position, Color color, int32_t parti
     }
 }
 
+auto updateBanishedEntryCutscene(Game& game, float deltaTime) -> bool
+{
+    game.run.bossCutsceneTimer -= deltaTime;
+
+    if (game.run.bossCutscenePhase == 10)
+    {
+        const Vector2 toCenter =
+            Vector2Subtract(game.run.blackhole.position, game.run.player.position);
+        if (Vector2Length(toCenter) > 1.0F)
+        {
+            game.run.player.position = Vector2Add(
+                game.run.player.position, Vector2Scale(toCenter, std::min(1.0F, 3.0F * deltaTime)));
+        }
+
+        if (game.run.bossCutsceneTimer <= 0)
+        {
+            game.run.inBanishedRealm = true;
+            game.run.punctumTrapActive = false;
+            game.run.blackhole.active = false;
+            game.run.enemies.clear();
+            game.run.eliteHazards.clear();
+            game.run.asteroids.clear();
+            game.run.bossProjectiles.clear();
+            game.run.gasHazards.clear();
+            game.run.mines.clear();
+            game.run.bgParticles.clear();
+            game.run.stars.clear();
+            game.run.player.position = Vector2{};
+            game.run.achievementToast = "It was never a ship.";
+            game.run.achievementToastTimer = banishedRemainsDuration + banishedBreakApartDuration;
+            game.run.bossCutscenePhase = 11;
+            game.run.bossCutsceneTimer = banishedRemainsDuration;
+        }
+        return true;
+    }
+
+    if (game.run.bossCutscenePhase == 11)
+    {
+        if (game.run.bossCutsceneTimer <= 0)
+        {
+            game.run.bossCutscenePhase = 12;
+            game.run.bossCutsceneTimer = banishedBreakApartDuration;
+        }
+        return true;
+    }
+
+    if (game.run.bossCutscenePhase == 12)
+    {
+        if (game.run.bossCutsceneTimer <= 0)
+        {
+            game.run.bossCutscenePhase = 0;
+            spawnBanished(game);
+        }
+        return true;
+    }
+
+    game.run.bossCutscenePhase = 0;
+    return false;
+}
+
 auto updateBossCutscene(Game& game, float deltaTime) -> bool
 {
     if (game.run.bossCutscenePhase == 0)
     {
         return false;
+    }
+
+    if (game.run.bossCutscenePhase >= 10)
+    {
+        return updateBanishedEntryCutscene(game, deltaTime);
     }
 
     Boss* kraken = nullptr;
@@ -892,21 +957,11 @@ void updateGameplay(Game& game, float deltaTime)
     {
         if (game.run.punctumTrapActive && !game.run.inBanishedRealm)
         {
-            game.run.inBanishedRealm = true;
-            game.run.punctumTrapActive = false;
-            game.run.blackhole.active = false;
-            game.run.enemies.clear();
-            game.run.eliteHazards.clear();
-            game.run.asteroids.clear();
-            game.run.bossProjectiles.clear();
-            game.run.gasHazards.clear();
-            game.run.mines.clear();
-            game.run.bgParticles.clear();
-            game.run.stars.clear();
-            game.run.player.position = Vector2{};
-            game.run.achievementToast = "It was never a ship.";
-            game.run.achievementToastTimer = 4.0F;
-            spawnBanished(game);
+            if (game.run.bossCutscenePhase == 0)
+            {
+                game.run.bossCutscenePhase = 10;
+                game.run.bossCutsceneTimer = banishedEntryTwirlDuration;
+            }
         }
         else
         {

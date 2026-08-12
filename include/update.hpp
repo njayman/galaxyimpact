@@ -87,6 +87,7 @@ void damagePlayer(Game& game, int32_t amount);
 void spawnDeathExplosion(Game& game);
 void updateDeathParticles(Game& game, float deltaTime);
 auto updateBossCutscene(Game& game, float deltaTime) -> bool;
+auto updateBanishedEntryCutscene(Game& game, float deltaTime) -> bool;
 void updateGameplay(Game& game, float deltaTime);
 auto resolveExpandingWaveHit(Game& game, Vector2 from, float radius,
                              bool allowDash) -> WaveHitResult;

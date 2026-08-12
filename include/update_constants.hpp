@@ -425,6 +425,12 @@ constexpr int32_t banishedEyeShieldDashDamageDivisor = 12;
 
 constexpr float banishedFleeSpeed = 2.4F;
 constexpr float banishedEyeFireDuration = 1.0F;
+
+constexpr float banishedOffscreenAggressionMult = 3.0F;
+
+constexpr float banishedEntryTwirlDuration = 1.6F;
+constexpr float banishedRemainsDuration = 2.0F;
+constexpr float banishedBreakApartDuration = 1.6F;
 constexpr float banishedBeamDps = 6.0F;
 
 constexpr float krakenRetreatSpeed = 900.0F;

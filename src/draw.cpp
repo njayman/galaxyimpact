@@ -1518,12 +1518,81 @@ void drawBlackHoleTwirl(Vector2 center, float radius, const std::vector<BlackHol
     }
 }
 
+void drawKrakenRemains(const Game& game)
+{
+    const Vector2 center{};
+    constexpr float radius = 220.0F;
+
+    if (game.run.bossCutscenePhase == 11)
+    {
+        const float blink = std::sin(static_cast<float>(GetTime()) * 30.0F) > 0 ? 1.0F : 0.0F;
+        const Color color = ColorLerp(Palette::StructDark, WHITE, blink * 0.5F);
+        drawKrakenShape(center, radius, 7.0F, color);
+
+        constexpr int32_t crackCount = 6;
+        for (int32_t i = 0; i < crackCount; i++)
+        {
+            const float seed = static_cast<float>(i) * 13.0F;
+            const float angle = hashNoise(seed) * 2.0F * std::numbers::pi_v<float>;
+            const Vector2 start = Vector2Add(
+                center, Vector2{.x = std::cos(angle) * radius * 0.15F,
+                               .y = std::sin(angle) * radius * 0.15F});
+            const Vector2 end = Vector2Add(
+                center, Vector2{.x = std::cos(angle) * radius * 0.95F,
+                               .y = std::sin(angle) * radius * 0.95F});
+            DrawLineEx(start, end, 2.5F, Fade(Palette::Void, 0.75F));
+        }
+        return;
+    }
+
+    if (game.run.bossCutscenePhase == 12)
+    {
+        const float progress =
+            std::clamp(1.0F - game.run.bossCutsceneTimer / banishedBreakApartDuration, 0.0F, 1.0F);
+
+        drawKrakenShape(center, radius * (1.0F - progress * 0.5F), 7.0F,
+                        Fade(Palette::StructDark, 1.0F - progress));
+
+        const auto crackCount = static_cast<int32_t>(4 + progress * 10.0F);
+        for (int32_t i = 0; i < crackCount; i++)
+        {
+            const float seed = static_cast<float>(i) * 13.0F;
+            const float angle = hashNoise(seed) * 2.0F * std::numbers::pi_v<float>;
+            const Vector2 start = Vector2Add(
+                center, Vector2{.x = std::cos(angle) * radius * 0.15F,
+                               .y = std::sin(angle) * radius * 0.15F});
+            const Vector2 end = Vector2Add(
+                center, Vector2{.x = std::cos(angle) * radius * 0.95F,
+                               .y = std::sin(angle) * radius * 0.95F});
+            DrawLineEx(start, end, 2.5F, Fade(Palette::Void, 0.75F * (1.0F - progress)));
+        }
+
+        constexpr int32_t fragmentCount = 8;
+        for (int32_t i = 0; i < fragmentCount; i++)
+        {
+            const float seed = static_cast<float>(i) * 19.0F;
+            const float angle = hashNoise(seed) * 2.0F * std::numbers::pi_v<float>;
+            const float dist = radius * 0.5F * progress;
+            const Vector2 pos =
+                Vector2Add(center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+            const float rot = hashNoise(seed + 1.0F) * 360.0F;
+            DrawPoly(pos, 5, radius * 0.16F * (1.0F - progress * 0.5F), rot,
+                    Fade(Palette::StructDark, 1.0F - progress));
+        }
+    }
+}
+
 void drawGameplayWorld(const Game& game)
 {
     drawBackgroundStars(game, game.run.player.position);
     drawPunctumLightning(game);
     drawSolarForgeCaveBackground(game);
     drawRustbloomBackground(game);
+
+    if (game.run.bossCutscenePhase == 11 || game.run.bossCutscenePhase == 12)
+    {
+        drawKrakenRemains(game);
+    }
 
     constexpr float arenaBoundaryVisibleMargin = 2000.0F;
     if (const float distFromCenter = Vector2Length(game.run.player.position);
@@ -1898,10 +1967,17 @@ void drawShipHull(ShipClass shipClass, Vector2 p, float r, float angle, Color sh
 void drawShip(const Game& game)
 {
     const Vector2 p = game.run.player.position;
-    const float r = game.run.player.radius;
+
+    const bool twirlingIn = game.run.bossCutscenePhase == 10;
+    const float twirlProgress =
+        twirlingIn ? std::clamp(1.0F - game.run.bossCutsceneTimer / banishedEntryTwirlDuration,
+                                0.0F, 1.0F)
+                   : 0.0F;
+    const float r = game.run.player.radius * (twirlingIn ? std::max(0.05F, 1.0F - twirlProgress) : 1.0F);
 
     const Vector2 dir = aimAtMouse(game);
-    const float angle = std::atan2(dir.y, dir.x) + std::numbers::pi_v<float> / 2;
+    const float angle = std::atan2(dir.y, dir.x) + std::numbers::pi_v<float> / 2 +
+                        (twirlingIn ? twirlProgress * 900.0F * DEG2RAD : 0.0F);
 
     const auto rotate = [angle](Vector2 v) -> Vector2
     {
@@ -1909,6 +1985,14 @@ void drawShip(const Game& game)
         const float sinA = std::sin(angle);
         return Vector2{.x = v.x * cosA - v.y * sinA, .y = v.x * sinA + v.y * cosA};
     };
+
+    if (twirlingIn)
+    {
+        const auto shipClass = static_cast<ShipClass>(game.resources.settings.shipIndex);
+        const Color shipColor = ColorLerp(game.run.player.color, BLACK, twirlProgress);
+        drawShipHull(shipClass, p, r, angle, shipColor);
+        return;
+    }
 
     if (game.run.player.dashing)
     {

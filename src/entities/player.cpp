@@ -336,11 +336,7 @@ void updatePlayerMovement(Game& game, float deltaTime)
 
     game.run.player.velocity = Vector2Subtract(game.run.player.position, startPosition);
 
-    if (game.run.inBanishedRealm)
-    {
-        // ponytail: no bounds inside the Banished realm, it's meant to feel infinite
-    }
-    else if (game.run.punctumTrapActive)
+    if (game.run.inBanishedRealm || game.run.punctumTrapActive)
     {
         if (game.run.player.position.x > punctumTrapHalfWidth)
         {

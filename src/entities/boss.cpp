@@ -807,6 +807,14 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
         updateBanishedGrab(game, boss, deltaTime);
     }
 
+    const bool bossVisible =
+        std::abs(bossCenter.x - game.run.player.position.x) <=
+            static_cast<float>(game.resources.screenWidth) / 2.0F + boss.size.x / 2.0F &&
+        std::abs(bossCenter.y - game.run.player.position.y) <=
+            static_cast<float>(game.resources.screenHeight) / 2.0F + boss.size.y / 2.0F;
+    const float tentacleDeltaTime =
+        bossVisible ? deltaTime : deltaTime * banishedOffscreenAggressionMult;
+
     bool allStaggered = true;
     for (int32_t i = 0; i < Boss::banishedTentacleCount; i++)
     {
@@ -826,7 +834,7 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
 
         if (boss.banishedPhase[idx] == 0)
         {
-            boss.banishedCooldown[idx] -= deltaTime;
+            boss.banishedCooldown[idx] -= tentacleDeltaTime;
             if (boss.banishedCooldown[idx] > 0)
             {
                 continue;
@@ -868,7 +876,7 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
 
         if (boss.banishedPhase[idx] == 1)
         {
-            boss.banishedTimer[idx] -= deltaTime;
+            boss.banishedTimer[idx] -= tentacleDeltaTime;
             if (boss.banishedTimer[idx] <= 0)
             {
                 boss.banishedPhase[idx] = 2;
@@ -889,7 +897,7 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
             boss.banishedTip[idx] =
                 Vector2Add(boss.banishedAnchor[idx], Vector2Scale(dir, dist * progress));
 
-            boss.banishedTimer[idx] -= deltaTime;
+            boss.banishedTimer[idx] -= tentacleDeltaTime;
 
             if (Vector2Distance(boss.banishedTip[idx], game.run.player.position) <=
                 banishedTentacleHitRadius + game.run.player.radius)
@@ -920,7 +928,7 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
 
         if (boss.banishedPhase[idx] == 3)
         {
-            boss.banishedTimer[idx] -= deltaTime;
+            boss.banishedTimer[idx] -= tentacleDeltaTime;
             if (boss.banishedTimer[idx] <= 0)
             {
                 boss.banishedPhase[idx] = 0;
