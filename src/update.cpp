@@ -4874,6 +4874,21 @@ void updateBlackHole(Game& game, float deltaTime)
     }
 }
 
+auto spawnBlackHoleDustParticle() -> BlackHoleDustParticle
+{
+    return BlackHoleDustParticle{
+        .radiusFrac = 1.0F,
+        .armPeakAngle = static_cast<float>(GetRandomValue(0, blackHoleDustArmCount - 1)) /
+                            static_cast<float>(blackHoleDustArmCount) * 2.0F *
+                            std::numbers::pi_v<float>,
+        .jitter = static_cast<float>(GetRandomValue(-1000, 1000)) / 1000.0F * 0.25F,
+        .brightness = static_cast<float>(GetRandomValue(60, 100)) / 100.0F,
+        .accelerating = GetRandomValue(0, 1) == 0,
+        .fixedSpeed = blackHoleDustInwardSpeedMin +
+                     (blackHoleDustInwardSpeedMax - blackHoleDustInwardSpeedMin) *
+                         static_cast<float>(GetRandomValue(0, 1000)) / 1000.0F};
+}
+
 void updateBlackHoleDust(Game& game, float deltaTime)
 {
     if (!game.run.blackhole.active)
@@ -4883,19 +4898,16 @@ void updateBlackHoleDust(Game& game, float deltaTime)
 
     for (auto& dust : game.run.blackHoleDust)
     {
-        const float speed = blackHoleDustInwardSpeedMin +
-                            (blackHoleDustInwardSpeedMax - blackHoleDustInwardSpeedMin) *
-                                (1.0F - dust.radiusFrac);
+        const float speed = dust.accelerating
+                                ? blackHoleDustInwardSpeedMin +
+                                      (blackHoleDustInwardSpeedMax - blackHoleDustInwardSpeedMin) *
+                                          (1.0F - dust.radiusFrac)
+                                : dust.fixedSpeed;
         dust.radiusFrac -= speed * deltaTime;
 
         if (dust.radiusFrac <= blackHoleDustCoreFraction)
         {
-            dust.radiusFrac = 1.0F;
-            dust.armPeakAngle = static_cast<float>(GetRandomValue(0, blackHoleDustArmCount - 1)) /
-                                    static_cast<float>(blackHoleDustArmCount) * 2.0F *
-                                    std::numbers::pi_v<float>;
-            dust.jitter = static_cast<float>(GetRandomValue(-1000, 1000)) / 1000.0F * 0.25F;
-            dust.brightness = static_cast<float>(GetRandomValue(60, 100)) / 100.0F;
+            dust = spawnBlackHoleDustParticle();
         }
     }
 }

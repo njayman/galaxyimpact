@@ -1496,7 +1496,7 @@ void drawBlackHoleTwirl(Vector2 center, float radius, Color color,
     drawBlackHoleGradient(center, radius);
 
     constexpr int32_t ringDotCount = 140;
-    constexpr float ringWidth = 0.05F;
+    constexpr float ringWidth = 0.012F;
     for (int32_t i = 0; i < ringDotCount; i++)
     {
         const float u = static_cast<float>(GetRandomValue(0, 1000)) / 1000.0F;
@@ -1505,7 +1505,7 @@ void drawBlackHoleTwirl(Vector2 center, float radius, Color color,
         const Vector2 p = Vector2Add(
             center, Vector2{.x = std::cos(angle) * r * radius, .y = std::sin(angle) * r * radius});
         const auto brightness = static_cast<float>(GetRandomValue(70, 100)) / 100.0F;
-        DrawCircleV(p, 1.4F, Fade(WHITE, brightness));
+        DrawCircleV(p, 1.2F, Fade(WHITE, brightness));
     }
 
     for (const auto& d : dust)
@@ -1514,7 +1514,8 @@ void drawBlackHoleTwirl(Vector2 center, float radius, Color color,
         const float angle = d.armPeakAngle + d.jitter - twist;
         const Vector2 p = Vector2Add(center, Vector2{.x = std::cos(angle) * d.radiusFrac * radius,
                                                       .y = std::sin(angle) * d.radiusFrac * radius});
-        DrawCircleV(p, 1.4F, Fade(color, d.brightness));
+        const float dotSize = 0.7F + 0.9F * (1.0F - d.radiusFrac);
+        DrawCircleV(p, dotSize, Fade(color, d.brightness));
     }
 }
 

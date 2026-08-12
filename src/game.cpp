@@ -13,7 +13,6 @@
 #include <cmath>
 #include <filesystem>
 #include <memory>
-#include <numbers>
 
 namespace
 {
@@ -280,13 +279,8 @@ void resetRun(Game& game)
     game.run.blackHoleDust.resize(blackHoleDustCount);
     for (auto& dust : game.run.blackHoleDust)
     {
-        dust = BlackHoleDustParticle{
-            .radiusFrac = static_cast<float>(GetRandomValue(220, 1000)) / 1000.0F,
-            .armPeakAngle = static_cast<float>(GetRandomValue(0, blackHoleDustArmCount - 1)) /
-                                static_cast<float>(blackHoleDustArmCount) * 2.0F *
-                                std::numbers::pi_v<float>,
-            .jitter = static_cast<float>(GetRandomValue(-1000, 1000)) / 1000.0F * 0.25F,
-            .brightness = static_cast<float>(GetRandomValue(60, 100)) / 100.0F};
+        dust = spawnBlackHoleDustParticle();
+        dust.radiusFrac = static_cast<float>(GetRandomValue(220, 1000)) / 1000.0F;
     }
     game.run.wormhole = Wormhole{};
     game.run.wormhole.timer = static_cast<float>(GetRandomValue(400, 700)) / 10.0F;

@@ -77,6 +77,8 @@ class BlackHoleDustParticle
     float armPeakAngle;
     float jitter;
     float brightness;
+    bool accelerating;
+    float fixedSpeed;
 };
 
 enum class WormholeFacing : std::uint8_t
