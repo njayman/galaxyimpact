@@ -80,7 +80,7 @@ constexpr float dashKillChargeRefund = 0.6F;
 constexpr float shieldKillChargeRefund = 0.6F;
 constexpr float shieldDashKillGraceDuration = 1.0F;
 
-constexpr int32_t blackHoleDustCount = 500;
+constexpr int32_t blackHoleDustCount = 250;
 constexpr int32_t blackHoleDustArmCount = 7;
 constexpr float blackHoleDustCoreFraction = 0.22F;
 constexpr float blackHoleDustTwistStrength = 4.0F;
