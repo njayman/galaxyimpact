@@ -410,13 +410,18 @@ constexpr float banishedTentacleCooldownMin = 2.0F;
 constexpr float banishedTentacleCooldownMax = 4.5F;
 constexpr float banishedTentacleHitRadius = 24.0F;
 constexpr int32_t banishedTentacleDamage = 4;
-constexpr float banishedGrabChance = 0.35F;
-constexpr float banishedGrabDuration = 4.0F;
-constexpr float banishedGrabRadius = 130.0F;
-constexpr float banishedGrabAngularSpeed = 3.2F;
-constexpr float banishedGrabChipInterval = 0.6F;
-constexpr int32_t banishedGrabChipDamage = 2;
-constexpr float banishedGrabEscapeDot = -0.4F;
+
+constexpr float banishedThrashArcDegrees = 110.0F;
+constexpr int32_t banishedThrashDamage = 7;
+
+constexpr float banishedCoilDuration = 0.35F;
+constexpr float banishedLaunchDistanceMin = 700.0F;
+constexpr float banishedLaunchDistanceMax = 1100.0F;
+constexpr float banishedLaunchDuration = 1.1F;
+constexpr float banishedCatchRadius = 50.0F;
+constexpr float banishedJuggleCancelDot = -0.4F;
+constexpr int32_t banishedJuggleMaxRounds = 3;
+constexpr float banishedGrabAttackChance = 0.15F;
 
 constexpr float banishedEyeChargeDuration = 5.0F;
 constexpr float banishedEyeCooldownAfterFire = 3.0F;

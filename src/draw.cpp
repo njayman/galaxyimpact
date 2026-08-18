@@ -2763,6 +2763,13 @@ void drawBoss(const Game& game, const Boss& boss)
         {
             drawBanishedEye(boss);
         }
+        if (game.run.player.launched && game.run.player.launchTargetTentacle >= 0 &&
+            game.run.player.launchTargetTentacle < Boss::banishedTentacleCount)
+        {
+            const Vector2 catcherTip = boss.banishedTip[static_cast<size_t>(
+                game.run.player.launchTargetTentacle)];
+            DrawLineEx(game.run.player.position, catcherTip, 2.0F, Fade(Palette::Crit, 0.35F));
+        }
     }
 
     if (boss.deathAnimTimer >= 0)
@@ -3497,6 +3504,20 @@ void drawBanishedShape(Vector2 center, const Boss& boss)
     DrawCircleV(center, coreRadius * 0.6F, Fade(Palette::PunctumHaze, 0.5F));
 }
 
+void drawBanishedPortal(Vector2 position, float progress)
+{
+    const float radius = 34.0F * std::clamp(progress, 0.0F, 1.0F);
+    if (radius < 1.0F)
+    {
+        return;
+    }
+    const auto t = static_cast<float>(GetTime());
+    DrawCircleV(position, radius, Fade(Palette::Void, 0.35F));
+    DrawRing(position, radius - 4, radius, t * -90.0F, t * -90.0F + 300.0F, 24, Fade(Palette::Crit, 0.8F));
+    DrawCircleLines(static_cast<int32_t>(position.x), static_cast<int32_t>(position.y),
+                    static_cast<int32_t>(radius), Fade(Palette::PunctumHaze, 0.6F));
+}
+
 void drawBanishedTentacle(Vector2 center, const Boss& boss, int32_t slot)
 {
     const int32_t phase = boss.banishedPhase[static_cast<size_t>(slot)];
@@ -3541,8 +3562,35 @@ void drawBanishedTentacle(Vector2 center, const Boss& boss, int32_t slot)
         return;
     }
 
+    if (phase == 6)
+    {
+        const Vector2 tip = boss.banishedTip[static_cast<size_t>(slot)];
+        for (int32_t k = 0; k < 3; k++)
+        {
+            const float a = seed + t * 4.0F + static_cast<float>(k) * 2.1F;
+            const Vector2 wrapPos =
+                Vector2Add(tip, Vector2{.x = std::cos(a) * 22.0F, .y = std::sin(a) * 22.0F});
+            DrawLineEx(center, wrapPos, 9.0F, Fade(Palette::Crit, 0.55F));
+        }
+        DrawCircleLines(static_cast<int32_t>(tip.x), static_cast<int32_t>(tip.y), 26.0F,
+                        Fade(WHITE, 0.5F));
+        return;
+    }
+
     const Vector2 anchor = boss.banishedAnchor[static_cast<size_t>(slot)];
     const Vector2 tip = boss.banishedTip[static_cast<size_t>(slot)];
+
+    if (phase == 1)
+    {
+        const float progress =
+            1.0F - boss.banishedTimer[static_cast<size_t>(slot)] / banishedTentacleWindup;
+        drawBanishedPortal(anchor, progress);
+    }
+    else if (phase == 5)
+    {
+        drawBanishedPortal(anchor, 1.0F);
+    }
+
     if (Vector2Distance(anchor, tip) < 2.0F)
     {
         return;

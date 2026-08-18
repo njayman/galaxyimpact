@@ -663,54 +663,123 @@ void damageBanishedEyeBurst(Game& game, Boss& boss, int32_t divisor)
     playSFX(game, game.resources.sounds.critical);
 }
 
-void updateBanishedGrab(Game& game, Boss& boss, float deltaTime)
+void beginBanishedCoil(Boss& boss, Player& player, int32_t idx, Vector2 contactPoint)
+{
+    boss.banishedGrabbing[static_cast<size_t>(idx)] = true;
+    boss.banishedPhase[static_cast<size_t>(idx)] = 6;
+    boss.banishedTimer[static_cast<size_t>(idx)] = banishedCoilDuration;
+    boss.banishedTip[static_cast<size_t>(idx)] = contactPoint;
+    player.grabbed = true;
+    player.grabbingTentacle = idx;
+    player.launched = false;
+    player.launchTargetTentacle = -1;
+    player.position = contactPoint;
+}
+
+void resolveBanishedCoil(Game& game, Boss& boss, int32_t idx)
 {
     Player& player = game.run.player;
-    const int32_t i = player.grabbingTentacle;
-    if (i < 0 || i >= Boss::banishedTentacleCount || !boss.banishedGrabbing[static_cast<size_t>(i)])
+    const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
+                             .y = boss.position.y + boss.size.y / 2};
+
+    player.grabbed = false;
+    player.grabbingTentacle = -1;
+
+    if (player.launchRound >= banishedJuggleMaxRounds)
     {
-        player.grabbed = false;
-        player.grabbingTentacle = -1;
+        damagePlayer(game, enemyDamage(game, banishedThrashDamage));
+        player.launchRound = 0;
+        boss.banishedGrabbing[static_cast<size_t>(idx)] = false;
+        boss.banishedPhase[static_cast<size_t>(idx)] = 3;
+        boss.banishedTimer[static_cast<size_t>(idx)] = banishedTentacleRetreat;
         return;
     }
 
-    boss.banishedTimer[static_cast<size_t>(i)] -= deltaTime;
-
-    const Vector2 tangent{.x = -std::sin(player.grabAngle), .y = std::cos(player.grabAngle)};
-    player.grabAngle += banishedGrabAngularSpeed * deltaTime;
-    player.position =
-        Vector2Add(player.grabCenter, Vector2{.x = std::cos(player.grabAngle) * player.grabRadius,
-                                              .y = std::sin(player.grabAngle) * player.grabRadius});
-
-    player.grabChipTimer -= deltaTime;
-    if (player.grabChipTimer <= 0)
+    int32_t catcher = -1;
+    for (int32_t attempt = 0; attempt < Boss::banishedTentacleCount; attempt++)
     {
-        player.grabChipTimer = banishedGrabChipInterval;
-        damagePlayer(game, banishedGrabChipDamage);
+        const int32_t candidate = GetRandomValue(0, Boss::banishedTentacleCount - 1);
+        if (candidate == idx || boss.banishedStaggered[static_cast<size_t>(candidate)] ||
+            boss.banishedGrabbing[static_cast<size_t>(candidate)])
+        {
+            continue;
+        }
+        catcher = candidate;
+        break;
     }
 
-    bool escaped = false;
+    if (catcher < 0)
+    {
+        damagePlayer(game, enemyDamage(game, banishedThrashDamage));
+        player.launchRound = 0;
+        boss.banishedGrabbing[static_cast<size_t>(idx)] = false;
+        boss.banishedPhase[static_cast<size_t>(idx)] = 3;
+        boss.banishedTimer[static_cast<size_t>(idx)] = banishedTentacleRetreat;
+        return;
+    }
+
+    player.launchRound++;
+
+    const float away = std::atan2(player.position.y - bossCenter.y, player.position.x - bossCenter.x);
+    const float jitter = (static_cast<float>(GetRandomValue(-60, 60))) * DEG2RAD;
+    const float angle = away + jitter;
+    const float distance = static_cast<float>(
+        GetRandomValue(static_cast<int32_t>(banishedLaunchDistanceMin),
+                       static_cast<int32_t>(banishedLaunchDistanceMax)));
+    const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
+    player.launched = true;
+    player.launchVelocity = Vector2Scale(dir, distance / banishedLaunchDuration);
+    player.launchTargetTentacle = catcher;
+
+    boss.banishedGrabbing[static_cast<size_t>(catcher)] = true;
+    boss.banishedPhase[static_cast<size_t>(catcher)] = 5;
+    boss.banishedTip[static_cast<size_t>(catcher)] = boss.banishedTip[static_cast<size_t>(idx)];
+    boss.banishedAnchor[static_cast<size_t>(catcher)] = boss.banishedTip[static_cast<size_t>(catcher)];
+
+    boss.banishedGrabbing[static_cast<size_t>(idx)] = false;
+    boss.banishedPhase[static_cast<size_t>(idx)] = 3;
+    boss.banishedTimer[static_cast<size_t>(idx)] = banishedTentacleRetreat;
+}
+
+void updateBanishedLaunch(Game& game, Boss& boss, float deltaTime)
+{
+    Player& player = game.run.player;
+    const int32_t idx = player.launchTargetTentacle;
+
+    if (idx < 0 || idx >= Boss::banishedTentacleCount || boss.banishedStaggered[static_cast<size_t>(idx)])
+    {
+        player.launched = false;
+        player.launchTargetTentacle = -1;
+        return;
+    }
+
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
     {
         const Vector2 aim = aimAtMouse(game);
-        const float dot = aim.x * tangent.x + aim.y * tangent.y;
-        if (dot <= banishedGrabEscapeDot)
+        const Vector2 launchDir = Vector2Normalize(player.launchVelocity);
+        const float dot = aim.x * -launchDir.x + aim.y * -launchDir.y;
+        if (dot <= banishedJuggleCancelDot)
         {
-            escaped = true;
+            player.launched = false;
             player.dashing = true;
             player.dashTimer = dashChunkDuration(game);
             player.dashVelocity = Vector2Scale(aim, dashSpeed * currentShip(game).dashDistanceMult);
             player.immunityTimer = std::max(player.immunityTimer, 0.5F);
+
+            boss.banishedGrabbing[static_cast<size_t>(idx)] = false;
+            boss.banishedPhase[static_cast<size_t>(idx)] = 3;
+            boss.banishedTimer[static_cast<size_t>(idx)] = banishedTentacleRetreat;
+            player.launchTargetTentacle = -1;
+            return;
         }
     }
 
-    if (escaped || boss.banishedTimer[static_cast<size_t>(i)] <= 0)
+    player.position = Vector2Add(player.position, Vector2Scale(player.launchVelocity, deltaTime));
+
+    if (Vector2Distance(player.position, boss.banishedTip[static_cast<size_t>(idx)]) <=
+        banishedCatchRadius)
     {
-        player.grabbed = false;
-        player.grabbingTentacle = -1;
-        boss.banishedGrabbing[static_cast<size_t>(i)] = false;
-        boss.banishedPhase[static_cast<size_t>(i)] = 3;
-        boss.banishedTimer[static_cast<size_t>(i)] = banishedTentacleRetreat;
+        beginBanishedCoil(boss, player, idx, player.position);
     }
 }
 
@@ -740,6 +809,9 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
         boss.banishedStage = 3;
         game.run.player.grabbed = false;
         game.run.player.grabbingTentacle = -1;
+        game.run.player.launched = false;
+        game.run.player.launchTargetTentacle = -1;
+        game.run.player.launchRound = 0;
         return;
     }
 
@@ -787,6 +859,11 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
             boss.banishedStage = 0;
             boss.banishedEyeCharging = false;
             boss.banishedEyeChargeBurstUsed = false;
+            game.run.player.grabbed = false;
+            game.run.player.grabbingTentacle = -1;
+            game.run.player.launched = false;
+            game.run.player.launchTargetTentacle = -1;
+            game.run.player.launchRound = 0;
             for (int32_t t = 0; t < Boss::banishedTentacleCount; t++)
             {
                 boss.banishedStaggered[static_cast<size_t>(t)] = false;
@@ -802,9 +879,9 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
         return;
     }
 
-    if (game.run.player.grabbed)
+    if (game.run.player.launched)
     {
-        updateBanishedGrab(game, boss, deltaTime);
+        updateBanishedLaunch(game, boss, deltaTime);
     }
 
     const bool bossVisible =
@@ -827,7 +904,7 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
         {
             allStaggered = false;
         }
-        if (boss.banishedStaggered[idx] || boss.banishedGrabbing[idx])
+        if (boss.banishedStaggered[idx])
         {
             continue;
         }
@@ -843,22 +920,13 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
             const float distToPlayer = Vector2Distance(bossCenter, game.run.player.position);
             boss.banishedIsFar[idx] = distToPlayer > banishedNearReach;
 
-            if (!boss.banishedIsFar[idx] && !game.run.player.grabbed &&
-                GetRandomValue(0, 99) < static_cast<int32_t>(banishedGrabChance * 100))
+            int32_t kind = GetRandomValue(0, 1);
+            if (!boss.banishedIsFar[idx] && !game.run.player.grabbed && !game.run.player.launched &&
+                GetRandomValue(0, 99) < static_cast<int32_t>(banishedGrabAttackChance * 100))
             {
-                boss.banishedGrabbing[idx] = true;
-                boss.banishedPhase[idx] = 1;
-                boss.banishedTimer[idx] = banishedGrabDuration;
-                game.run.player.grabbed = true;
-                game.run.player.grabbingTentacle = i;
-                game.run.player.grabCenter = bossCenter;
-                game.run.player.grabAngle =
-                    std::atan2(game.run.player.position.y - bossCenter.y,
-                              game.run.player.position.x - bossCenter.x);
-                game.run.player.grabRadius = banishedGrabRadius;
-                game.run.player.grabChipTimer = banishedGrabChipInterval;
-                continue;
+                kind = 2;
             }
+            boss.banishedAttackKind[idx] = kind;
 
             const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
             boss.banishedAnchor[idx] =
@@ -869,6 +937,18 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
                     : Vector2Add(bossCenter, Vector2{.x = std::cos(angle) * boss.size.x / 2 * 0.9F,
                                                      .y = std::sin(angle) * boss.size.y / 2 * 0.9F});
             boss.banishedTip[idx] = boss.banishedAnchor[idx];
+
+            if (kind == 1)
+            {
+                const float startAngle =
+                    std::atan2(game.run.player.position.y - boss.banishedAnchor[idx].y,
+                              game.run.player.position.x - boss.banishedAnchor[idx].x);
+                const float sweepDir = GetRandomValue(0, 1) == 0 ? 1.0F : -1.0F;
+                boss.banishedThrashStartAngle[idx] = startAngle;
+                boss.banishedThrashEndAngle[idx] =
+                    startAngle + sweepDir * banishedThrashArcDegrees * DEG2RAD;
+            }
+
             boss.banishedPhase[idx] = 1;
             boss.banishedTimer[idx] = banishedTentacleWindup;
             continue;
@@ -889,13 +969,29 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
         {
             const float progress =
                 std::clamp(1.0F - boss.banishedTimer[idx] / banishedTentacleStrike, 0.0F, 1.0F);
-            const Vector2 toPlayer = Vector2Subtract(game.run.player.position, boss.banishedAnchor[idx]);
-            const float dist = std::min(Vector2Length(toPlayer), banishedNearReach * 1.3F);
-            const Vector2 dir = Vector2Length(toPlayer) > 0.01F
-                                    ? Vector2Scale(toPlayer, 1.0F / Vector2Length(toPlayer))
-                                    : Vector2{.x = 0, .y = 1};
-            boss.banishedTip[idx] =
-                Vector2Add(boss.banishedAnchor[idx], Vector2Scale(dir, dist * progress));
+
+            if (boss.banishedAttackKind[idx] == 1)
+            {
+                const float radius = std::min(
+                    Vector2Distance(boss.banishedAnchor[idx], game.run.player.position),
+                    banishedNearReach * 1.3F);
+                const float angle =
+                    boss.banishedThrashStartAngle[idx] +
+                    (boss.banishedThrashEndAngle[idx] - boss.banishedThrashStartAngle[idx]) * progress;
+                const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
+                boss.banishedTip[idx] = Vector2Add(boss.banishedAnchor[idx], Vector2Scale(dir, radius));
+            }
+            else
+            {
+                const Vector2 toPlayer =
+                    Vector2Subtract(game.run.player.position, boss.banishedAnchor[idx]);
+                const float dist = std::min(Vector2Length(toPlayer), banishedNearReach * 1.3F);
+                const Vector2 dir = Vector2Length(toPlayer) > 0.01F
+                                        ? Vector2Scale(toPlayer, 1.0F / Vector2Length(toPlayer))
+                                        : Vector2{.x = 0, .y = 1};
+                boss.banishedTip[idx] =
+                    Vector2Add(boss.banishedAnchor[idx], Vector2Scale(dir, dist * progress));
+            }
 
             boss.banishedTimer[idx] -= tentacleDeltaTime;
 
@@ -909,9 +1005,15 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
                     boss.banishedTentacleHitFlash[idx] = UpdateConstants::hitFlashDuration;
                     triggerBossShieldDashShake(game);
                 }
+                else if (boss.banishedAttackKind[idx] == 2)
+                {
+                    beginBanishedCoil(boss, game.run.player, i, boss.banishedTip[idx]);
+                }
                 else
                 {
-                    damagePlayer(game, enemyDamage(game, banishedTentacleDamage));
+                    const int32_t dmg =
+                        boss.banishedAttackKind[idx] == 1 ? banishedThrashDamage : banishedTentacleDamage;
+                    damagePlayer(game, enemyDamage(game, dmg));
                     boss.banishedPhase[idx] = 3;
                     boss.banishedTimer[idx] = banishedTentacleRetreat;
                 }
@@ -937,6 +1039,26 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
                         static_cast<int32_t>(banishedTentacleCooldownMin * 10),
                         static_cast<int32_t>(banishedTentacleCooldownMax * 10))) /
                     10.0F;
+            }
+            continue;
+        }
+
+        if (boss.banishedPhase[idx] == 5)
+        {
+            const float easeLerp = std::clamp(3.0F * deltaTime, 0.0F, 1.0F);
+            boss.banishedTip[idx] = Vector2Lerp(boss.banishedTip[idx], game.run.player.position, easeLerp);
+            boss.banishedAnchor[idx] = boss.banishedTip[idx];
+            continue;
+        }
+
+        if (boss.banishedPhase[idx] == 6)
+        {
+            game.run.player.position = boss.banishedTip[idx];
+            game.run.player.dashing = false;
+            boss.banishedTimer[idx] -= deltaTime;
+            if (boss.banishedTimer[idx] <= 0)
+            {
+                resolveBanishedCoil(game, boss, i);
             }
         }
     }

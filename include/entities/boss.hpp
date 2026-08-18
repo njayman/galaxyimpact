@@ -207,6 +207,9 @@ class Boss
     std::array<Vector2, banishedTentacleCount> banishedAnchor{};
     std::array<Vector2, banishedTentacleCount> banishedTip{};
     std::array<float, banishedTentacleCount> banishedTentacleHitFlash{};
+    std::array<int32_t, banishedTentacleCount> banishedAttackKind{};
+    std::array<float, banishedTentacleCount> banishedThrashStartAngle{};
+    std::array<float, banishedTentacleCount> banishedThrashEndAngle{};
 
     int32_t banishedStage = 0;
     bool banishedEyeCharging = false;

@@ -49,10 +49,11 @@ class Player
 
     bool grabbed = false;
     int32_t grabbingTentacle = -1;
-    Vector2 grabCenter{};
-    float grabAngle = 0;
-    float grabRadius = 0;
-    float grabChipTimer = 0;
+
+    bool launched = false;
+    Vector2 launchVelocity{};
+    int32_t launchRound = 0;
+    int32_t launchTargetTentacle = -1;
 
     bool comboActive = false;
     bool comboRefundEligible = false;
