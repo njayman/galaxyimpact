@@ -1482,7 +1482,7 @@ auto shockwaveRadius(int32_t level, bool evolved) -> float
     return radius;
 }
 
-auto weaponCooldown(const Game& game, WeaponType kind, int32_t level) -> float
+auto weaponCooldown(const Game& game, WeaponType kind, int32_t level, bool evolved) -> float
 {
     float base = weaponBaseCooldown.at(static_cast<size_t>(kind));
     base -= static_cast<float>(level) * 0.02F;
@@ -1493,6 +1493,10 @@ auto weaponCooldown(const Game& game, WeaponType kind, int32_t level) -> float
     if (kind == WeaponType::Forward)
     {
         base /= currentShip(game).forwardFireRateMult;
+    }
+    if (kind == WeaponType::Shock && evolved)
+    {
+        base /= 2.0F; // evolution doubles Shockwave's attack speed
     }
     base *= 1 - 0.1F * static_cast<float>(
                            game.run.skillLevels.at(static_cast<size_t>(SkillType::Cooldown)));
@@ -1550,7 +1554,7 @@ auto estimatePlayerDps(const Game& game) -> float
             continue;
         }
         const float dmg = static_cast<float>(weaponDamage(game, w.level));
-        const float cooldown = std::max(weaponCooldown(game, w.type, w.level), 0.05F);
+        const float cooldown = std::max(weaponCooldown(game, w.type, w.level, w.evolved), 0.05F);
 
         float hitsPerCooldown = 1.0F;
         switch (w.type)
@@ -1799,7 +1803,7 @@ void updateWeapons(Game& game, float deltaTime)
         {
             continue;
         }
-        w.timer = weaponCooldown(game, w.type, w.level);
+        w.timer = weaponCooldown(game, w.type, w.level, w.evolved);
 
         switch (w.type)
         {
@@ -1908,8 +1912,18 @@ void updateWeapons(Game& game, float deltaTime)
                     game.run.player.health++;
                 }
             }
-            aoePulse(game, game.run.player.position, radius, dmg, DamageSource::Shock,
-                     w.evolved ? 40.0F : 0.0F);
+            {
+                float knockback = shockKnockbackBase + static_cast<float>(w.level) * shockKnockbackPerLevel;
+                if (w.evolved)
+                {
+                    knockback += shockEvolvedKnockbackBonus;
+                }
+                const float bossSlowMult = std::clamp(
+                    shockBossSlowMultBase - static_cast<float>(w.level) * shockBossSlowMultPerLevel,
+                    shockBossSlowMultMin, 1.0F);
+                aoePulse(game, game.run.player.position, radius, dmg, DamageSource::Shock, knockback,
+                         bossSlowMult, shockBossSlowDuration, shockProjectileRepelForce);
+            }
             w.flashTimer = UpdateConstants::shockFlashDuration;
             break;
         }
@@ -2025,7 +2039,8 @@ void recordDamage(Game& game, DamageSource source, int32_t amount)
 }
 
 void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSource source,
-              float knockback)
+              float knockback, float bossSlowMult, float bossSlowDuration,
+              float projectileRepelForce)
 {
     bool hitAny = false;
 
@@ -2077,6 +2092,33 @@ void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSourc
         {
             damageBoss(game, boss, dmg);
             recordDamage(game, source, dmg);
+            if (bossSlowDuration > 0)
+            {
+                // Bosses are too heavy to knock back, so the same hit slows them (and any
+                // in-progress dash) instead of shoving their position.
+                boss.shockwaveSlowTimer = std::max(boss.shockwaveSlowTimer, bossSlowDuration);
+                boss.shockwaveSlowMult = std::min(boss.shockwaveSlowMult, bossSlowMult);
+            }
+            hitAny = true;
+        }
+    }
+
+    if (projectileRepelForce > 0)
+    {
+        for (auto& proj : game.run.bossProjectiles)
+        {
+            if (!proj.active || proj.fromPlayer ||
+                Vector2Distance(center, proj.position) > radius + proj.radius)
+            {
+                continue;
+            }
+            const Vector2 pushDir = Vector2Distance(center, proj.position) > 0.01F
+                                        ? Vector2Normalize(Vector2Subtract(proj.position, center))
+                                        : Vector2{.x = 0, .y = -1};
+            const float speed = Vector2Length(proj.velocity);
+            proj.velocity = Vector2Scale(pushDir, speed > 0.01F ? speed : projectileRepelForce);
+            proj.position = Vector2Add(proj.position, Vector2Scale(pushDir, projectileRepelForce));
+            proj.homing = false; // otherwise it just curves straight back at the player
             hitAny = true;
         }
     }

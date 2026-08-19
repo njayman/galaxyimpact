@@ -62,6 +62,9 @@ set(GALAXYIMPACT_SOURCES
     src/raygui_impl.cpp
     src/sandbox.cpp
     src/settings.cpp
+    src/ships/bastion.cpp
+    src/ships/interceptor.cpp
+    src/ships/ranger.cpp
     src/sound.cpp
     src/update.cpp
 )

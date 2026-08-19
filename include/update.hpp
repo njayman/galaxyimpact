@@ -99,7 +99,7 @@ auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>;
 auto farthestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>;
 auto nearestEnemyExcluding(const Game& game, Vector2 from,
                            Vector2 exclude) -> std::optional<Vector2>;
-auto weaponCooldown(const Game& game, WeaponType kind, int32_t level) -> float;
+auto weaponCooldown(const Game& game, WeaponType kind, int32_t level, bool evolved) -> float;
 auto weaponDamage(const Game& game, int32_t level) -> int32_t;
 auto ricochetLevel(const Game& game) -> int32_t;
 auto estimatePlayerDps(const Game& game) -> float;
@@ -132,7 +132,8 @@ void applyActiveElementalDebuffs(Game& game, Boss& boss);
 void collectElementalPickup(Game& game, ElementType element, ElementMechanism mechanism);
 void updatePlayerBuffs(Game& game, float deltaTime);
 void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSource source,
-              float knockback = 0);
+              float knockback = 0, float bossSlowMult = 1.0F, float bossSlowDuration = 0,
+              float projectileRepelForce = 0);
 void updateWaveSpawner(Game& game, float deltaTime);
 void updateEliteHazards(Game& game, float deltaTime);
 void damageEliteHazard(Game& game, size_t index, int32_t amount, bool applyShake = true);

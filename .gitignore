@@ -9,5 +9,6 @@ compile_commands.json
 *~
 .DS_Store
 tools/bgm_prototype
+tools/ship_playground
 __pycache__/
 *.pyc

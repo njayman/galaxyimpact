@@ -1,0 +1,336 @@
+// Standalone ship-shape playground. Edit drawShip() below, rebuild, rerun — no engine build
+// needed. Ship faces the mouse cursor so you can check the silhouette at any angle.
+//
+// Build:  cd tools && make ship_playground
+// Run:    ./ship_playground
+
+#include "raylib.h"
+#include "raymath.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <format>
+#include <initializer_list>
+#include <string>
+
+namespace
+{
+
+// ---- EDIT BELOW: this is the whole ship shape -----------------------------------------------
+//
+// p      = ship center (screen position)
+// r      = ship radius (size knob — everything should scale with this)
+// angle  = facing angle in radians (0 = pointing toward -Y / up, matches drawShipHull)
+// color  = base ship color, tweak with ColorBrightness(color, -1..1) for shading
+//
+// `rotate(v)` turns a local offset (x right, y down — nose is -Y) into world space at the
+// ship's facing angle. Same convention as src/draw.cpp's drawShipHull, so whatever you build
+// here can be pasted straight into that function's switch cases.
+
+void drawShip(Vector2 p, float r, float angle, Color color)
+{
+    const auto rotate = [angle](Vector2 v) -> Vector2
+    {
+        const float cosA = std::cos(angle);
+        const float sinA = std::sin(angle);
+        return Vector2{.x = v.x * cosA - v.y * sinA, .y = v.x * sinA + v.y * cosA};
+    };
+    const auto at = [&](float x, float y) -> Vector2 { return Vector2Add(p, rotate(Vector2{.x = x * r, .y = y * r})); };
+    (void)color; // hull uses its own fixed pixel-art palette, not the ship's tint color
+
+    {
+        const Color shapeColor0 = Color{.r = 26, .g = 28, .b = 44, .a = 255};
+        const std::array<Vector2, 23> shape0 = {
+            at(-0.160F, 0.760F), at(0.160F, 0.760F),  at(0.320F, 0.920F),  at(0.320F, 0.200F),
+            at(0.400F, 0.280F),  at(0.960F, -0.280F), at(0.960F, 0.360F),  at(0.400F, 0.920F),
+            at(0.320F, 1.000F),  at(0.240F, 0.920F),  at(0.160F, 0.920F),  at(0.080F, 0.840F),
+            at(-0.080F, 0.840F), at(-0.160F, 0.920F), at(-0.240F, 0.920F), at(-0.320F, 1.000F),
+            at(-0.400F, 0.920F), at(-0.805F, 0.515F), at(-0.960F, 0.360F), at(-0.960F, -0.280F),
+            at(-0.400F, 0.280F), at(-0.320F, 0.200F), at(-0.320F, 0.920F),
+        };
+        DrawTriangle(shape0[22], shape0[21], shape0[20], shapeColor0);
+        DrawTriangle(shape0[22], shape0[20], shape0[19], shapeColor0);
+        DrawTriangle(shape0[22], shape0[19], shape0[18], shapeColor0);
+        DrawTriangle(shape0[22], shape0[18], shape0[17], shapeColor0);
+        DrawTriangle(shape0[22], shape0[17], shape0[16], shapeColor0);
+        DrawTriangle(shape0[22], shape0[16], shape0[15], shapeColor0);
+        DrawTriangle(shape0[0], shape0[22], shape0[15], shapeColor0);
+        DrawTriangle(shape0[0], shape0[15], shape0[14], shapeColor0);
+        DrawTriangle(shape0[0], shape0[14], shape0[13], shapeColor0);
+        DrawTriangle(shape0[0], shape0[13], shape0[12], shapeColor0);
+        DrawTriangle(shape0[0], shape0[12], shape0[11], shapeColor0);
+        DrawTriangle(shape0[11], shape0[10], shape0[9], shapeColor0);
+        DrawTriangle(shape0[7], shape0[6], shape0[5], shapeColor0);
+        DrawTriangle(shape0[8], shape0[7], shape0[5], shapeColor0);
+        DrawTriangle(shape0[8], shape0[5], shape0[4], shapeColor0);
+        DrawTriangle(shape0[4], shape0[3], shape0[2], shapeColor0);
+        DrawTriangle(shape0[8], shape0[4], shape0[2], shapeColor0);
+        DrawTriangle(shape0[9], shape0[8], shape0[2], shapeColor0);
+        DrawTriangle(shape0[11], shape0[9], shape0[2], shapeColor0);
+        DrawTriangle(shape0[11], shape0[2], shape0[1], shapeColor0);
+        DrawTriangle(shape0[11], shape0[1], shape0[0], shapeColor0);
+    }
+    {
+        const Color shapeColor1 = Color{.r = 163, .g = 73, .b = 79, .a = 255};
+        const std::array<Vector2, 29> shape1 = {
+            at(-0.080F, -0.440F), at(0.000F, -0.520F),  at(0.080F, -0.440F),  at(0.160F, -0.360F),
+            at(0.160F, -0.280F),  at(0.240F, -0.200F),  at(0.240F, -0.120F),  at(0.320F, -0.040F),
+            at(0.320F, 0.280F),   at(0.400F, 0.360F),   at(0.960F, -0.200F),  at(0.960F, 0.280F),
+            at(0.320F, 0.920F),   at(0.240F, 0.840F),   at(0.160F, 0.840F),   at(-0.160F, 0.840F),
+            at(-0.240F, 0.840F),  at(-0.320F, 0.920F),  at(-0.960F, 0.280F),  at(-0.960F, -0.200F),
+            at(-0.400F, 0.360F),  at(-0.320F, 0.280F),  at(-0.400F, 0.360F),  at(-0.320F, 0.280F),
+            at(-0.320F, -0.040F), at(-0.240F, -0.120F), at(-0.240F, -0.200F), at(-0.160F, -0.280F),
+            at(-0.160F, -0.360F),
+        };
+        DrawTriangle(shape1[0], shape1[28], shape1[27], shapeColor1);
+        DrawTriangle(shape1[27], shape1[26], shape1[25], shapeColor1);
+        DrawTriangle(shape1[0], shape1[27], shape1[25], shapeColor1);
+        DrawTriangle(shape1[19], shape1[18], shape1[17], shapeColor1);
+        DrawTriangle(shape1[19], shape1[17], shape1[16], shapeColor1);
+        DrawTriangle(shape1[19], shape1[16], shape1[15], shapeColor1);
+        DrawTriangle(shape1[20], shape1[19], shape1[18], shapeColor1);
+        DrawTriangle(shape1[20], shape1[18], shape1[15], shapeColor1);
+        DrawTriangle(shape1[21], shape1[20], shape1[15], shapeColor1);
+        DrawTriangle(shape1[24], shape1[21], shape1[15], shapeColor1);
+        DrawTriangle(shape1[13], shape1[12], shape1[11], shapeColor1);
+        DrawTriangle(shape1[14], shape1[13], shape1[11], shapeColor1);
+        DrawTriangle(shape1[15], shape1[14], shape1[11], shapeColor1);
+        DrawTriangle(shape1[11], shape1[10], shape1[9], shapeColor1);
+        DrawTriangle(shape1[15], shape1[11], shape1[9], shapeColor1);
+        DrawTriangle(shape1[15], shape1[9], shape1[8], shapeColor1);
+        DrawTriangle(shape1[15], shape1[8], shape1[7], shapeColor1);
+        DrawTriangle(shape1[15], shape1[7], shape1[6], shapeColor1);
+        DrawTriangle(shape1[15], shape1[6], shape1[5], shapeColor1);
+        DrawTriangle(shape1[15], shape1[5], shape1[4], shapeColor1);
+        DrawTriangle(shape1[15], shape1[4], shape1[3], shapeColor1);
+        DrawTriangle(shape1[15], shape1[3], shape1[2], shapeColor1);
+        DrawTriangle(shape1[15], shape1[2], shape1[1], shapeColor1);
+        DrawTriangle(shape1[15], shape1[1], shape1[0], shapeColor1);
+        DrawTriangle(shape1[15], shape1[0], shape1[25], shapeColor1);
+        DrawTriangle(shape1[15], shape1[25], shape1[24], shapeColor1);
+    }
+    {
+        const Color shapeColor2 = Color{.r = 26, .g = 28, .b = 44, .a = 255};
+        const std::array<Vector2, 6> shape2 = {
+            at(-0.880F, -0.840F), at(-0.800F, -0.760F), at(-0.640F, -0.920F),
+            at(-0.560F, -0.120F), at(-0.560F, -0.040F), at(-0.880F, -0.360F),
+        };
+        DrawTriangle(shape2[0], shape2[5], shape2[4], shapeColor2);
+        DrawTriangle(shape2[0], shape2[4], shape2[3], shapeColor2);
+        DrawTriangle(shape2[3], shape2[2], shape2[1], shapeColor2);
+        DrawTriangle(shape2[3], shape2[1], shape2[0], shapeColor2);
+    }
+    {
+        const Color shapeColor3 = Color{.r = 163, .g = 73, .b = 79, .a = 255};
+        const std::array<Vector2, 12> shape3 = {
+            at(-0.880F, -0.440F), at(-0.880F, -0.600F), at(-0.880F, -0.840F), at(-0.800F, -0.920F),
+            at(-0.800F, -0.680F), at(-0.720F, -0.600F), at(-0.640F, -0.600F), at(-0.640F, -0.920F),
+            at(-0.560F, -1.000F), at(-0.560F, -0.360F), at(-0.560F, -0.120F), at(-0.720F, -0.280F),
+        };
+        DrawTriangle(shape3[11], shape3[10], shape3[9], shapeColor3);
+        DrawTriangle(shape3[0], shape3[11], shape3[9], shapeColor3);
+        DrawTriangle(shape3[9], shape3[8], shape3[7], shapeColor3);
+        DrawTriangle(shape3[9], shape3[7], shape3[6], shapeColor3);
+        DrawTriangle(shape3[0], shape3[9], shape3[6], shapeColor3);
+        DrawTriangle(shape3[0], shape3[6], shape3[5], shapeColor3);
+        DrawTriangle(shape3[0], shape3[5], shape3[4], shapeColor3);
+        DrawTriangle(shape3[0], shape3[4], shape3[3], shapeColor3);
+        DrawTriangle(shape3[3], shape3[2], shape3[1], shapeColor3);
+        DrawTriangle(shape3[3], shape3[1], shape3[0], shapeColor3);
+    }
+    {
+        const Color shapeColor4 = Color{.r = 26, .g = 28, .b = 44, .a = 255};
+        const std::array<Vector2, 6> shape4 = {
+            at(0.880F, -0.840F), at(0.800F, -0.760F), at(0.640F, -0.920F),
+            at(0.560F, -0.120F), at(0.560F, -0.040F), at(0.880F, -0.360F),
+        };
+        DrawTriangle(shape4[5], shape4[0], shape4[1], shapeColor4);
+        DrawTriangle(shape4[5], shape4[1], shape4[2], shapeColor4);
+        DrawTriangle(shape4[5], shape4[2], shape4[3], shapeColor4);
+        DrawTriangle(shape4[3], shape4[4], shape4[5], shapeColor4);
+    }
+    {
+        const Color shapeColor5 = Color{.r = 163, .g = 73, .b = 79, .a = 255};
+        const std::array<Vector2, 12> shape5 = {
+            at(0.880F, -0.440F), at(0.880F, -0.600F), at(0.880F, -0.840F), at(0.800F, -0.920F),
+            at(0.800F, -0.680F), at(0.720F, -0.600F), at(0.640F, -0.600F), at(0.640F, -0.920F),
+            at(0.560F, -1.000F), at(0.560F, -0.360F), at(0.560F, -0.120F), at(0.720F, -0.280F),
+        };
+        DrawTriangle(shape5[11], shape5[0], shape5[1], shapeColor5);
+        DrawTriangle(shape5[11], shape5[1], shape5[2], shapeColor5);
+        DrawTriangle(shape5[2], shape5[3], shape5[4], shapeColor5);
+        DrawTriangle(shape5[11], shape5[2], shape5[4], shapeColor5);
+        DrawTriangle(shape5[11], shape5[4], shape5[5], shapeColor5);
+        DrawTriangle(shape5[11], shape5[5], shape5[6], shapeColor5);
+        DrawTriangle(shape5[6], shape5[7], shape5[8], shapeColor5);
+        DrawTriangle(shape5[6], shape5[8], shape5[9], shapeColor5);
+        DrawTriangle(shape5[11], shape5[6], shape5[9], shapeColor5);
+        DrawTriangle(shape5[9], shape5[10], shape5[11], shapeColor5);
+    }
+    {
+        const Color shapeColor6 = Color{.r = 26, .g = 28, .b = 44, .a = 255};
+        const std::array<Vector2, 6> shape6 = {
+            at(-0.880F, 0.200F), at(-0.800F, 0.280F), at(-0.720F, 0.280F),
+            at(-0.720F, 0.200F), at(-0.800F, 0.120F), at(-0.880F, 0.120F),
+        };
+        DrawTriangleFan(shape6.data(), static_cast<int>(shape6.size()), shapeColor6);
+    }
+    {
+        const Color shapeColor7 = Color{.r = 26, .g = 28, .b = 44, .a = 255};
+        const std::array<Vector2, 6> shape7 = {
+            at(-0.640F, 0.440F), at(-0.560F, 0.520F), at(-0.480F, 0.520F),
+            at(-0.480F, 0.440F), at(-0.560F, 0.360F), at(-0.640F, 0.360F),
+        };
+        DrawTriangleFan(shape7.data(), static_cast<int>(shape7.size()), shapeColor7);
+    }
+    {
+        const Color shapeColor8 = Color{.r = 26, .g = 28, .b = 44, .a = 255};
+        const std::array<Vector2, 6> shape8 = {
+            at(-0.400F, 0.680F), at(-0.320F, 0.760F), at(-0.240F, 0.760F),
+            at(-0.240F, 0.680F), at(-0.320F, 0.600F), at(-0.400F, 0.600F),
+        };
+        DrawTriangleFan(shape8.data(), static_cast<int>(shape8.size()), shapeColor8);
+    }
+    {
+        const Color shapeColor9 = Color{.r = 26, .g = 28, .b = 44, .a = 255};
+        const std::array<Vector2, 6> shape9 = {
+            at(0.880F, 0.120F), at(0.800F, 0.120F), at(0.720F, 0.200F),
+            at(0.720F, 0.280F), at(0.800F, 0.280F), at(0.880F, 0.200F),
+        };
+        DrawTriangleFan(shape9.data(), static_cast<int>(shape9.size()), shapeColor9);
+    }
+    {
+        const Color shapeColor10 = Color{.r = 26, .g = 28, .b = 44, .a = 255};
+        const std::array<Vector2, 6> shape10 = {
+            at(0.640F, 0.360F), at(0.560F, 0.360F), at(0.480F, 0.440F),
+            at(0.480F, 0.520F), at(0.560F, 0.520F), at(0.640F, 0.440F),
+        };
+        DrawTriangleFan(shape10.data(), static_cast<int>(shape10.size()), shapeColor10);
+    }
+    {
+        const Color shapeColor11 = Color{.r = 26, .g = 28, .b = 44, .a = 255};
+        const std::array<Vector2, 6> shape11 = {
+            at(0.400F, 0.600F), at(0.320F, 0.600F), at(0.240F, 0.680F),
+            at(0.240F, 0.760F), at(0.320F, 0.760F), at(0.400F, 0.680F),
+        };
+        DrawTriangleFan(shape11.data(), static_cast<int>(shape11.size()), shapeColor11);
+    }
+    {
+        const Color shapeColor12 = Color{.r = 65, .g = 166, .b = 246, .a = 255};
+        const std::array<Vector2, 14> shape12 = {
+            at(0.000F, -0.440F),  at(0.080F, -0.360F),  at(0.080F, -0.280F),  at(0.160F, -0.200F),
+            at(0.160F, -0.040F),  at(0.080F, 0.040F),   at(0.080F, -0.040F),  at(0.000F, -0.120F),
+            at(-0.080F, -0.040F), at(-0.080F, 0.040F),  at(-0.160F, -0.040F), at(-0.160F, -0.200F),
+            at(-0.080F, -0.280F), at(-0.080F, -0.360F),
+        };
+        DrawTriangle(shape12[0], shape12[13], shape12[12], shapeColor12);
+        DrawTriangle(shape12[12], shape12[11], shape12[10], shapeColor12);
+        DrawTriangle(shape12[0], shape12[12], shape12[10], shapeColor12);
+        DrawTriangle(shape12[10], shape12[9], shape12[8], shapeColor12);
+        DrawTriangle(shape12[0], shape12[10], shape12[8], shapeColor12);
+        DrawTriangle(shape12[0], shape12[8], shape12[7], shapeColor12);
+        DrawTriangle(shape12[0], shape12[7], shape12[6], shapeColor12);
+        DrawTriangle(shape12[6], shape12[5], shape12[4], shapeColor12);
+        DrawTriangle(shape12[0], shape12[6], shape12[4], shapeColor12);
+        DrawTriangle(shape12[4], shape12[3], shape12[2], shapeColor12);
+        DrawTriangle(shape12[0], shape12[4], shape12[2], shapeColor12);
+        DrawTriangle(shape12[2], shape12[1], shape12[0], shapeColor12);
+    }
+    {
+        const Color shapeColor13 = Color{.r = 26, .g = 28, .b = 44, .a = 255};
+        const std::array<Vector2, 11> shape13 = {
+            at(0.000F, -0.120F), at(0.080F, -0.040F), at(0.080F, 0.280F),   at(0.160F, 0.360F),
+            at(0.160F, 0.920F),  at(0.080F, 0.840F),  at(-0.080F, 0.840F),  at(-0.160F, 0.920F),
+            at(-0.160F, 0.360F), at(-0.080F, 0.280F), at(-0.080F, -0.040F),
+        };
+        DrawTriangle(shape13[0], shape13[10], shape13[9], shapeColor13);
+        DrawTriangle(shape13[9], shape13[8], shape13[7], shapeColor13);
+        DrawTriangle(shape13[0], shape13[9], shape13[7], shapeColor13);
+        DrawTriangle(shape13[0], shape13[7], shape13[6], shapeColor13);
+        DrawTriangle(shape13[0], shape13[6], shape13[5], shapeColor13);
+        DrawTriangle(shape13[0], shape13[5], shape13[4], shapeColor13);
+        DrawTriangle(shape13[4], shape13[3], shape13[2], shapeColor13);
+        DrawTriangle(shape13[0], shape13[4], shape13[2], shapeColor13);
+        DrawTriangle(shape13[2], shape13[1], shape13[0], shapeColor13);
+    }
+
+    // Jet: single engine flame trailing behind the tail claws (which reach out to y=1.0), not
+    // the generic mid-ship flame -- that one's base sits right where the claws are and smears
+    // into them on this hull.
+    const float flicker = 0.65F + 0.35F * std::sin(static_cast<float>(GetTime()) * 28.0F);
+    const Color flameOuter =
+        ColorAlpha(Color{.r = 255, .g = 120, .b = 90, .a = 255}, 0.7F + 0.3F * flicker);
+    const Color flameInner =
+        ColorAlpha(Color{.r = 255, .g = 220, .b = 180, .a = 255}, 0.9F + 0.1F * flicker);
+    const Vector2 left = at(-0.14F, 1.05F);
+    const Vector2 right = at(0.14F, 1.05F);
+    const Vector2 tip = at(0, 1.05F + 0.55F + 0.35F * flicker);
+    DrawTriangle(left, tip, right, flameOuter);
+
+    const Vector2 innerLeft = at(-0.07F, 1.05F);
+    const Vector2 innerRight = at(0.07F, 1.05F);
+    const Vector2 innerTip = at(0, 1.05F + 0.35F + 0.2F * flicker);
+    DrawTriangle(innerLeft, innerTip, innerRight, flameInner);
+}
+
+// ---- EDIT ABOVE -------------------------------------------------------------------------------
+
+}
+
+int main()
+{
+    constexpr int screenW = 900;
+    constexpr int screenH = 700;
+    InitWindow(screenW, screenH, "ship playground");
+    SetTargetFPS(60);
+
+    float radius = 70.0F;
+    Color color = Color{.r = 150, .g = 180, .b = 200, .a = 255}; // Palette::Shield, Bastion's color
+    bool freezeAngle = false; // C toggles: frozen at 0 so mouse position reads as at(x,y) coords
+
+    while (!WindowShouldClose())
+    {
+        if (IsKeyPressed(KEY_UP))
+        {
+            radius += 5;
+        }
+        if (IsKeyPressed(KEY_DOWN))
+        {
+            radius = std::max(10.0F, radius - 5);
+        }
+        if (IsKeyPressed(KEY_C))
+        {
+            freezeAngle = !freezeAngle;
+        }
+
+        const Vector2 center{.x = screenW / 2.0F, .y = screenH / 2.0F};
+        const Vector2 mouse = GetMousePosition();
+        const Vector2 dir = Vector2Normalize(Vector2Subtract(mouse, center));
+        const float angle = freezeAngle ? 0.0F : std::atan2(dir.y, dir.x) + PI / 2;
+
+        BeginDrawing();
+        ClearBackground(Color{.r = 10, .g = 12, .b = 18, .a = 255});
+
+        DrawLine(static_cast<int>(center.x), 0, static_cast<int>(center.x), screenH, Fade(GRAY, 0.2F));
+        DrawLine(0, static_cast<int>(center.y), screenW, static_cast<int>(center.y), Fade(GRAY, 0.2F));
+
+        drawShip(center, radius, angle, color);
+
+        DrawText("mouse = aim direction   UP/DOWN = resize   C = toggle coord readout   ESC = quit", 10, 10, 18,
+                  RAYWHITE);
+        DrawText(TextFormat("r = %.0f", radius), 10, 34, 18, RAYWHITE);
+
+        if (freezeAngle)
+        {
+            const Vector2 local = Vector2Scale(Vector2Subtract(mouse, center), 1.0F / radius);
+            const std::string coordText = std::format("at({:.3f}F, {:.3f}F)", local.x, local.y);
+            DrawCircleV(mouse, 3, YELLOW);
+            DrawText(coordText.c_str(), static_cast<int>(mouse.x) + 8, static_cast<int>(mouse.y) - 20, 16, YELLOW);
+        }
+
+        EndDrawing();
+    }
+
+    CloseWindow();
+    return 0;
+}

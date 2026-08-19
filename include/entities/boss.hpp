@@ -90,6 +90,7 @@ class Boss
     float barrageTimer;
     int spreadWindupShots;
     bool hitByDash;
+    bool dashHitPlayer = false;
     bool isMega;
     bool isSwarm;
     float strafePhase;
@@ -188,6 +189,9 @@ class Boss
     bool debuffFreeze = false;
     float burnDps = 0;
     float burnDamageAccum = 0;
+
+    float shockwaveSlowTimer = 0;
+    float shockwaveSlowMult = 1.0F;
 
     float deathAnimTimer = -1.0F;
 

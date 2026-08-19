@@ -1301,6 +1301,7 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
         static_cast<float>(boss.health) <= static_cast<float>(boss.maxHealth) * enrageHealthFrac;
 
     const float speedMult = (enraged ? 1.25F : 1.0F) * (boss.debuffFreeze ? freezeSlowMult : 1.0F) *
+                            (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F) *
                             (boss.isBeltbreakerPlate ? beltbreakerPlateMoveSpeedMult : 1.0F) *
                             (boss.isWreckwormHead ? boss.wreckwormSpeedMult * wreckwormChaseSpeedMult
                                                   : 1.0F) *
@@ -2061,6 +2062,10 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake, bool pi
 
 void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 {
+    if (boss.shockwaveSlowTimer > 0)
+    {
+        boss.shockwaveSlowTimer -= deltaTime;
+    }
 
     if (boss.debuffStatic)
     {
@@ -2080,7 +2085,15 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
     const bool enraged =
         boss.health > 0 &&
         static_cast<float>(boss.health) <= static_cast<float>(boss.maxHealth) * enrageHealthFrac;
-    const float rateMult = enraged ? enrageSpeedMult : 1.0F;
+    float rateMult = enraged ? enrageSpeedMult : 1.0F;
+
+    if (boss.isBeltbreaker && boss.plateCount > 0)
+    {
+        // No minions left to hide behind: the core attacks faster the fewer plates remain.
+        const float plateFrac =
+            static_cast<float>(countAttachedAlivePlates(game, boss)) / static_cast<float>(boss.plateCount);
+        rateMult = std::min(rateMult, Lerp(beltbreakerNoPlatesSpeedMult, 1.0F, plateFrac));
+    }
 
     switch (boss.state)
     {
@@ -2329,7 +2342,8 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 
         if (boss.attack == BossAttack::ChargeDash)
         {
-            boss.position = Vector2Add(boss.position, Vector2Scale(boss.chargeVelocity, deltaTime));
+            boss.position = Vector2Add(boss.position, Vector2Scale(boss.chargeVelocity,
+                                            deltaTime * (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F)));
         }
 
         if (boss.attack == BossAttack::DashRush)
@@ -2338,7 +2352,8 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             if (boss.slamHit)
             {
                 boss.position =
-                    Vector2Add(boss.position, Vector2Scale(boss.chargeVelocity, deltaTime));
+                    Vector2Add(boss.position, Vector2Scale(boss.chargeVelocity,
+                                            deltaTime * (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F)));
                 if (boss.barrageTimer <= 0)
                 {
                     boss.slamHit = false;
@@ -2349,7 +2364,8 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             else if (boss.wreckwormRepositioning)
             {
                 boss.position =
-                    Vector2Add(boss.position, Vector2Scale(boss.chargeVelocity, deltaTime));
+                    Vector2Add(boss.position, Vector2Scale(boss.chargeVelocity,
+                                            deltaTime * (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F)));
                 if (boss.barrageTimer <= 0)
                 {
                     boss.wreckwormRepositioning = false;
@@ -2482,13 +2498,16 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 plate.state = BossState::SHOOTING;
                 plate.attack = BossAttack::ChargeDash;
                 plate.stateTimer = chargeDashDuration;
-                plate.chargeVelocity = Vector2Scale(dir, chargeDashSpeed);
+                plate.chargeVelocity =
+                    Vector2Scale(dir, chargeDashSpeed * beltbreakerPlateAttackScale);
+                plate.dashHitPlayer = false;
             }
         }
 
         if (boss.attack == BossAttack::BurrowCharge)
         {
-            boss.position = Vector2Add(boss.position, Vector2Scale(boss.chargeVelocity, deltaTime));
+            boss.position = Vector2Add(boss.position, Vector2Scale(boss.chargeVelocity,
+                                            deltaTime * (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F)));
         }
 
         if (boss.attack == BossAttack::CoilClamp)
@@ -2830,6 +2849,7 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         boss.chargeVelocity = Vector2Scale(
             aimDirection,
             chargeDashSpeed * (boss.isBeltbreakerPlate ? beltbreakerPlateAttackScale : 1.0F));
+        boss.dashHitPlayer = false;
         playSFX(game, game.resources.sounds.bossWindUp);
         triggerShake(game, 8, 0.3F);
         break;

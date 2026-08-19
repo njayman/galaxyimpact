@@ -377,6 +377,17 @@ void updatePlayerMovement(Game& game, float deltaTime)
 
         touchingAnyBoss = true;
 
+        if (boss.isBeltbreakerPlate && boss.state == BossState::SHOOTING &&
+            boss.attack == BossAttack::ChargeDash && !boss.dashHitPlayer &&
+            !game.run.player.dashing && !game.run.player.shieldActive &&
+            game.run.player.immunityTimer <= 0)
+        {
+            // A dashing plate should land its hit immediately, not rely on the multi-second
+            // "standing inside a boss" linger timer below — it's gone long before that fires.
+            boss.dashHitPlayer = true;
+            damagePlayer(game, enemyDamage(game, 2));
+        }
+
         if (boss.isBanished)
         {
             if (game.run.player.dashing && !boss.hitByDash)
@@ -414,40 +425,24 @@ void updatePlayerMovement(Game& game, float deltaTime)
         if (game.run.player.dashing && !boss.hitByDash)
         {
             boss.hitByDash = true;
-            const DashQuirk quirk = currentShip(game).dashQuirk;
 
-            if (quirk != DashQuirk::Push)
+            const bool coreVulnerable = boss.isBeltbreaker && !boss.beltbreakerShielded &&
+                                        countAttachedAlivePlates(game, boss) == 0;
+            const float coreBonusMult = coreVulnerable ? beltbreakerVulnerableDashDamageMult : 1.0F;
+            const auto ramDamage = static_cast<int32_t>(
+                static_cast<float>(game.run.player.shieldActive ? bossRamDamage * 2 : bossRamDamage) *
+                currentShip(game).damageMult * coreBonusMult);
+            damageBoss(game, boss, ramDamage, true, true);
+            if (game.run.player.shieldActive)
             {
-                const float quirkMult = quirk == DashQuirk::Hybrid ? 0.5F : 1.0F;
-
-                const bool coreVulnerable = boss.isBeltbreaker && !boss.beltbreakerShielded &&
-                                            countAttachedAlivePlates(game, boss) == 0;
-                const float coreBonusMult =
-                    coreVulnerable ? beltbreakerVulnerableDashDamageMult : 1.0F;
-                const auto ramDamage = static_cast<int32_t>(
-                    static_cast<float>(game.run.player.shieldActive ? bossRamDamage * 2
-                                                                    : bossRamDamage) *
-                    quirkMult * currentShip(game).damageMult * coreBonusMult);
-                damageBoss(game, boss, ramDamage, true, true);
-                if (game.run.player.shieldActive)
-                {
-                    game.run.player.chargeRegenTimer =
-                        std::max(0.0F, game.run.player.chargeRegenTimer - shieldKillChargeRefund);
-                }
+                game.run.player.chargeRegenTimer =
+                    std::max(0.0F, game.run.player.chargeRegenTimer - shieldKillChargeRefund);
             }
 
             const bool plateShieldDash = boss.isBeltbreakerPlate && game.run.player.shieldActive;
             const bool segmentShieldDash =
                 boss.isWreckwormSegment && boss.wreckwormDetached && game.run.player.shieldActive;
             const bool bonusShieldDash = plateShieldDash || segmentShieldDash;
-
-            if (quirk != DashQuirk::Damage)
-            {
-                const Vector2 pushDir = Vector2Normalize(game.run.player.dashVelocity);
-                const float pushDist =
-                    bonusShieldDash ? beltbreakerPlateShieldDashPushDistance : dashPushDistance;
-                boss.position = Vector2Add(boss.position, Vector2Scale(pushDir, pushDist));
-            }
 
             if (plateShieldDash)
             {
@@ -487,26 +482,15 @@ void updatePlayerMovement(Game& game, float deltaTime)
         if (game.run.player.dashing && !hazard.hitByDash)
         {
             hazard.hitByDash = true;
-            const DashQuirk quirk = currentShip(game).dashQuirk;
 
-            if (quirk != DashQuirk::Push)
+            const auto ramDamage = static_cast<int32_t>(
+                static_cast<float>(game.run.player.shieldActive ? bossRamDamage * 2 : bossRamDamage) *
+                currentShip(game).damageMult);
+            damageEliteHazard(game, hi, ramDamage);
+            if (game.run.player.shieldActive)
             {
-                const auto ramDamage = static_cast<int32_t>(
-                    static_cast<float>(game.run.player.shieldActive ? bossRamDamage * 2
-                                                                    : bossRamDamage) *
-                    (quirk == DashQuirk::Hybrid ? 0.5F : 1.0F) * currentShip(game).damageMult);
-                damageEliteHazard(game, hi, ramDamage);
-                if (game.run.player.shieldActive)
-                {
-                    game.run.player.chargeRegenTimer =
-                        std::max(0.0F, game.run.player.chargeRegenTimer - shieldKillChargeRefund);
-                }
-            }
-
-            if (quirk != DashQuirk::Damage)
-            {
-                const Vector2 pushDir = Vector2Normalize(game.run.player.dashVelocity);
-                hazard.position = Vector2Add(hazard.position, Vector2Scale(pushDir, dashPushDistance));
+                game.run.player.chargeRegenTimer =
+                    std::max(0.0F, game.run.player.chargeRegenTimer - shieldKillChargeRefund);
             }
 
             if (game.run.player.shieldActive)

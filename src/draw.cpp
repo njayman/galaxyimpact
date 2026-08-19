@@ -15,6 +15,9 @@
 #include "raymath.h"
 #include "sandbox.hpp"
 #include "settings.hpp"
+#include "ships/bastion.hpp"
+#include "ships/interceptor.hpp"
+#include "ships/ranger.hpp"
 #include "update.hpp"
 #include "update_constants.hpp"
 #include <algorithm>
@@ -87,6 +90,7 @@ void drawGameplayWorld(const Game& game);
 void drawPunctumLightning(const Game& game);
 void drawShipHull(ShipClass shipClass, Vector2 p, float r, float angle, Color shipColor);
 void drawShip(const Game& game);
+void drawEngineFlame(Vector2 p, float r, float angle);
 void drawNerveBurstFlash(const Game& game);
 void drawEnemy(const Game& game, const Enemy& enemy, bool buffed);
 void drawEliteHazard(const EliteHazard& hazard);
@@ -269,6 +273,11 @@ void drawShipSelect(const Game& game)
     const Vector2 dir = aimAtMouse(game);
     const float previewAngle = std::atan2(dir.y, dir.x) + std::numbers::pi_v<float> / 2;
     const auto shipClass = static_cast<ShipClass>(game.menuIndex);
+    if (shipClass != ShipClass::Bastion && shipClass != ShipClass::Interceptor &&
+        shipClass != ShipClass::Ranger)
+    {
+        drawEngineFlame(previewPos, previewRadius, previewAngle);
+    }
     drawShipHull(shipClass, previewPos, previewRadius, previewAngle, highlighted.color);
 
     std::vector<std::string> names;
@@ -1080,7 +1089,13 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
     {
         const auto& def = Skills.at(static_cast<size_t>(*hovered));
         const int lvl = game.run.skillLevels.at(static_cast<size_t>(*hovered));
-        const std::string name = std::format("{} (Lv {})", def.name, lvl);
+        std::string_view skillName = def.name;
+        if (const auto weapon = weaponForGrantSkill(*hovered);
+            weapon.has_value() && weaponEvolved(game, *weapon))
+        {
+            skillName = evolvedWeaponName.at(static_cast<size_t>(*weapon));
+        }
+        const std::string name = std::format("{} (Lv {})", skillName, lvl);
         const std::string desc(def.description);
 
         constexpr int32_t nameFontSize = 16;
@@ -1908,40 +1923,19 @@ void drawShipHull(ShipClass shipClass, Vector2 p, float r, float angle, Color sh
     {
     case ShipClass::Bastion:
     {
-        DrawPoly(p, 6, r, angle * RAD2DEG, shipColor);
-        DrawPolyLines(p, 6, r, angle * RAD2DEG, Fade(Palette::StructDark, 0.6F));
-
-        const Vector2 wingLeftFront =
-            Vector2Add(p, rotate(Vector2{.x = -r * 0.5F, .y = -r * 0.3F}));
-        const Vector2 wingLeftTip = Vector2Add(p, rotate(Vector2{.x = -r * 1.3F, .y = r * 0.2F}));
-        const Vector2 wingLeftBack = Vector2Add(p, rotate(Vector2{.x = -r * 0.5F, .y = r * 0.9F}));
-        DrawTriangle(wingLeftFront, wingLeftTip, wingLeftBack, Fade(shipColor, 0.85F));
-
-        const Vector2 wingRightFront =
-            Vector2Add(p, rotate(Vector2{.x = r * 0.5F, .y = -r * 0.3F}));
-        const Vector2 wingRightTip = Vector2Add(p, rotate(Vector2{.x = r * 1.3F, .y = r * 0.2F}));
-        const Vector2 wingRightBack = Vector2Add(p, rotate(Vector2{.x = r * 0.5F, .y = r * 0.9F}));
-        DrawTriangle(wingRightTip, wingRightFront, wingRightBack, Fade(shipColor, 0.85F));
+        drawBastionHull(p, r, angle, shipColor);
         break;
     }
     case ShipClass::Interceptor:
     {
-        const Vector2 dartTip = Vector2Add(p, rotate(Vector2{.x = 0, .y = -r * 1.3F}));
-        const Vector2 dartLeft = Vector2Add(p, rotate(Vector2{.x = -r * 0.45F, .y = r * 0.9F}));
-        const Vector2 dartRight = Vector2Add(p, rotate(Vector2{.x = r * 0.45F, .y = r * 0.9F}));
-        DrawTriangle(dartTip, dartLeft, dartRight, shipColor);
-        DrawTriangleLines(dartTip, dartLeft, dartRight, Fade(Palette::StructDark, 0.6F));
-
-        const Vector2 finLeftInner = Vector2Add(p, rotate(Vector2{.x = -r * 0.2F, .y = r * 0.5F}));
-        const Vector2 finLeftOuter = Vector2Add(p, rotate(Vector2{.x = -r * 1.1F, .y = r * 1.3F}));
-        DrawTriangle(dartLeft, finLeftInner, finLeftOuter, Fade(shipColor, 0.8F));
-
-        const Vector2 finRightInner = Vector2Add(p, rotate(Vector2{.x = r * 0.2F, .y = r * 0.5F}));
-        const Vector2 finRightOuter = Vector2Add(p, rotate(Vector2{.x = r * 1.1F, .y = r * 1.3F}));
-        DrawTriangle(finRightInner, dartRight, finRightOuter, Fade(shipColor, 0.8F));
+        drawInterceptorHull(p, r, angle, shipColor);
         break;
     }
     case ShipClass::Ranger:
+    {
+        drawRangerHull(p, r, angle, shipColor);
+        break;
+    }
     case ShipClass::Count:
     default:
     {
@@ -1961,7 +1955,32 @@ void drawShipHull(ShipClass shipClass, Vector2 p, float r, float angle, Color sh
     }
     }
 
-    DrawCircleV(p, r * 0.3F, Palette::StructLight);
+    if (shipClass != ShipClass::Bastion && shipClass != ShipClass::Ranger &&
+        shipClass != ShipClass::Interceptor)
+    {
+        DrawCircleV(p, r * 0.3F, Palette::StructLight);
+    }
+}
+
+// Generic single engine flame, shown behind a ship that has no hull-specific thruster jets.
+void drawEngineFlame(Vector2 p, float r, float angle)
+{
+    const auto rotate = [angle](Vector2 v) -> Vector2
+    {
+        const float cosA = std::cos(angle);
+        const float sinA = std::sin(angle);
+        return Vector2{.x = v.x * cosA - v.y * sinA, .y = v.x * sinA + v.y * cosA};
+    };
+
+    const float flicker = 0.65F + 0.35F * std::sin(static_cast<float>(GetTime()) * 28.0F);
+    const Vector2 flameTip =
+        Vector2Add(p, rotate(Vector2{.x = 0, .y = r * (1.5F + 0.6F * flicker)}));
+    const Vector2 flameLeft = Vector2Add(p, rotate(Vector2{.x = -r * 0.35F, .y = r * 0.85F}));
+    const Vector2 flameRight = Vector2Add(p, rotate(Vector2{.x = r * 0.35F, .y = r * 0.85F}));
+    DrawTriangle(flameLeft, flameTip, flameRight, Fade(Palette::Charge, 0.75F * flicker));
+    DrawTriangle(flameLeft,
+                 Vector2Add(p, rotate(Vector2{.x = 0, .y = r * (1.0F + 0.3F * flicker)})),
+                 flameRight, Fade(Palette::StructLight, 0.6F * flicker));
 }
 
 void drawShip(const Game& game)
@@ -1978,13 +1997,6 @@ void drawShip(const Game& game)
     const Vector2 dir = aimAtMouse(game);
     const float angle = std::atan2(dir.y, dir.x) + std::numbers::pi_v<float> / 2 +
                         (twirlingIn ? twirlProgress * 900.0F * DEG2RAD : 0.0F);
-
-    const auto rotate = [angle](Vector2 v) -> Vector2
-    {
-        const float cosA = std::cos(angle);
-        const float sinA = std::sin(angle);
-        return Vector2{.x = v.x * cosA - v.y * sinA, .y = v.x * sinA + v.y * cosA};
-    };
 
     if (twirlingIn)
     {
@@ -2010,17 +2022,14 @@ void drawShip(const Game& game)
 
     const Color shipColor = game.run.player.dashing ? Palette::Crit : game.run.player.color;
 
-    const float flicker = 0.65F + 0.35F * std::sin(static_cast<float>(GetTime()) * 28.0F);
-    const Vector2 flameTip =
-        Vector2Add(p, rotate(Vector2{.x = 0, .y = r * (1.5F + 0.6F * flicker)}));
-    const Vector2 flameLeft = Vector2Add(p, rotate(Vector2{.x = -r * 0.35F, .y = r * 0.85F}));
-    const Vector2 flameRight = Vector2Add(p, rotate(Vector2{.x = r * 0.35F, .y = r * 0.85F}));
-    DrawTriangle(flameLeft, flameTip, flameRight, Fade(Palette::Charge, 0.75F * flicker));
-    DrawTriangle(flameLeft,
-                 Vector2Add(p, rotate(Vector2{.x = 0, .y = r * (1.0F + 0.3F * flicker)})),
-                 flameRight, Fade(Palette::StructLight, 0.6F * flicker));
-
     const auto shipClass = static_cast<ShipClass>(game.resources.settings.shipIndex);
+    if (shipClass != ShipClass::Bastion && shipClass != ShipClass::Interceptor &&
+        shipClass != ShipClass::Ranger)
+    {
+        // Bastion, Interceptor, and Ranger draw their own jets as part of their hull;
+        // every other ship falls back to this single generic engine flame.
+        drawEngineFlame(p, r, angle);
+    }
     drawShipHull(shipClass, p, r, angle, shipColor);
 
     if (game.run.player.nerveCharging)

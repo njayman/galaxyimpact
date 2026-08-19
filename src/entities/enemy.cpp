@@ -665,7 +665,6 @@ void updateEnemies(Game& game, float deltaTime)
         if (collides && game.run.player.dashing && !enemy.hitByDash)
         {
             enemy.hitByDash = true;
-            const DashQuirk quirk = currentShip(game).dashQuirk;
 
             if (game.run.player.shieldActive)
             {
@@ -674,20 +673,10 @@ void updateEnemies(Game& game, float deltaTime)
             }
             else
             {
-                if (quirk != DashQuirk::Push)
-                {
-                    const auto dmg = static_cast<int32_t>(
-                        static_cast<float>(dashDamage) *
-                        (quirk == DashQuirk::Hybrid ? 0.5F : 1.0F) * currentShip(game).damageMult);
-                    damageEnemy(game, i, dmg);
-                    recordDamage(game, DamageSource::Dash, dmg);
-                }
-                if (quirk != DashQuirk::Damage)
-                {
-                    const Vector2 pushDir = Vector2Normalize(game.run.player.dashVelocity);
-                    enemy.position =
-                        Vector2Add(enemy.position, Vector2Scale(pushDir, dashPushDistance));
-                }
+                const auto dmg =
+                    static_cast<int32_t>(static_cast<float>(dashDamage) * currentShip(game).damageMult);
+                damageEnemy(game, i, dmg);
+                recordDamage(game, DamageSource::Dash, dmg);
                 damagePlayer(game, enemyDamage(game, kind.contactDamage));
             }
 

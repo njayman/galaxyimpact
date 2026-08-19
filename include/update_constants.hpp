@@ -24,7 +24,6 @@ constexpr float pickupMagnetSpeed = 7;
 constexpr float dashSpeed = 22;
 constexpr float dashDuration = 0.18F;
 constexpr int32_t dashDamage = 15;
-constexpr float dashPushDistance = 60.0F;
 
 constexpr float holdChunkBaseDuration = 1.0F;
 constexpr float holdChunkPerLevel = 0.03F;
@@ -164,8 +163,11 @@ constexpr float beltbreakerPlateHurlDuration = 1.6F;
 
 constexpr float beltbreakerVulnerableDashDamageMult = 2.5F;
 
-constexpr float beltbreakerPlateShieldDashPushDistance = 260.0F;
 constexpr float beltbreakerPlateShieldDashShieldDuration = 2.5F;
+
+// Core attacks faster as fewer plates remain attached: 1.0x at full plates, down to this
+// multiplier with none left.
+constexpr float beltbreakerNoPlatesSpeedMult = 0.4F;
 
 constexpr int32_t bossHpPerTier = 500;
 
@@ -333,6 +335,14 @@ constexpr float chainLightningBoltLife = 0.2F;
 constexpr float forwardDamageMult = 0.5F;
 constexpr float mineDamageMult = 0.7F;
 constexpr float shockDamageMult = 1.5F;
+constexpr float shockKnockbackBase = 20.0F;
+constexpr float shockKnockbackPerLevel = 6.0F;
+constexpr float shockEvolvedKnockbackBonus = 20.0F;
+constexpr float shockProjectileRepelForce = 260.0F;
+constexpr float shockBossSlowDuration = 2.0F;
+constexpr float shockBossSlowMultBase = 0.8F;
+constexpr float shockBossSlowMultPerLevel = 0.05F;
+constexpr float shockBossSlowMultMin = 0.25F;
 constexpr float flakCannonDamageMult = 0.35F;
 
 constexpr float railgunBaseDamageMult = 2.6F;

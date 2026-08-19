@@ -18,13 +18,6 @@ enum class ShipClass : std::uint8_t
     Count
 };
 
-enum class DashQuirk : std::uint8_t
-{
-    Push,
-    Hybrid,
-    Damage
-};
-
 struct ShipDef
 {
     std::string_view name;
@@ -37,7 +30,6 @@ struct ShipDef
     float damageMult;
     int32_t maxShieldStacks;
     float dashDistanceMult;
-    DashQuirk dashQuirk;
     WeaponType defaultWeapon;
     float orbitSpinMult;
     float bulletSpeedMult;
@@ -47,26 +39,22 @@ struct ShipDef
 
 constexpr std::array<ShipDef, static_cast<size_t>(ShipClass::Count)> ships{
     ShipDef{.name = "Bastion",
-            .description =
-                "Heavy hull. Shield-dash shoves enemies aside instead of cutting through. "
-                "Orbit blades spin much faster.",
+            .description = "Orbit blades spin much faster.",
             .color = Palette::Shield,
-            .radius = 18,
-            .speed = 4,
-            .maxHealth = 8,
-            .armor = 2,
-            .damageMult = 0.8F,
-            .maxShieldStacks = 4,
-            .dashDistanceMult = 0.75F,
-            .dashQuirk = DashQuirk::Push,
+            .radius = 15,
+            .speed = 5,
+            .maxHealth = 5,
+            .armor = 1,
+            .damageMult = 1.0F,
+            .maxShieldStacks = 3,
+            .dashDistanceMult = 1.0F,
             .defaultWeapon = WeaponType::Orbit,
             .orbitSpinMult = 2.2F,
             .bulletSpeedMult = 1.0F,
             .beamLengthMult = 1.0F,
             .forwardFireRateMult = 1.0F},
     ShipDef{.name = "Ranger",
-            .description =
-                "All-rounder. Dash both pushes and damages. Faster bullets, faster forward fire rate.",
+            .description = "All-rounder. Faster bullets, faster forward fire rate.",
             .color = Palette::Accent,
             .radius = 15,
             .speed = 5,
@@ -75,25 +63,21 @@ constexpr std::array<ShipDef, static_cast<size_t>(ShipClass::Count)> ships{
             .damageMult = 1.0F,
             .maxShieldStacks = 3,
             .dashDistanceMult = 1.0F,
-            .dashQuirk = DashQuirk::Hybrid,
             .defaultWeapon = WeaponType::Forward,
             .orbitSpinMult = 1.0F,
             .bulletSpeedMult = 1.4F,
             .beamLengthMult = 1.0F,
             .forwardFireRateMult = 2.0F},
     ShipDef{.name = "Interceptor",
-            .description =
-                "Light frame. Dash cuts through everything in its path and reaches further. "
-                "Longer laser.",
+            .description = "Longer laser.",
             .color = Palette::Crit,
-            .radius = 12,
-            .speed = 6.5F,
-            .maxHealth = 4,
-            .armor = 0,
-            .damageMult = 1.3F,
-            .maxShieldStacks = 2,
-            .dashDistanceMult = 1.3F,
-            .dashQuirk = DashQuirk::Damage,
+            .radius = 15,
+            .speed = 5,
+            .maxHealth = 5,
+            .armor = 1,
+            .damageMult = 1.0F,
+            .maxShieldStacks = 3,
+            .dashDistanceMult = 1.0F,
             .defaultWeapon = WeaponType::Beam,
             .orbitSpinMult = 1.0F,
             .bulletSpeedMult = 1.0F,

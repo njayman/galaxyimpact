@@ -9,5 +9,13 @@ bgm_prototype: bgm_prototype.cpp
 synth: synth.cpp
 	$(CXX) $(CXXFLAGS) $< -o $@ -I $(RAYLIB_DIR) -L $(RAYLIB_LIB) $(LDLIBS)
 
+ship_playground: ship_playground.cpp
+	$(CXX) $(CXXFLAGS) $< -o $@ -I $(RAYLIB_DIR) -L $(RAYLIB_LIB) $(LDLIBS)
+
+shiprun: ship_playground
+	./ship_playground
+
 clean:
-	rm -f bgm_prototype synth
+	rm -f bgm_prototype synth ship_playground
+
+.PHONY: shiprun clean
