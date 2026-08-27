@@ -277,7 +277,6 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
     if (kind.shape == EnemyShape::Organic)
     {
         spawnOrganicHitSplash(game, game.run.enemies.at(index).position, kind.color);
-        playSFX(game, game.resources.sounds.squishHit);
     }
 
     spawnDamageNumber(game, game.run.enemies.at(index).position, std::min(amount, healthBefore));
@@ -314,7 +313,6 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
         spawnKillExplosion(game, game.run.enemies.at(index).position, kind.color, 8, 1.0F);
     }
     game.run.score += score;
-    playSFX(game, game.resources.sounds.enemyDeath);
     gainNerve(game);
 
     spawnPickup(game, game.run.enemies.at(index).position, score, PickupType::XP);

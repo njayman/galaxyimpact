@@ -1,5 +1,10 @@
 build/
 build-web/
+android/.gradle/
+android/.idea/
+android/local.properties
+android/app/build/
+android/app/.cxx/
 .cache/
 highscore.txt
 settings.txt

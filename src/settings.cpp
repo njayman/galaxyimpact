@@ -80,6 +80,11 @@ auto loadSettings() -> Settings
         }
     }
 
+    if (int32_t swapSticks = 0; file >> swapSticks)
+    {
+        settings.swapTouchSticks = swapSticks != 0;
+    }
+
     return settings;
 }
 
@@ -93,7 +98,7 @@ void saveSettings(const Settings& settings)
 
     file << settings.resolutionIndex << ' ' << 0 << ' ' << (settings.bgmOn ? 1 : 0) << ' '
          << (settings.soundOn ? 1 : 0) << ' ' << settings.fpsIndex << ' ' << settings.hudScaleIndex
-         << ' ' << settings.shipIndex;
+         << ' ' << settings.shipIndex << ' ' << (settings.swapTouchSticks ? 1 : 0);
     file.close();
     platformSyncSaveData();
 }

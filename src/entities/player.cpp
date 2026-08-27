@@ -2,11 +2,14 @@
 
 #include "draw.hpp"
 #include "entities/ship.hpp"
+#include "menu.hpp"
 #include "raymath.h"
 #include "update_constants.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
+#include <utility>
 #include <vector>
 
 auto playerConstant(const Game& game) -> float
@@ -63,7 +66,7 @@ void updateNerve(Game& game, float deltaTime)
         return;
     }
 
-    if (!IsKeyDown(KEY_SPACE))
+    if (!nerveDown(game))
     {
         player.nerveCharging = false;
         return;
@@ -85,7 +88,7 @@ void updateNerveBurstInput(Game& game)
     {
         player.nerve = UpdateConstants::nerveMax;
     }
-    if (!player.nerveCharging && IsKeyPressed(KEY_SPACE) &&
+    if (!player.nerveCharging && nervePressed(game) &&
         player.nerve >= UpdateConstants::nerveMax)
     {
         player.nerveCharging = true;
@@ -118,7 +121,7 @@ void damagePlayer(Game& game, int32_t amount)
         game.run.player.shieldStacks--;
         game.run.player.immunityTimer = 1.0F;
         playSFX(game, game.resources.sounds.hit);
-        triggerShake(game, 3, 0.15F);
+        triggerPlayerHitShake(game, 3, 0.15F);
         return;
     }
 
@@ -131,7 +134,7 @@ void damagePlayer(Game& game, int32_t amount)
         game.run.player.secondWindReady = false;
         game.run.player.health = 1.0F;
         playSFX(game, game.resources.sounds.victory);
-        triggerShake(game, 8, 0.3F);
+        triggerPlayerHitShake(game, 8, 0.3F);
         return;
     }
 
@@ -140,14 +143,14 @@ void damagePlayer(Game& game, int32_t amount)
         game.state = GameState::GAME_OVER;
         game.menuIndex = 0;
         playSFX(game, game.resources.sounds.defeat);
-        triggerShake(game, 12, 0.5F);
+        triggerPlayerHitShake(game, 12, 0.5F);
         triggerHitPause(game, 0.15F);
         spawnDeathExplosion(game);
     }
     else
     {
         playSFX(game, game.resources.sounds.hit);
-        triggerShake(game, 4, 0.2F);
+        triggerPlayerHitShake(game, 4, 0.2F);
     }
 }
 
@@ -295,6 +298,12 @@ void updatePlayerMovement(Game& game, float deltaTime)
         if (IsKeyDown(KEY_S))
         {
             moveDelta.y += effectiveSpeed;
+        }
+
+        if (game.touch.visible)
+        {
+            moveDelta.x += game.touch.moveStick.axis.x * effectiveSpeed;
+            moveDelta.y += game.touch.moveStick.axis.y * effectiveSpeed;
         }
 
         if (game.run.punctumTrapActive && !game.run.inBanishedRealm && Vector2Length(moveDelta) == 0)
@@ -465,6 +474,10 @@ void updatePlayerMovement(Game& game, float deltaTime)
                 triggerBossShieldDashShake(game);
                 boss.parryStunTimer = parryStunDuration;
                 tryComboRefund(game);
+                if (boss.isKraken)
+                {
+                    krakenStaggerSwipingTentacle(boss);
+                }
             }
         }
     }
@@ -595,18 +608,18 @@ void updateAbilityCharges(Game& game, float deltaTime)
     const bool comboTrigger =
         !player.dashing && !player.shieldActive &&
         (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE) ||
-         (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-          (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) ||
+         (dashPressed(game) &&
+          (shieldDown(game) ||
            static_cast<float>(GetTime()) - player.lastShieldClickTime <= comboClickWindow)) ||
-         (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) &&
-          (IsMouseButtonDown(MOUSE_BUTTON_LEFT) ||
+         (shieldPressed(game) &&
+          (dashDown(game) ||
            static_cast<float>(GetTime()) - player.lastDashClickTime <= comboClickWindow)));
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    if (dashPressed(game))
     {
         player.lastDashClickTime = static_cast<float>(GetTime());
     }
-    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))
+    if (shieldPressed(game))
     {
         player.lastShieldClickTime = static_cast<float>(GetTime());
     }
@@ -629,7 +642,7 @@ void updateAbilityCharges(Game& game, float deltaTime)
             Vector2Scale(aimAtMouse(game), dashSpeed * currentShip(game).dashDistanceMult);
         resetDashHitFlags();
     }
-    else if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !player.dashing && !player.comboActive)
+    else if (dashPressed(game) && !player.dashing && !player.comboActive)
     {
         if (infiniteCharges || player.charges > 0 || player.overdriveTimer > 0)
         {
@@ -644,7 +657,7 @@ void updateAbilityCharges(Game& game, float deltaTime)
             resetDashHitFlags();
         }
     }
-    else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && !player.shieldActive && !player.comboActive)
+    else if (shieldPressed(game) && !player.shieldActive && !player.comboActive)
     {
         if (infiniteCharges || player.charges > 0 || player.overdriveTimer > 0)
         {
@@ -659,9 +672,8 @@ void updateAbilityCharges(Game& game, float deltaTime)
 
     if (player.comboActive)
     {
-        const bool stillHeld = IsMouseButtonDown(MOUSE_BUTTON_LEFT) ||
-                               IsMouseButtonDown(MOUSE_BUTTON_RIGHT) ||
-                               IsMouseButtonDown(MOUSE_BUTTON_MIDDLE);
+        const bool stillHeld =
+            dashDown(game) || shieldDown(game) || IsMouseButtonDown(MOUSE_BUTTON_MIDDLE);
         if (!stillHeld)
         {
             player.comboActive = false;
@@ -708,7 +720,7 @@ void updateAbilityCharges(Game& game, float deltaTime)
 
         if (player.dashing)
         {
-            if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+            if (!dashDown(game))
             {
                 player.dashing = false;
             }
@@ -759,7 +771,7 @@ void updateAbilityCharges(Game& game, float deltaTime)
             player.shieldTimer -= deltaTime;
             if (player.shieldTimer <= 0)
             {
-                const bool stillHeld = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
+                const bool stillHeld = shieldDown(game);
                 if (stillHeld && (infiniteCharges || player.charges > 0 || player.overdriveTimer > 0))
                 {
                     if (!infiniteCharges && player.overdriveTimer <= 0)
@@ -784,6 +796,11 @@ void updateAbilityCharges(Game& game, float deltaTime)
 
 auto aimAtMouse(const Game& game) -> Vector2
 {
+    if (game.touch.visible)
+    {
+        return game.touch.aimDir;
+    }
+
     const Vector2 mouse = GetMousePosition();
     const Rectangle box = letterBoxRect(game);
     const Vector2 center{.x = box.x + box.width / 2, .y = box.y + box.height / 2};
@@ -793,6 +810,326 @@ auto aimAtMouse(const Game& game) -> Vector2
         return Vector2{.x = 0, .y = -1};
     }
     return Vector2Normalize(dir);
+}
+
+// raylib synthesizes MOUSE_BUTTON_LEFT from any touch (for basic
+// mouse-code compatibility), so once touch controls are active, real mouse
+// state is unreliable - a stick drag would otherwise alias to a dash press.
+// Touch mode is exclusive: only the dedicated buttons count.
+auto dashPressed(const Game& game) -> bool
+{
+    if (game.touch.visible)
+    {
+        return game.touch.dash.pressed || game.touch.combo.pressed;
+    }
+    return IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+}
+
+auto dashDown(const Game& game) -> bool
+{
+    if (game.touch.visible)
+    {
+        return game.touch.dash.down || game.touch.combo.down;
+    }
+    return IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+}
+
+auto shieldPressed(const Game& game) -> bool
+{
+    if (game.touch.visible)
+    {
+        return game.touch.shield.pressed || game.touch.combo.pressed;
+    }
+    return IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
+}
+
+auto shieldDown(const Game& game) -> bool
+{
+    if (game.touch.visible)
+    {
+        return game.touch.shield.down || game.touch.combo.down;
+    }
+    return IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
+}
+
+auto nerveDown(const Game& game) -> bool
+{
+    if (game.touch.visible)
+    {
+        return game.touch.nerve.down;
+    }
+    return IsKeyDown(KEY_SPACE);
+}
+
+auto nervePressed(const Game& game) -> bool
+{
+    if (game.touch.visible)
+    {
+        return game.touch.nerve.pressed;
+    }
+    return IsKeyPressed(KEY_SPACE);
+}
+
+auto pausePressed(const Game& game) -> bool
+{
+    return game.touch.visible && game.touch.pause.pressed;
+}
+
+auto touchControlLayout(const Game& game) -> TouchLayout
+{
+    const float scale = guiUiScale(game);
+    const auto w = static_cast<float>(game.resources.windowWidth);
+    const auto h = static_cast<float>(game.resources.windowHeight);
+
+    // 2x the original sizing - touch targets sized for a desktop-DPI
+    // assumption were too small on Android's much higher pixel density.
+    constexpr float margin = 180.0F;
+    constexpr float stickRadius = 170.0F;
+    constexpr float nerveMargin = 100.0F;
+    constexpr float nerveRadius = 140.0F;
+    constexpr float pauseMargin = 80.0F;
+    constexpr float pauseRadius = 68.0F;
+    constexpr float actionMargin = 50.0F;
+    constexpr float actionButtonRadius = 130.0F;
+    constexpr float actionButtonY = 260.0F; // below the HUD's top-corner clusters
+    constexpr float comboRadius = 100.0F;
+    constexpr float comboGap = 20.0F;
+
+    const float scaledMargin = margin * scale;
+    const float scaledStickRadius = stickRadius * scale;
+    const float scaledNerveMargin = nerveMargin * scale;
+    const float scaledNerveRadius = nerveRadius * scale;
+    const float scaledPauseMargin = pauseMargin * scale;
+    const float scaledPauseRadius = pauseRadius * scale;
+    const float scaledActionButtonRadius = actionButtonRadius * scale;
+    const float scaledComboRadius = comboRadius * scale;
+
+    const Vector2 leftStickAnchor{.x = scaledMargin + scaledStickRadius,
+                                  .y = h - scaledMargin - scaledStickRadius};
+    const Vector2 rightStickAnchor{.x = w - scaledMargin - scaledStickRadius,
+                                   .y = h - scaledMargin - scaledStickRadius};
+    const bool swap = game.resources.settings.swapTouchSticks;
+
+    const Vector2 pauseCenter{.x = w / 2, .y = scaledPauseMargin + scaledPauseRadius};
+
+    return TouchLayout{
+        // Move/aim can swap which physical side they're on (Settings ->
+        // Swap Sticks), for players who prefer the other hand on movement.
+        .moveStickAnchor = swap ? rightStickAnchor : leftStickAnchor,
+        .aimStickAnchor = swap ? leftStickAnchor : rightStickAnchor,
+        .stickRadius = scaledStickRadius,
+        // Bottom-center, between the two sticks - clear of the HUD.
+        .nerveCenter = Vector2{.x = w / 2, .y = h - scaledNerveMargin - scaledNerveRadius},
+        .nerveRadius = scaledNerveRadius,
+        // Top-center - the HUD hugs both top corners (health/score/XP on the
+        // left, ability slots/status icons on the right), so this is the one
+        // top-edge spot that stays clear of it.
+        .pauseCenter = pauseCenter,
+        .pauseRadius = scaledPauseRadius,
+        // Top corners, index-finger reach, dropped below the HUD clusters.
+        .dashCenter = Vector2{.x = actionMargin * scale + scaledActionButtonRadius,
+                              .y = actionButtonY * scale},
+        .shieldCenter = Vector2{.x = w - actionMargin * scale - scaledActionButtonRadius,
+                                .y = actionButtonY * scale},
+        .actionButtonRadius = scaledActionButtonRadius,
+        // Stacked under the pause button, top-center.
+        .comboCenter = Vector2{.x = w / 2,
+                               .y = pauseCenter.y + scaledPauseRadius + comboGap * scale +
+                                    scaledComboRadius},
+        .comboRadius = scaledComboRadius,
+    };
+}
+
+namespace
+{
+
+constexpr float touchStickDeadzone = 0.08F;
+
+// Advances one stick's live drag, or springs it back to center on release
+// (normal joystick behavior).
+void updateTouchStick(TouchStick& stick, Vector2 anchor, float radius, int32_t touchCount)
+{
+    if (stick.touchId == -1)
+    {
+        return;
+    }
+
+    for (int32_t i = 0; i < touchCount; i++)
+    {
+        if (GetTouchPointId(i) != stick.touchId)
+        {
+            continue;
+        }
+
+        const Vector2 pos = GetTouchPosition(i);
+        Vector2 offset = Vector2Subtract(pos, anchor);
+        const float len = Vector2Length(offset);
+        if (len > radius)
+        {
+            offset = Vector2Scale(offset, radius / len);
+        }
+        stick.offset = offset;
+        return;
+    }
+
+    // Touch is gone this frame - released, spring back to center.
+    stick.touchId = -1;
+    stick.offset = Vector2{};
+}
+
+// Deadzone with rescaling: response ramps up smoothly from 0 right at the
+// deadzone edge instead of jumping straight to a fraction of full strength,
+// so small pushes register - more sensitive than a plain cutoff.
+auto resolveAxis(const TouchStick& stick, float radius) -> Vector2
+{
+    if (radius <= 0)
+    {
+        return Vector2{};
+    }
+    const Vector2 raw = Vector2Scale(stick.offset, 1.0F / radius);
+    const float len = Vector2Length(raw);
+    if (len < touchStickDeadzone)
+    {
+        return Vector2{};
+    }
+    const float rescaled = std::min(1.0F, (len - touchStickDeadzone) / (1.0F - touchStickDeadzone));
+    return Vector2Scale(raw, rescaled / len);
+}
+
+void releaseIfGone(int32_t& touchId, int32_t touchCount)
+{
+    if (touchId == -1)
+    {
+        return;
+    }
+    for (int32_t i = 0; i < touchCount; i++)
+    {
+        if (GetTouchPointId(i) == touchId)
+        {
+            return;
+        }
+    }
+    touchId = -1;
+}
+
+}
+
+auto touchInputActive(const Game& game) -> bool
+{
+#if defined(PLATFORM_ANDROID)
+    (void)game;
+    return true;
+#else
+    return game.touch.hasEverTouched;
+#endif
+}
+
+void updateTouchControls(Game& game)
+{
+    auto& touch = game.touch;
+
+    if (GetTouchPointCount() > 0)
+    {
+        touch.hasEverTouched = true;
+    }
+
+    const bool wasVisible = touch.visible;
+    touch.visible = game.state == GameState::GAMEPLAY && touchInputActive(game);
+
+    if (!touch.visible)
+    {
+        if (wasVisible)
+        {
+            const bool hadEverTouched = touch.hasEverTouched;
+            touch = TouchControls{};
+            touch.hasEverTouched = hadEverTouched;
+        }
+        return;
+    }
+
+    const TouchLayout layout = touchControlLayout(game);
+    const int32_t count = GetTouchPointCount();
+
+    releaseIfGone(touch.dash.touchId, count);
+    releaseIfGone(touch.shield.touchId, count);
+    releaseIfGone(touch.combo.touchId, count);
+    releaseIfGone(touch.nerve.touchId, count);
+    releaseIfGone(touch.pause.touchId, count);
+
+    const std::array<std::pair<TouchButton*, std::pair<Vector2, float>>, 5> buttons{{
+        {&touch.pause, {layout.pauseCenter, layout.pauseRadius}},
+        {&touch.combo, {layout.comboCenter, layout.comboRadius}},
+        {&touch.nerve, {layout.nerveCenter, layout.nerveRadius}},
+        {&touch.dash, {layout.dashCenter, layout.actionButtonRadius}},
+        {&touch.shield, {layout.shieldCenter, layout.actionButtonRadius}},
+    }};
+
+    const std::array<bool, 5> wasDown{touch.pause.down, touch.combo.down, touch.nerve.down,
+                                      touch.dash.down, touch.shield.down};
+
+    for (int32_t i = 0; i < count; i++)
+    {
+        const int32_t id = GetTouchPointId(i);
+        const Vector2 pos = GetTouchPosition(i);
+
+        bool claimed = id == touch.moveStick.touchId || id == touch.aimStick.touchId;
+        for (const auto& [button, zone] : buttons)
+        {
+            claimed = claimed || id == button->touchId;
+        }
+        if (claimed)
+        {
+            continue;
+        }
+
+        bool claimedByButton = false;
+        for (const auto& [button, zone] : buttons)
+        {
+            if (button->touchId == -1 && CheckCollisionPointCircle(pos, zone.first, zone.second))
+            {
+                button->touchId = id;
+                claimedByButton = true;
+                break;
+            }
+        }
+        if (claimedByButton)
+        {
+            continue;
+        }
+
+        if (touch.moveStick.touchId == -1 &&
+            CheckCollisionPointCircle(pos, layout.moveStickAnchor, layout.stickRadius))
+        {
+            touch.moveStick.touchId = id;
+        }
+        else if (touch.aimStick.touchId == -1 &&
+                CheckCollisionPointCircle(pos, layout.aimStickAnchor, layout.stickRadius))
+        {
+            touch.aimStick.touchId = id;
+        }
+    }
+
+    for (size_t i = 0; i < buttons.size(); i++)
+    {
+        TouchButton& button = *buttons.at(i).first;
+        button.down = button.touchId != -1;
+        button.pressed = button.down && !wasDown.at(i);
+    }
+
+    updateTouchStick(touch.moveStick, layout.moveStickAnchor, layout.stickRadius, count);
+    updateTouchStick(touch.aimStick, layout.aimStickAnchor, layout.stickRadius, count);
+
+    touch.moveStick.axis = resolveAxis(touch.moveStick, layout.stickRadius);
+    touch.aimStick.axis = resolveAxis(touch.aimStick, layout.stickRadius);
+
+    if (Vector2Length(touch.aimStick.axis) > 0.001F)
+    {
+        touch.aimDir = Vector2Normalize(touch.aimStick.axis);
+    }
+    else if (Vector2Length(touch.moveStick.axis) > 0.001F)
+    {
+        touch.aimDir = Vector2Normalize(touch.moveStick.axis);
+    }
 }
 
 auto mouseWorldPos(const Game& game) -> Vector2

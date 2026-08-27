@@ -69,8 +69,16 @@ auto damageShakeIntensity(int32_t amount) -> float
 }
 void triggerShake(Game& /*game*/, float /*intensity*/, float /*duration*/)
 {
-    // ponytail: screen shake is disabled everywhere except triggerBossShieldDashShake below,
-    // per explicit request that shake should only fire on a shield-dash into a boss.
+    // ponytail: screen shake is disabled everywhere except triggerBossShieldDashShake and
+    // triggerPlayerHitShake below, per explicit request that shake should only fire on a
+    // shield-dash into a boss or on the player taking damage.
+}
+
+void triggerPlayerHitShake(Game& game, float intensity, float duration)
+{
+    game.run.shakeIntensity = intensity;
+    game.run.shakeTimer = duration;
+    game.run.shakeDuration = duration;
 }
 
 void triggerBossShieldDashShake(Game& game)
@@ -201,8 +209,9 @@ auto updateTitle(Game& game) -> bool
 
 auto updateAchievements(Game& game) -> bool
 {
-    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) ||
-        IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    // A quick tap/click backs out; a tap-and-hold previews a weapon's
+    // unlock details instead (see hoverActive) without instantly exiting.
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) || quickTapReleased(game))
     {
         game.state = game.settingsReturnState;
     }
@@ -211,8 +220,7 @@ auto updateAchievements(Game& game) -> bool
 
 auto updateBestiary(Game& game) -> bool
 {
-    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) ||
-        IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) || quickTapReleased(game))
     {
         game.state = game.settingsReturnState;
     }
@@ -300,7 +308,15 @@ auto updateEnding(Game& game, float deltaTime) -> bool
     game.run.player.shieldActive = false;
     game.run.player.nerveCharging = false;
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+    game.run.endingTimer += deltaTime;
+
+    const bool skipRequested =
+        IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
+
+    // ponytail: the dash that kills the final boss also fires on MOUSE_BUTTON_LEFT, so a short
+    // grace window keeps that same click from instantly skipping the scene it just triggered.
+    if ((skipRequested && game.run.endingTimer >= endingSkipGraceDuration) ||
+        game.run.endingTimer >= endingDuration)
     {
         game.state = GameState::TITLE;
         game.menuIndex = 0;
@@ -531,6 +547,12 @@ auto updateSettings(Game& game) -> bool
         }
         break;
     case 6:
+        if (left || right || confirm)
+        {
+            game.resources.settings.swapTouchSticks = !game.resources.settings.swapTouchSticks;
+        }
+        break;
+    case 7:
         if (confirm)
         {
             game.state = game.settingsReturnState;
@@ -541,7 +563,7 @@ auto updateSettings(Game& game) -> bool
         break;
     }
 
-    if ((left || right || confirm) && game.menuIndex <= 4)
+    if ((left || right || confirm) && (game.menuIndex <= 4 || game.menuIndex == 6))
     {
         saveSettings(game.resources.settings);
     }
@@ -887,7 +909,7 @@ void updateGameplay(Game& game, float deltaTime)
 
     game.run.damageMeter = DamageMeter{};
 
-    if (IsKeyPressed(KEY_ESCAPE))
+    if (IsKeyPressed(KEY_ESCAPE) || pausePressed(game))
     {
         game.state = GameState::PAUSED;
         game.menuIndex = 0;
@@ -1069,14 +1091,16 @@ void updateGameplay(Game& game, float deltaTime)
         const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
                                  .y = boss.position.y + boss.size.y / 2};
 
-        if (boss.isKraken)
+        if (boss.isKraken && boss.krakenEncounter < 3)
         {
-            if (boss.krakenEncounter < 3)
-            {
-                boss.retreating = true;
-                boss.health = 1;
-            }
-            else if (game.run.bossCutscenePhase == 0)
+            boss.retreating = true;
+            boss.health = 1;
+            continue;
+        }
+
+        if (boss.isKraken && !game.run.inBanishedRealm)
+        {
+            if (game.run.bossCutscenePhase == 0)
             {
                 boss.health = 1;
                 boss.deathAnimTimer = bossDeathAnimDuration;
@@ -1163,7 +1187,7 @@ void updateGameplay(Game& game, float deltaTime)
 
         if (boss.slagmawBreaksIntoDrifters)
         {
-            spawnSlagmawDrifterBreak(game, bossCenter);
+            spawnSlagmawDrifterBreak(game, bossCenter, boss.slagmawBreakGeneration + 1);
         }
         else if (boss.slagmawBreaksIntoHalves)
         {
@@ -2135,7 +2159,7 @@ void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSourc
         }
     }
 
-    if (hitAny)
+    if (hitAny && source != DamageSource::Mine)
     {
         playSFX(game, game.resources.sounds.explosion);
     }
@@ -3774,12 +3798,33 @@ void updateBullets(Game& game, float deltaTime)
 
         for (auto& boss : game.run.bosses)
         {
+            if (!bullet.active || boss.health <= 0)
+            {
+                continue;
+            }
+
+            if (boss.isKraken)
+            {
+                for (int32_t slot = 0; slot < Boss::krakenLimbSlots; slot++)
+                {
+                    if (bullet.active && boss.tentacleStaggered.at(static_cast<size_t>(slot)) &&
+                        CheckCollisionCircles(bullet.position, bullet.radius,
+                                              boss.tentacleStaggerPos.at(static_cast<size_t>(slot)),
+                                              krakenTentacleHitRadius))
+                    {
+                        bullet.active = false;
+                        damageBoss(game, boss, bullet.damage, true, false, true);
+                        recordDamage(game, bullet.source, bullet.damage);
+                    }
+                }
+                continue;
+            }
+
             const Rectangle bossRect{.x = boss.position.x,
                                      .y = boss.position.y,
                                      .width = boss.size.x,
                                      .height = boss.size.y};
-            if (bullet.active && boss.health > 0 &&
-                CheckCollisionCircleRec(bullet.position, bullet.radius, bossRect))
+            if (bullet.active && CheckCollisionCircleRec(bullet.position, bullet.radius, bossRect))
             {
                 bullet.active = false;
                 damageBoss(game, boss, bullet.damage, true, bullet.source == DamageSource::Railgun);
@@ -5291,6 +5336,8 @@ auto UpdateGame(Game& game, float deltaTime) -> bool
         toggleFullscreen(game);
     }
     syncScreenSize(game);
+    updateTouchControls(game);
+    updatePointerHold(game);
 
     updateBgParticles(game);
     updateDeathParticles(game, deltaTime);

@@ -48,6 +48,55 @@ enum class GameState : std::uint8_t
     ENDING
 };
 
+// A normal virtual stick: springs back to center on release.
+struct TouchStick
+{
+    int32_t touchId = -1;
+    Vector2 offset{};   // live offset from the fixed anchor, |offset| <= radius
+    Vector2 axis{};     // offset scaled to [-1,1], deadzone applied and rescaled
+};
+
+// A simple circular press/hold button.
+struct TouchButton
+{
+    int32_t touchId = -1;
+    bool down = false;
+    bool pressed = false;
+};
+
+struct TouchControls
+{
+    bool hasEverTouched = false;
+    bool visible = false;
+
+    TouchStick moveStick;
+    TouchStick aimStick;
+    Vector2 aimDir{.x = 0, .y = -1};
+
+    TouchButton dash;
+    TouchButton shield;
+    TouchButton combo; // dash + shield together, dedicated button
+    TouchButton nerve;
+    TouchButton pause;
+};
+
+// raylib aliases touch to MOUSE_BUTTON_LEFT/GetMousePosition() outside
+// gameplay (see TouchControls), which is what makes tapping menu buttons
+// already work on touch for free. Menu hover previews (tooltips) don't have
+// a touch equivalent though, since touch has no "point without pressing"
+// gesture - this tracks press duration/drift so hover-driven UI can treat a
+// held press (tap-and-hold) as hover, while a quick tap still acts as a
+// click. Works for desktop mouse too: a plain mouse hover (button up) always
+// counts, unchanged from before.
+struct PointerHold
+{
+    Vector2 position{};
+    Vector2 pressStartPos{};
+    float pressStartTime = 0;
+    bool isHold = false;
+    bool releasedAsTap = false;
+};
+
 struct GameResources
 {
     int screenWidth{};
@@ -142,6 +191,8 @@ struct GameplayState
     float bossCutsceneTimer;
     Vector2 krakenFleePos;
 
+    float endingTimer;
+
 };
 
 struct Game
@@ -174,6 +225,8 @@ struct Game
 
     GameResources resources;
     GameplayState run;
+    TouchControls touch;
+    PointerHold pointerHold;
 };
 
 auto InitGame() -> Game;

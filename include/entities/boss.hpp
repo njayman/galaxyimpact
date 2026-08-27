@@ -157,26 +157,34 @@ class Boss
     int32_t krakenEncounter = 0;
     bool retreating = false;
     float tentacleCheckTimer = 5.0F;
-    int32_t tentaclePhase = 0;
-    float tentacleStateTimer = 0;
-    float tentacleCooldownTimer = 0;
-    Vector2 tentaclePortalPos{};
-    float tentacleSwipeStartAngle = 0;
-    float tentacleSwipeEndAngle = 0;
-    bool tentacleHitPlayerThisSwipe = false;
 
-    static constexpr int32_t krakenLimbSlots = 2;
-    std::array<int32_t, krakenLimbSlots> limbPod{-1, -1};
-    std::array<int32_t, krakenLimbSlots> limbPhase{0, 0};
-    std::array<float, krakenLimbSlots> limbTimer{0, 0};
-    std::array<float, krakenLimbSlots> limbCooldown{0, 0};
-    std::array<float, krakenLimbSlots> limbGrabTimer{0, 0};
+    static constexpr int32_t krakenLimbSlots = 4;
+    std::array<int32_t, krakenLimbSlots> tentaclePhase{0, 0, 0, 0};
+    std::array<float, krakenLimbSlots> tentacleStateTimer{0, 0, 0, 0};
+    std::array<float, krakenLimbSlots> tentacleCooldownTimer{0, 0, 0, 0};
+    std::array<Vector2, krakenLimbSlots> tentaclePortalPos{};
+    std::array<float, krakenLimbSlots> tentacleSwipeStartAngle{0, 0, 0, 0};
+    std::array<float, krakenLimbSlots> tentacleSwipeEndAngle{0, 0, 0, 0};
+    std::array<bool, krakenLimbSlots> tentacleHitPlayerThisSwipe{};
+
+    // ponytail: parry no longer deals instant damage; it staggers the tentacle out at its
+    // body gate for a hittable window (see krakenStaggerDuration). This is Kraken's only
+    // damage source now.
+    std::array<bool, krakenLimbSlots> tentacleStaggered{};
+    std::array<float, krakenLimbSlots> tentacleStaggerTimer{0, 0, 0, 0};
+    std::array<Vector2, krakenLimbSlots> tentacleStaggerPos{};
+
+    std::array<int32_t, krakenLimbSlots> limbPod{-1, -1, -1, -1};
+    std::array<int32_t, krakenLimbSlots> limbPhase{0, 0, 0, 0};
+    std::array<float, krakenLimbSlots> limbTimer{0, 0, 0, 0};
+    std::array<float, krakenLimbSlots> limbCooldown{0, 0, 0, 0};
+    std::array<float, krakenLimbSlots> limbGrabTimer{0, 0, 0, 0};
     std::array<Vector2, krakenLimbSlots> limbGrabTarget{};
     std::array<Vector2, krakenLimbSlots> limbPortalPos{};
     std::array<float, krakenLimbSlots> limbGrabAnimTimer{};
-    std::array<int32_t, krakenLimbSlots> limbGrabbedKind{-1, -1};
-    std::array<int32_t, krakenLimbSlots> limbThrowPhase{0, 0};
-    std::array<float, krakenLimbSlots> limbThrowTimer{0, 0};
+    std::array<int32_t, krakenLimbSlots> limbGrabbedKind{-1, -1, -1, -1};
+    std::array<int32_t, krakenLimbSlots> limbThrowPhase{0, 0, 0, 0};
+    std::array<float, krakenLimbSlots> limbThrowTimer{0, 0, 0, 0};
 
     float krakenSummonTimer = 0;
     bool krakenSnakeSummoned = false;
@@ -197,6 +205,7 @@ class Boss
 
     bool slagmawBreaksIntoDrifters = false;
     bool slagmawBreaksIntoHalves = false;
+    int32_t slagmawBreakGeneration = 0;
 
     float parryStunTimer = 0;
 

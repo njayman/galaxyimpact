@@ -69,8 +69,7 @@ namespace
 {
 
 void drawTitle(const Game& game);
-void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float rotationDeg,
-                    Color color);
+void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float rotationDeg, Color color);
 void drawBossHull(BossShape shape, Vector2 center, Vector2 size, Color color);
 void drawShipSelect(const Game& game);
 void drawGameOver(const Game& game);
@@ -106,11 +105,14 @@ void drawComet(const BossProjectile& projectile);
 void drawMeteorProjectile(const BossProjectile& projectile);
 void drawKrakenHurledEnemy(const BossProjectile& projectile);
 void drawFluidBlob(Vector2 center, float radius, Color color, float seed, Vector2 trailDir);
-void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color color, Vector2 velocity);
+void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color color,
+                            Vector2 velocity);
 void drawKrakenShape(Vector2 center, float radius, float seed, Color color);
-void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bodyRadius, float seed,
-                       float thicknessScale, float waveScale, bool calm, Color color, Color tipColor);
-void drawKrakenTentacle(const Boss& boss);
+void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bodyRadius,
+                       float seed, float thicknessScale, float waveScale, bool calm, Color color,
+                       Color tipColor);
+void drawKrakenTentacle(const Boss& boss, int32_t slot);
+void drawKrakenStaggeredTentacle(const Boss& boss, int32_t slot);
 void drawKrakenLimb(const Boss& boss, int32_t slot);
 void drawKrakenGrabbedEnemy(Vector2 pos, int32_t kindIndex, float scale, float facingAngle);
 void drawBanishedShape(Vector2 center, const Boss& boss);
@@ -120,6 +122,7 @@ void drawPanelShape(Vector2 center, float radius, int32_t sides, float rotationD
                     float seed);
 void drawPanelHex(Vector2 center, float radius, float rotationDeg, Color baseColor, float seed);
 void drawHUD(const Game& game);
+void drawTouchControls(const Game& game);
 void drawStatusRow(const Game& game, int32_t x, int32_t y);
 void drawDownwardTriangleIcon(float cx, int32_t y, float size, Color fillColor, bool filled);
 void drawHealthBar(const Game& game, int32_t x, int32_t y);
@@ -194,10 +197,14 @@ auto biomeVoidColor(const Game& game) -> Color
 {
     switch (currentBiome(game.run.waveNumber))
     {
-    case Biome::ShatteredBelt: return Palette::Void;
-    case Biome::Rustbloom: return Palette::RustbloomVoid;
-    case Biome::SolarForge: return Palette::SolarForgeVoid;
-    case Biome::Punctum: return Palette::PunctumVoid;
+    case Biome::ShatteredBelt:
+        return Palette::Void;
+    case Biome::Rustbloom:
+        return Palette::RustbloomVoid;
+    case Biome::SolarForge:
+        return Palette::SolarForgeVoid;
+    case Biome::Punctum:
+        return Palette::PunctumVoid;
     }
     return Palette::Void;
 }
@@ -206,10 +213,14 @@ auto biomeHazeColor(const Game& game) -> Color
 {
     switch (currentBiome(game.run.waveNumber))
     {
-    case Biome::ShatteredBelt: return Palette::Haze;
-    case Biome::Rustbloom: return Palette::RustbloomHaze;
-    case Biome::SolarForge: return Palette::SolarForgeHaze;
-    case Biome::Punctum: return Palette::PunctumHaze;
+    case Biome::ShatteredBelt:
+        return Palette::Haze;
+    case Biome::Rustbloom:
+        return Palette::RustbloomHaze;
+    case Biome::SolarForge:
+        return Palette::SolarForgeHaze;
+    case Biome::Punctum:
+        return Palette::PunctumHaze;
     }
     return Palette::Haze;
 }
@@ -323,34 +334,58 @@ void drawEnding(const Game& game)
 {
     const auto windowW = static_cast<float>(game.resources.windowWidth);
     const auto windowH = static_cast<float>(game.resources.windowHeight);
+    const auto t = static_cast<float>(GetTime());
+    const float parallax = game.run.endingTimer * endingDriftSpeed * 0.15F;
 
     for (int32_t i = 0; i < 60; i++)
     {
         const float seed = static_cast<float>(i);
-        DrawCircleV(Vector2{.x = hashNoise(seed * 3.1F) * windowW, .y = hashNoise(seed * 7.7F) * windowH},
-                   1.2F, Fade(WHITE, 0.5F));
+        const float twinkle =
+            0.35F + 0.35F * std::sin(t * (0.6F + hashNoise(seed) * 1.4F) + seed * 5.0F);
+        const float x = std::fmod(hashNoise(seed * 3.1F) * windowW - parallax, windowW);
+        DrawCircleV(Vector2{.x = x < 0 ? x + windowW : x, .y = hashNoise(seed * 7.7F) * windowH},
+                    1.2F, Fade(WHITE, twinkle));
     }
 
-    const Vector2 sunPos{.x = windowW * 0.85F, .y = windowH * 0.2F};
-    DrawCircleV(sunPos, 60, Fade(Palette::Accent, 0.25F));
+    const float sunPulse = 1.0F + 0.06F * std::sin(t * 1.3F);
+    const Vector2 sunPos{.x = windowW * 0.85F - parallax * 0.3F, .y = windowH * 0.2F};
+    DrawCircleV(sunPos, 60 * sunPulse, Fade(Palette::Accent, 0.25F));
     DrawCircleV(sunPos, 42, Palette::Accent);
 
-    const Vector2 earthPos{.x = windowW * 0.62F, .y = windowH * 0.42F};
+    const Vector2 earthPos{.x = windowW * 0.62F - parallax * 0.5F, .y = windowH * 0.42F};
     DrawCircleV(earthPos, 28, Palette::Shield);
-    DrawCircleV(Vector2Add(earthPos, Vector2{.x = 9, .y = -7}), 9, Palette::Heal);
+    const float moonOrbit = t * 0.5F;
+    const Vector2 moonPos = Vector2Add(
+        earthPos, Vector2{.x = std::cos(moonOrbit) * 13.0F, .y = std::sin(moonOrbit) * 13.0F});
+    DrawCircleV(moonPos, 9, Palette::Heal);
 
-    DrawCircleV(Vector2{.x = windowW * 0.3F, .y = windowH * 0.72F}, 9, Palette::StructMid);
-    DrawCircleV(Vector2{.x = windowW * 0.14F, .y = windowH * 0.28F}, 5, Palette::AccentDim);
+    const Vector2 driftPlanet1{.x = windowW * 0.3F - parallax * 0.8F,
+                               .y = windowH * 0.72F + std::sin(t * 0.7F) * 6.0F};
+    DrawCircleV(driftPlanet1, 9, Palette::StructMid);
+    const Vector2 driftPlanet2{.x = windowW * 0.14F - parallax,
+                               .y = windowH * 0.28F + std::sin(t * 0.9F + 2.0F) * 4.0F};
+    DrawCircleV(driftPlanet2, 5, Palette::AccentDim);
 
     drawShip(game);
 
     applyGuiScale(game);
+    constexpr float textFadeInDuration = 1.8F;
+    const float textAlpha = std::clamp(game.run.endingTimer / textFadeInDuration, 0.0F, 1.0F);
+    // windowText scales its y by guiUiScale(), so bottom-anchored positions must be
+    // pre-divided by that scale or they land below the visible window on tall resolutions.
+    const float scale = guiUiScale(game);
+    const auto windowHeightF = static_cast<float>(game.resources.windowHeight);
     windowText(game, "Thank you for playing this game.", game.resources.windowWidth / 2,
-              game.resources.windowHeight - 140, 26, WHITE);
+               static_cast<int32_t>((windowHeightF - 140) / scale), 26, Fade(WHITE, textAlpha));
     windowText(game, "Never go to space alone.", game.resources.windowWidth / 2,
-              game.resources.windowHeight - 100, 26, WHITE);
-    windowText(game, "click to continue", game.resources.windowWidth / 2,
-              game.resources.windowHeight - 50, 16, Palette::StructLight);
+               static_cast<int32_t>((windowHeightF - 100) / scale), 26, Fade(WHITE, textAlpha));
+    if (game.run.endingTimer >= endingSkipGraceDuration)
+    {
+        const float promptPulse = 0.6F + 0.4F * std::sin(t * 3.0F);
+        windowText(game, "click to continue", game.resources.windowWidth / 2,
+                   static_cast<int32_t>((windowHeightF - 50) / scale), 16,
+                   Fade(Palette::StructLight, promptPulse));
+    }
 }
 
 void drawOverlay(const Game& game)
@@ -369,9 +404,9 @@ void drawSettings(const Game& game)
         resolutionOptions.at(static_cast<size_t>(game.resources.settings.resolutionIndex));
     const std::string displayMode = IsWindowFullscreen() ? "Fullscreen" : "Windowed";
 
-    const std::array<std::string, 6> stepperLabels{"Resolution", "", "", "FPS Cap", "HUD Scale",
-                                                   "Display Mode"};
-    const std::array<std::string, 6> stepperValues{
+    const std::array<std::string, 7> stepperLabels{"Resolution",   "", "", "FPS Cap", "HUD Scale",
+                                                   "Display Mode", ""};
+    const std::array<std::string, 7> stepperValues{
         std::format("{}x{}", res.width, res.height),
         "",
         "",
@@ -380,9 +415,10 @@ void drawSettings(const Game& game)
                     hudScaleOptions.at(static_cast<size_t>(game.resources.settings.hudScaleIndex)) *
                         100),
         displayMode,
+        "",
     };
 
-    constexpr int32_t rowCount = 7;
+    constexpr int32_t rowCount = settingsRowCount;
     for (int32_t i = 0; i < rowCount; i++)
     {
         const Rectangle rect =
@@ -394,12 +430,13 @@ void drawSettings(const Game& game)
             GuiSetState(STATE_FOCUSED);
         }
 
-        if (i == 1 || i == 2)
+        if (i == 1 || i == 2 || i == 6)
         {
-            const bool on =
-                i == 1 ? game.resources.settings.bgmOn : game.resources.settings.soundOn;
+            const bool on = i == 1   ? game.resources.settings.bgmOn
+                            : i == 2 ? game.resources.settings.soundOn
+                                     : game.resources.settings.swapTouchSticks;
             bool checked = on;
-            const char* label = i == 1 ? "BGM" : "Sound";
+            const char* label = i == 1 ? "BGM" : i == 2 ? "Sound" : "Swap Sticks (Android)";
             const Rectangle box{.x = rect.x,
                                 .y = rect.y + rect.height / 2 - 12 * scale,
                                 .width = 24 * scale,
@@ -520,9 +557,8 @@ void drawAchievements(const Game& game)
     constexpr int32_t columnWidth = 520;
     constexpr int32_t iconBoxSize = 30;
     constexpr size_t evolvableWeaponCount = 6;
-    const int32_t leftX =
-        game.resources.windowWidth / 2 - static_cast<int32_t>(static_cast<float>(columnWidth) *
-                                                              scale);
+    const int32_t leftX = game.resources.windowWidth / 2 -
+                          static_cast<int32_t>(static_cast<float>(columnWidth) * scale);
     const int32_t topY = 170;
 
     const Vector2 mouse = GetMousePosition();
@@ -536,16 +572,16 @@ void drawAchievements(const Game& game)
         const int32_t column = static_cast<int32_t>(i) / rowsPerColumn;
         const int32_t row = static_cast<int32_t>(i) % rowsPerColumn;
         const auto x = static_cast<float>(leftX) +
-                      static_cast<float>(column) * static_cast<float>(columnWidth) * scale;
-        const auto y =
-            static_cast<float>(topY) + static_cast<float>(row) * static_cast<float>(rowHeight) * scale;
+                       static_cast<float>(column) * static_cast<float>(columnWidth) * scale;
+        const auto y = static_cast<float>(topY) +
+                       static_cast<float>(row) * static_cast<float>(rowHeight) * scale;
         const Color color = unlocked ? Palette::StructLight : Palette::StructMid;
 
         const Rectangle rowRect{.x = x,
                                 .y = y,
                                 .width = static_cast<float>(columnWidth) * scale,
                                 .height = static_cast<float>(rowHeight) * scale};
-        if (CheckCollisionPointRec(mouse, rowRect))
+        if (hoverActive(game) && CheckCollisionPointRec(mouse, rowRect))
         {
             hovered = weapon;
             hoveredRect = rowRect;
@@ -618,12 +654,16 @@ void drawAchievements(const Game& game)
         DrawRectangleLines(tipX, tipY, boxWidth, boxHeight, Palette::StructMid);
         for (size_t li = 0; li < lines.size(); li++)
         {
-            drawText(game, lines.at(li).c_str(), tipX + 8, tipY + 6 + static_cast<int32_t>(li) * lineHeight,
-                     lineFontSize, li == 0 ? Palette::Accent : Palette::StructLight);
+            drawText(game, lines.at(li).c_str(), tipX + 8,
+                     tipY + 6 + static_cast<int32_t>(li) * lineHeight, lineFontSize,
+                     li == 0 ? Palette::Accent : Palette::StructLight);
         }
     }
 
-    windowText(game, "Hover a weapon for unlock details   |   Click / Enter / Esc: back",
+    windowText(game,
+               touchInputActive(game)
+                   ? "Tap & hold a weapon for unlock details   |   Tap: back"
+                   : "Hover a weapon for unlock details   |   Click / Enter / Esc: back",
                game.resources.windowWidth / 2,
                topY + static_cast<int32_t>(static_cast<float>(rowsPerColumn * rowHeight) * scale) +
                    30,
@@ -693,7 +733,7 @@ auto drawBestiarySection(const Game& game, std::string_view title, float y, floa
                  static_cast<int32_t>(cellY + box.height + 2 * scale), 12,
                  unlocked ? Palette::StructLight : Palette::StructMid);
 
-        if (CheckCollisionPointRec(mouse, box))
+        if (hoverActive(game) && CheckCollisionPointRec(mouse, box))
         {
             hovering = true;
             hoverName = unlocked ? std::string(nameFor(i)) : "??? (undiscovered)";
@@ -729,19 +769,17 @@ void drawBestiary(const Game& game)
     const auto bossCount = std::count(bestiary.bossKilled.begin(), bestiary.bossKilled.end(), true);
     const auto hazardCount =
         std::count(bestiary.hazardKilled.begin(), bestiary.hazardKilled.end(), true);
-    const std::string summary =
-        std::format("Enemies: {} of {}   Bosses: {} of {}   Hazards: {} of {}", enemyCount,
-                    enemyKinds.size(), bossCount, bestiaryBossKindCount, hazardCount,
-                    bestiaryHazardKindCount);
+    const std::string summary = std::format(
+        "Enemies: {} of {}   Bosses: {} of {}   Hazards: {} of {}", enemyCount, enemyKinds.size(),
+        bossCount, bestiaryBossKindCount, hazardCount, bestiaryHazardKindCount);
     windowText(game, summary.c_str(), game.resources.windowWidth / 2, 100, 18,
                Palette::StructLight);
 
     float y = 140 * scale;
     y = drawBestiarySection(
         game, "ENEMIES", y, scale, enemyKinds.size(),
-        [&](size_t i) { return bestiary.enemyKilled.at(i); },
-        [](size_t i) -> std::string_view { return enemyKinds.at(i).name; },
-        [](size_t i, Vector2 c, float r, Color col)
+        [&](size_t i) { return bestiary.enemyKilled.at(i); }, [](size_t i) -> std::string_view
+        { return enemyKinds.at(i).name; }, [](size_t i, Vector2 c, float r, Color col)
         { drawEnemyShape(enemyKinds.at(i).shape, c, r, 0, col); },
         [](size_t i) { return enemyKinds.at(i).color; });
 
@@ -749,9 +787,10 @@ void drawBestiary(const Game& game)
         game, "BOSSES", y, scale, bestiaryBossKindCount,
         [&](size_t i) { return bestiary.bossKilled.at(i); },
         [](size_t i) { return bossBestiaryName(static_cast<int32_t>(i)); },
-        [](size_t i, Vector2 c, float r, Color col) {
+        [](size_t i, Vector2 c, float r, Color col)
+        {
             drawBossHull(bossBestiaryShape(static_cast<int32_t>(i)), c,
-                        Vector2{.x = r * 2, .y = r * 2}, col);
+                         Vector2{.x = r * 2, .y = r * 2}, col);
         },
         [](size_t i) { return bossBestiaryColor(static_cast<int32_t>(i)); });
 
@@ -768,11 +807,13 @@ void drawBestiary(const Game& game)
         [](size_t i)
         {
             return static_cast<EliteHazardRole>(i) == EliteHazardRole::Warlord ? Palette::Accent
-                                                                                : Palette::Shield;
+                                                                               : Palette::Shield;
         });
 
     const auto footerSize = static_cast<int32_t>(16 * scale);
-    constexpr const char* footerText = "Click, Enter, or Esc: back";
+    const char* footerText = touchInputActive(game)
+                                 ? "Tap & hold an entry for its name   |   Tap: back"
+                                 : "Click, Enter, or Esc: back";
     const int32_t footerWidth = measureText(game, footerText, footerSize);
     drawText(game, footerText, game.resources.windowWidth / 2 - footerWidth / 2,
              static_cast<int32_t>(y), footerSize, Palette::StructMid);
@@ -858,9 +899,9 @@ void drawWeaponIcon(WeaponType kind, Vector2 c, float s, Color color)
     case WeaponType::Sniper:
         DrawCircleLines(static_cast<int32_t>(c.x), static_cast<int32_t>(c.y), s, color);
         DrawLineEx(Vector2{.x = c.x - s * 1.3F, .y = c.y}, Vector2{.x = c.x + s * 1.3F, .y = c.y},
-                  1.5F, color);
+                   1.5F, color);
         DrawLineEx(Vector2{.x = c.x, .y = c.y - s * 1.3F}, Vector2{.x = c.x, .y = c.y + s * 1.3F},
-                  1.5F, color);
+                   1.5F, color);
         break;
     case WeaponType::Count:
         break;
@@ -1004,9 +1045,8 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
     {
         const Color color = w.evolved ? Palette::Crit : Palette::Shield;
         const auto typeIndex = static_cast<size_t>(w.type);
-        const bool evolutionReady =
-            typeIndex < evolvableWeaponCount && !w.evolved &&
-            game.resources.achievements.evolutionUnlocked.at(typeIndex);
+        const bool evolutionReady = typeIndex < evolvableWeaponCount && !w.evolved &&
+                                    game.resources.achievements.evolutionUnlocked.at(typeIndex);
         const bool stolen =
             game.run.weaponDowngrade.has_value() && game.run.weaponDowngrade->type == w.type;
         slots.push_back(Slot{.id = weaponGrantSkill.at(typeIndex),
@@ -1027,7 +1067,8 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
         {
             continue;
         }
-        slots.push_back(Slot{.id = id, .color = Palette::Shield, .level = game.run.skillLevels.at(i)});
+        slots.push_back(
+            Slot{.id = id, .color = Palette::Shield, .level = game.run.skillLevels.at(i)});
     }
 
     const Vector2 mouse = mouseUIPos(game);
@@ -1063,9 +1104,9 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
                 const auto tx = static_cast<int32_t>(bx);
                 const auto ty = static_cast<int32_t>(by);
                 DrawTriangle(Vector2{.x = static_cast<float>(tx), .y = static_cast<float>(ty)},
-                            Vector2{.x = static_cast<float>(tx) + 9, .y = static_cast<float>(ty)},
-                            Vector2{.x = static_cast<float>(tx), .y = static_cast<float>(ty) + 9},
-                            Palette::Accent);
+                             Vector2{.x = static_cast<float>(tx) + 9, .y = static_cast<float>(ty)},
+                             Vector2{.x = static_cast<float>(tx), .y = static_cast<float>(ty) + 9},
+                             Palette::Accent);
             }
 
             if (slot.evolutionReady)
@@ -1073,10 +1114,11 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
                 const auto ax = bx + boxSize - 8;
                 const auto ay = by + 1;
                 DrawTriangle(Vector2{.x = ax, .y = ay + 7}, Vector2{.x = ax + 4, .y = ay},
-                            Vector2{.x = ax + 8, .y = ay + 7}, Palette::Heal);
+                             Vector2{.x = ax + 8, .y = ay + 7}, Palette::Heal);
             }
 
-            if (CheckCollisionPointRec(
+            if (hoverActive(game) &&
+                CheckCollisionPointRec(
                     mouse, Rectangle{.x = bx, .y = by, .width = boxSize, .height = boxSize}))
             {
                 hovered = slot.id;
@@ -1317,14 +1359,16 @@ void drawSolarForgeCaveBackground(const Game& game)
                             blobRadius, Fade(ColorLerp(rock, WHITE, 0.2F), 0.2F));
             if (shade > 0.78F)
             {
-                const float ex = (hashNoise(x * 0.091F + y * 0.061F + 2.3F) - 0.5F) * cellSize * 0.5F;
-                const float ey = (hashNoise(x * 0.061F + y * 0.091F + 6.7F) - 0.5F) * cellSize * 0.5F;
+                const float ex =
+                    (hashNoise(x * 0.091F + y * 0.061F + 2.3F) - 0.5F) * cellSize * 0.5F;
+                const float ey =
+                    (hashNoise(x * 0.061F + y * 0.091F + 6.7F) - 0.5F) * cellSize * 0.5F;
 
                 const float glowPulse =
                     0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 1.3F + shade * 30.0F);
                 const Color emberColor = ColorLerp(Palette::ElementBurn, YELLOW, glowPulse * 0.5F);
-                DrawCircleV(Vector2{.x = cellCenter.x + ex, .y = cellCenter.y + ey}, cellSize * 0.16F,
-                           Fade(emberColor, 0.5F + glowPulse * 0.3F));
+                DrawCircleV(Vector2{.x = cellCenter.x + ex, .y = cellCenter.y + ey},
+                            cellSize * 0.16F, Fade(emberColor, 0.5F + glowPulse * 0.3F));
             }
         }
     }
@@ -1344,8 +1388,10 @@ void drawRustbloomBackground(const Game& game)
         const float halfW = static_cast<float>(game.resources.screenWidth) / 2 + fragmentCellSize;
         const float halfH = static_cast<float>(game.resources.screenHeight) / 2 + fragmentCellSize;
         const Vector2 fragArea = game.run.player.position;
-        const float fragStartX = std::floor((fragArea.x - halfW) / fragmentCellSize) * fragmentCellSize;
-        const float fragStartY = std::floor((fragArea.y - halfH) / fragmentCellSize) * fragmentCellSize;
+        const float fragStartX =
+            std::floor((fragArea.x - halfW) / fragmentCellSize) * fragmentCellSize;
+        const float fragStartY =
+            std::floor((fragArea.y - halfH) / fragmentCellSize) * fragmentCellSize;
         for (float y = fragStartY; y < fragArea.y + halfH; y += fragmentCellSize)
         {
             for (float x = fragStartX; x < fragArea.x + halfW; x += fragmentCellSize)
@@ -1365,9 +1411,10 @@ void drawRustbloomBackground(const Game& game)
                 const float rot = hashNoise(presence * 71.0F) * 360.0F;
 
                 const float shapeRoll = hashNoise(presence * 53.0F + 4.0F);
-                const int32_t sides = shapeRoll < 0.2F ? 0 : 3 + static_cast<int32_t>(shapeRoll * 7.5F) % 6;
+                const int32_t sides =
+                    shapeRoll < 0.2F ? 0 : 3 + static_cast<int32_t>(shapeRoll * 7.5F) % 6;
                 drawPanelShape(fragCenter, fragRadius, sides, rot, Fade(Palette::StructMid, 0.5F),
-                              presence * 90.0F);
+                               presence * 90.0F);
             }
         }
     }
@@ -1380,7 +1427,8 @@ void drawRustbloomBackground(const Game& game)
     const float startY = std::floor((center.y - halfH) / cellSize) * cellSize;
 
     constexpr float podChance = rustbloomPodChance;
-    auto podPresence = [](float px, float py) -> float { return hashNoise(px * 0.021F + py * 0.037F); };
+    auto podPresence = [](float px, float py) -> float
+    { return hashNoise(px * 0.021F + py * 0.037F); };
 
     for (float y = startY; y < center.y + halfH; y += cellSize)
     {
@@ -1408,8 +1456,9 @@ void drawRustbloomBackground(const Game& game)
             const float sizeSeed = hashNoise(x * 0.043F + y * 0.017F + 9.0F);
             const float podRadius = cellSize * (0.14F + sizeSeed * 0.06F);
             DrawCircleV(podCenter, podRadius, Fade(Palette::RustbloomAccent, 0.3F));
-            DrawCircleV(Vector2Add(podCenter, Vector2{.x = podRadius * 0.5F, .y = podRadius * 0.3F}),
-                       podRadius * 0.6F, Fade(Palette::RustbloomHaze, 0.25F));
+            DrawCircleV(
+                Vector2Add(podCenter, Vector2{.x = podRadius * 0.5F, .y = podRadius * 0.3F}),
+                podRadius * 0.6F, Fade(Palette::RustbloomHaze, 0.25F));
 
             const float pulse = 0.5F + 0.5F * std::sin(t * 1.5F + x * 0.01F + y * 0.01F);
             DrawCircleV(podCenter, podRadius * 0.3F, Fade(Palette::Heal, 0.3F + 0.3F * pulse));
@@ -1442,16 +1491,17 @@ void drawPunctumLightning(const Game& game)
         const float t = static_cast<float>(i) / static_cast<float>(segments);
         const float jitterSeed = game.run.punctumThunderBoltSeed + static_cast<float>(i) * 3.7F;
         const float jitter = (hashNoise(jitterSeed) - 0.5F) * length * 0.12F;
-        const Vector2 point =
-            Vector2Add(Vector2Add(start, Vector2Scale(dir, length * t)), Vector2Scale(perp, jitter));
+        const Vector2 point = Vector2Add(Vector2Add(start, Vector2Scale(dir, length * t)),
+                                         Vector2Scale(perp, jitter));
         DrawLineEx(prev, point, 3.0F * frac, Fade(WHITE, 0.7F * frac));
         DrawLineEx(prev, point, 7.0F * frac, Fade(Palette::PunctumAccent, 0.35F * frac));
 
         if (i > 1 && i < segments && hashNoise(jitterSeed + 50.0F) > 0.6F)
         {
             const float branchAngle = (hashNoise(jitterSeed + 90.0F) - 0.5F) * 90.0F * DEG2RAD;
-            const Vector2 branchDir{.x = dir.x * std::cos(branchAngle) - dir.y * std::sin(branchAngle),
-                                    .y = dir.x * std::sin(branchAngle) + dir.y * std::cos(branchAngle)};
+            const Vector2 branchDir{
+                .x = dir.x * std::cos(branchAngle) - dir.y * std::sin(branchAngle),
+                .y = dir.x * std::sin(branchAngle) + dir.y * std::cos(branchAngle)};
             const Vector2 branchEnd = Vector2Add(point, Vector2Scale(branchDir, length * 0.12F));
             DrawLineEx(point, branchEnd, 2.0F * frac, Fade(WHITE, 0.5F * frac));
         }
@@ -1487,7 +1537,8 @@ void drawBlackHoleGradient(Vector2 center, float radius)
     for (int32_t i = 0; i < armCount; i++)
     {
         const float seed = static_cast<float>(i) * 2.7F;
-        const float baseAngle = static_cast<float>(i) / static_cast<float>(armCount) * 360.0F + rotation;
+        const float baseAngle =
+            static_cast<float>(i) / static_cast<float>(armCount) * 360.0F + rotation;
         const float lengthMult = 0.65F + 0.35F * std::sin(seed * 1.7F);
         const float curl = 70.0F + 20.0F * std::sin(seed);
 
@@ -1505,7 +1556,8 @@ void drawBlackHoleGradient(Vector2 center, float radius)
     }
 }
 
-void drawBlackHoleTwirl(Vector2 center, float radius, const std::vector<BlackHoleDustParticle>& dust)
+void drawBlackHoleTwirl(Vector2 center, float radius,
+                        const std::vector<BlackHoleDustParticle>& dust)
 {
     drawBlackHoleGradient(center, radius);
 
@@ -1527,7 +1579,7 @@ void drawBlackHoleTwirl(Vector2 center, float radius, const std::vector<BlackHol
         const float twist = blackHoleDustTwistStrength * (1.0F - d.radiusFrac);
         const float angle = d.armPeakAngle + d.jitter - twist;
         const Vector2 p = Vector2Add(center, Vector2{.x = std::cos(angle) * d.radiusFrac * radius,
-                                                      .y = std::sin(angle) * d.radiusFrac * radius});
+                                                     .y = std::sin(angle) * d.radiusFrac * radius});
         const float dotSize = 0.7F + 0.9F * (1.0F - d.radiusFrac);
         DrawCircleV(p, dotSize, Fade(d.color, d.brightness));
     }
@@ -1549,12 +1601,11 @@ void drawKrakenRemains(const Game& game)
         {
             const float seed = static_cast<float>(i) * 13.0F;
             const float angle = hashNoise(seed) * 2.0F * std::numbers::pi_v<float>;
-            const Vector2 start = Vector2Add(
-                center, Vector2{.x = std::cos(angle) * radius * 0.15F,
-                               .y = std::sin(angle) * radius * 0.15F});
-            const Vector2 end = Vector2Add(
-                center, Vector2{.x = std::cos(angle) * radius * 0.95F,
-                               .y = std::sin(angle) * radius * 0.95F});
+            const Vector2 start =
+                Vector2Add(center, Vector2{.x = std::cos(angle) * radius * 0.15F,
+                                           .y = std::sin(angle) * radius * 0.15F});
+            const Vector2 end = Vector2Add(center, Vector2{.x = std::cos(angle) * radius * 0.95F,
+                                                           .y = std::sin(angle) * radius * 0.95F});
             DrawLineEx(start, end, 2.5F, Fade(Palette::Void, 0.75F));
         }
         return;
@@ -1573,12 +1624,11 @@ void drawKrakenRemains(const Game& game)
         {
             const float seed = static_cast<float>(i) * 13.0F;
             const float angle = hashNoise(seed) * 2.0F * std::numbers::pi_v<float>;
-            const Vector2 start = Vector2Add(
-                center, Vector2{.x = std::cos(angle) * radius * 0.15F,
-                               .y = std::sin(angle) * radius * 0.15F});
-            const Vector2 end = Vector2Add(
-                center, Vector2{.x = std::cos(angle) * radius * 0.95F,
-                               .y = std::sin(angle) * radius * 0.95F});
+            const Vector2 start =
+                Vector2Add(center, Vector2{.x = std::cos(angle) * radius * 0.15F,
+                                           .y = std::sin(angle) * radius * 0.15F});
+            const Vector2 end = Vector2Add(center, Vector2{.x = std::cos(angle) * radius * 0.95F,
+                                                           .y = std::sin(angle) * radius * 0.95F});
             DrawLineEx(start, end, 2.5F, Fade(Palette::Void, 0.75F * (1.0F - progress)));
         }
 
@@ -1588,11 +1638,11 @@ void drawKrakenRemains(const Game& game)
             const float seed = static_cast<float>(i) * 19.0F;
             const float angle = hashNoise(seed) * 2.0F * std::numbers::pi_v<float>;
             const float dist = radius * 0.5F * progress;
-            const Vector2 pos =
-                Vector2Add(center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+            const Vector2 pos = Vector2Add(
+                center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
             const float rot = hashNoise(seed + 1.0F) * 360.0F;
             DrawPoly(pos, 5, radius * 0.16F * (1.0F - progress * 0.5F), rot,
-                    Fade(Palette::StructDark, 1.0F - progress));
+                     Fade(Palette::StructDark, 1.0F - progress));
         }
     }
 }
@@ -1625,7 +1675,7 @@ void drawGameplayWorld(const Game& game)
     if (game.run.blackhole.active)
     {
         drawBlackHoleTwirl(game.run.blackhole.position, game.run.blackhole.influenceRadius,
-                            game.run.blackHoleDust);
+                           game.run.blackHoleDust);
     }
 
     if (game.run.wormhole.active)
@@ -1641,11 +1691,11 @@ void drawGameplayWorld(const Game& game)
         const float pulse =
             0.85F + 0.15F * std::sin(static_cast<float>(GetTime()) * 2.2F + cloud.seed);
         const float fadeAlpha = std::min(1.0F, cloud.life / 1.5F);
-        const Color cloudColor = cloud.isFire
-                                     ? ColorLerp(Palette::Accent, Palette::Crit, 0.3F)
-                                     : ColorLerp(Palette::RustbloomAccent, Palette::RustbloomHaze, 0.3F);
+        const Color cloudColor =
+            cloud.isFire ? ColorLerp(Palette::Accent, Palette::Crit, 0.3F)
+                         : ColorLerp(Palette::RustbloomAccent, Palette::RustbloomHaze, 0.3F);
         drawFluidBlob(cloud.position, cloud.radius * pulse, Fade(cloudColor, 0.55F * fadeAlpha),
-                     cloud.seed, Vector2{});
+                      cloud.seed, Vector2{});
     }
 
     for (const auto& a : game.run.asteroids)
@@ -1655,7 +1705,7 @@ void drawGameplayWorld(const Game& game)
             const float pulse =
                 0.85F + 0.15F * std::sin(static_cast<float>(GetTime()) * 3.0F + a.position.x);
             drawFluidBlob(a.position, a.radius * pulse, Palette::SolarForgeAccent,
-                         a.position.x * 0.037F + a.position.y * 0.019F, a.velocity);
+                          a.position.x * 0.037F + a.position.y * 0.019F, a.velocity);
             continue;
         }
         DrawCircleV(a.position, a.radius, Palette::StructMid);
@@ -1725,8 +1775,10 @@ void drawGameplayWorld(const Game& game)
             const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
             const Vector2 perp{.x = -dir.y, .y = dir.x};
             const Vector2 tip = Vector2Add(c, Vector2Scale(dir, 10.0F));
-            const Vector2 baseA = Vector2Add(c, Vector2Add(Vector2Scale(dir, 3.0F), Vector2Scale(perp, 2.2F)));
-            const Vector2 baseB = Vector2Add(c, Vector2Subtract(Vector2Scale(dir, 3.0F), Vector2Scale(perp, 2.2F)));
+            const Vector2 baseA =
+                Vector2Add(c, Vector2Add(Vector2Scale(dir, 3.0F), Vector2Scale(perp, 2.2F)));
+            const Vector2 baseB =
+                Vector2Add(c, Vector2Subtract(Vector2Scale(dir, 3.0F), Vector2Scale(perp, 2.2F)));
             DrawTriangle(tip, baseA, baseB, Palette::Accent);
         }
         DrawCircleV(c, 5.0F, Palette::StructMid);
@@ -1738,15 +1790,16 @@ void drawGameplayWorld(const Game& game)
     for (const auto& drone : game.run.laserDrones)
     {
         const Vector2 c = drone.position;
-        const Vector2 toTarget = drone.beamFlashTimer > 0
-                                     ? Vector2Subtract(drone.beamTarget, c)
-                                     : Vector2{.x = 0, .y = -1};
-        const Vector2 dir = Vector2Length(toTarget) > 0.01F ? Vector2Normalize(toTarget)
-                                                            : Vector2{.x = 0, .y = -1};
+        const Vector2 toTarget = drone.beamFlashTimer > 0 ? Vector2Subtract(drone.beamTarget, c)
+                                                          : Vector2{.x = 0, .y = -1};
+        const Vector2 dir =
+            Vector2Length(toTarget) > 0.01F ? Vector2Normalize(toTarget) : Vector2{.x = 0, .y = -1};
         const Vector2 perp{.x = -dir.y, .y = dir.x};
         const Vector2 nose = Vector2Add(c, Vector2Scale(dir, 9.0F));
-        const Vector2 tailA = Vector2Add(c, Vector2Add(Vector2Scale(dir, -6.0F), Vector2Scale(perp, 5.0F)));
-        const Vector2 tailB = Vector2Add(c, Vector2Subtract(Vector2Scale(dir, -6.0F), Vector2Scale(perp, 5.0F)));
+        const Vector2 tailA =
+            Vector2Add(c, Vector2Add(Vector2Scale(dir, -6.0F), Vector2Scale(perp, 5.0F)));
+        const Vector2 tailB =
+            Vector2Add(c, Vector2Subtract(Vector2Scale(dir, -6.0F), Vector2Scale(perp, 5.0F)));
         DrawTriangle(nose, tailA, tailB, Palette::Crit);
         DrawTriangle(nose, tailB, tailA, Fade(Palette::StructLight, 0.25F));
         DrawCircleV(nose, 2.2F, WHITE);
@@ -1788,7 +1841,7 @@ void drawGameplayWorld(const Game& game)
         if (p.isFluid)
         {
             drawFluidBlob(p.position, p.radius * 1.4F, p.fluidColor,
-                         p.position.x * 0.05F + p.position.y * 0.03F, p.velocity);
+                          p.position.x * 0.05F + p.position.y * 0.03F, p.velocity);
         }
         else if (p.visualEnemyKind >= 0)
         {
@@ -1904,9 +1957,9 @@ void drawGameplayWorld(const Game& game)
         const auto halfW = static_cast<float>(game.resources.screenWidth);
         const auto halfH = static_cast<float>(game.resources.screenHeight);
         DrawRectangle(static_cast<int32_t>(game.run.player.position.x - halfW),
-                     static_cast<int32_t>(game.run.player.position.y - halfH),
-                     static_cast<int32_t>(halfW * 2), static_cast<int32_t>(halfH * 2),
-                     Fade(WHITE, flashAlpha));
+                      static_cast<int32_t>(game.run.player.position.y - halfH),
+                      static_cast<int32_t>(halfW * 2), static_cast<int32_t>(halfH * 2),
+                      Fade(WHITE, flashAlpha));
     }
 }
 
@@ -1989,10 +2042,11 @@ void drawShip(const Game& game)
 
     const bool twirlingIn = game.run.bossCutscenePhase == 10;
     const float twirlProgress =
-        twirlingIn ? std::clamp(1.0F - game.run.bossCutsceneTimer / banishedEntryTwirlDuration,
-                                0.0F, 1.0F)
-                   : 0.0F;
-    const float r = game.run.player.radius * (twirlingIn ? std::max(0.05F, 1.0F - twirlProgress) : 1.0F);
+        twirlingIn
+            ? std::clamp(1.0F - game.run.bossCutsceneTimer / banishedEntryTwirlDuration, 0.0F, 1.0F)
+            : 0.0F;
+    const float r =
+        game.run.player.radius * (twirlingIn ? std::max(0.05F, 1.0F - twirlProgress) : 1.0F);
 
     const Vector2 dir = aimAtMouse(game);
     const float angle = std::atan2(dir.y, dir.x) + std::numbers::pi_v<float> / 2 +
@@ -2061,10 +2115,9 @@ void drawNerveBurstFlash(const Game& game)
     {
         const float cosA = std::cos(angle);
         const float sinA = std::sin(angle);
-        return Vector2Add(
-            start, Vector2Scale(Vector2{.x = dir.x * cosA - dir.y * sinA,
-                                        .y = dir.x * sinA + dir.y * cosA},
-                                range));
+        return Vector2Add(start, Vector2Scale(Vector2{.x = dir.x * cosA - dir.y * sinA,
+                                                      .y = dir.x * sinA + dir.y * cosA},
+                                              range));
     };
 
     constexpr int32_t segments = 12;
@@ -2182,12 +2235,12 @@ void drawClusterEnemyShape(Vector2 center, float baseRadius, float seed, Color c
         const float pieceSeed = seed * 7.0F + static_cast<float>(i) * 19.0F;
         const float angle = hashNoise(pieceSeed) * 2.0F * std::numbers::pi_v<float>;
         const float dist = hashNoise(pieceSeed + 1.0F) * baseRadius * 0.65F;
-        const Vector2 pos = Vector2Add(
-            center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+        const Vector2 pos =
+            Vector2Add(center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
         const float pieceRadius = baseRadius * (0.35F + hashNoise(pieceSeed + 2.0F) * 0.45F);
-        const auto colorIdx = static_cast<size_t>(hashNoise(pieceSeed + 3.0F) *
-                                                   static_cast<float>(palette.size())) %
-                              palette.size();
+        const auto colorIdx =
+            static_cast<size_t>(hashNoise(pieceSeed + 3.0F) * static_cast<float>(palette.size())) %
+            palette.size();
         const Color pieceColor = palette.at(colorIdx);
 
         if (hashNoise(pieceSeed + 5.0F) < 0.35F)
@@ -2214,8 +2267,8 @@ void drawClusterEnemyShape(Vector2 center, float baseRadius, float seed, Color c
         const float eyeSeed = seed * 11.0F + static_cast<float>(i) * 31.0F;
         const float angle = hashNoise(eyeSeed) * 2.0F * std::numbers::pi_v<float>;
         const float dist = hashNoise(eyeSeed + 1.0F) * baseRadius * 0.5F;
-        const Vector2 pos = Vector2Add(
-            center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+        const Vector2 pos =
+            Vector2Add(center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
         const float pulse = 0.5F + 0.5F * std::sin(t * 4.0F + eyeSeed);
         DrawCircleV(pos, baseRadius * 0.1F, Fade(Palette::Crit, 0.5F + 0.4F * pulse));
     }
@@ -2226,14 +2279,14 @@ void drawOrganicEnemyShape(Vector2 center, float baseRadius, float seed, Color c
     const int32_t sides = 4 + static_cast<int32_t>(hashNoise(seed * 3.7F) * 5.0F) % 5;
     const float hullRotation = hashNoise(seed * 5.3F) * 360.0F;
     drawPanelShape(center, baseRadius, sides, hullRotation,
-                  ColorLerp(Palette::StructMid, Palette::Void, 0.1F), seed * 90.0F);
+                   ColorLerp(Palette::StructMid, Palette::Void, 0.1F), seed * 90.0F);
 
     const float blobScale = 0.55F + hashNoise(seed * 9.0F) * 0.7F;
     const float blobRadius = baseRadius * blobScale;
     const float offsetAngle = hashNoise(seed * 2.3F) * 2.0F * std::numbers::pi_v<float>;
     const float offsetDist = baseRadius * (1.0F - std::min(blobScale, 1.0F)) * 0.6F;
-    const Vector2 blobCenter = Vector2Add(
-        center, Vector2{.x = std::cos(offsetAngle) * offsetDist, .y = std::sin(offsetAngle) * offsetDist});
+    const Vector2 blobCenter = Vector2Add(center, Vector2{.x = std::cos(offsetAngle) * offsetDist,
+                                                          .y = std::sin(offsetAngle) * offsetDist});
 
     constexpr int32_t tendrilCount = 3;
     for (int32_t i = 0; i < tendrilCount; i++)
@@ -2303,7 +2356,7 @@ void drawElementalDebuffEffects(Vector2 pos, float radius, bool burning, bool sh
             const Color flameColor =
                 bob > 0.6F ? Palette::ElementBurn : ColorLerp(Palette::ElementBurn, YELLOW, 0.5F);
             DrawTriangle(Vector2{.x = base.x - 3, .y = base.y}, tip,
-                        Vector2{.x = base.x + 3, .y = base.y}, Fade(flameColor, 0.65F));
+                         Vector2{.x = base.x + 3, .y = base.y}, Fade(flameColor, 0.65F));
         }
     }
 
@@ -2314,17 +2367,17 @@ void drawElementalDebuffEffects(Vector2 pos, float radius, bool burning, bool sh
         const auto crackleStep = static_cast<float>(static_cast<int32_t>(t * 10.0F));
         for (int32_t i = 0; i < boltCount; i++)
         {
-            float boltSeed = pos.x * 0.7F + pos.y * 0.31F + crackleStep * 3.1F +
-                             static_cast<float>(i) * 91.0F;
+            float boltSeed =
+                pos.x * 0.7F + pos.y * 0.31F + crackleStep * 3.1F + static_cast<float>(i) * 91.0F;
             const float startAngle = hashNoise(boltSeed) * 2.0F * std::numbers::pi_v<float>;
             Vector2 point{.x = pos.x + std::cos(startAngle) * radius,
-                         .y = pos.y + std::sin(startAngle) * radius};
+                          .y = pos.y + std::sin(startAngle) * radius};
             for (int32_t s = 0; s < segments; s++)
             {
                 boltSeed += 7.7F;
-                const Vector2 next{
-                    .x = pos.x + (hashNoise(boltSeed) - 0.5F) * 2.0F * radius,
-                    .y = pos.y + (hashNoise(boltSeed + 3.3F) - 0.5F) * 2.0F * radius};
+                const Vector2 next{.x = pos.x + (hashNoise(boltSeed) - 0.5F) * 2.0F * radius,
+                                   .y =
+                                       pos.y + (hashNoise(boltSeed + 3.3F) - 0.5F) * 2.0F * radius};
                 DrawLineEx(point, next, 1.5F, Fade(Palette::ElementStatic, 0.8F));
                 point = next;
             }
@@ -2573,9 +2626,9 @@ void drawMeteorBossShape(Vector2 center, float radius, int32_t seed, Color baseC
         const float craterAngle = hashNoise(cs) * 2.0F * std::numbers::pi_v<float>;
         const float craterDist = hashNoise(cs + 3.1F) * radius * 0.62F;
         const float craterRadius = radius * (0.07F + hashNoise(cs + 5.0F) * 0.13F);
-        const Vector2 craterPos = Vector2Add(
-            center, Vector2{.x = std::cos(craterAngle) * craterDist,
-                            .y = std::sin(craterAngle) * craterDist});
+        const Vector2 craterPos =
+            Vector2Add(center, Vector2{.x = std::cos(craterAngle) * craterDist,
+                                       .y = std::sin(craterAngle) * craterDist});
 
         DrawCircleV(craterPos, craterRadius, ColorLerp(baseColor, Palette::Void, 0.55F));
         DrawCircleLines(static_cast<int32_t>(craterPos.x), static_cast<int32_t>(craterPos.y),
@@ -2624,9 +2677,9 @@ void drawPanelShape(Vector2 center, float radius, int32_t sides, float rotationD
         const float angle = hashNoise(seamSeed) * 2.0F * std::numbers::pi_v<float>;
         const float len = radius * (0.5F + hashNoise(seamSeed + 3.0F) * 0.5F);
         const float offsetDist = hashNoise(seamSeed + 6.0F) * radius * 0.6F;
-        const Vector2 base = Vector2Add(
-            center, Vector2{.x = std::cos(angle + 1.5708F) * offsetDist,
-                            .y = std::sin(angle + 1.5708F) * offsetDist});
+        const Vector2 base =
+            Vector2Add(center, Vector2{.x = std::cos(angle + 1.5708F) * offsetDist,
+                                       .y = std::sin(angle + 1.5708F) * offsetDist});
         const Vector2 end =
             Vector2Add(base, Vector2{.x = std::cos(angle) * len, .y = std::sin(angle) * len});
         DrawLineEx(base, end, 2.0F, Fade(Palette::Void, 0.5F));
@@ -2650,7 +2703,8 @@ void drawPanelHex(Vector2 center, float radius, float rotationDeg, Color baseCol
     drawPanelShape(center, radius, 6, rotationDeg, baseColor, seed);
 }
 
-void drawWreckwormSegmentShape(Vector2 center, float radius, float seed, Color baseColor, bool armor)
+void drawWreckwormSegmentShape(Vector2 center, float radius, float seed, Color baseColor,
+                               bool armor)
 {
     drawPanelHex(center, radius, seed * 40.0F, baseColor, seed);
     if (armor)
@@ -2723,8 +2777,9 @@ void drawBoss(const Game& game, const Boss& boss)
     }
     else if (boss.isWreckwormSegment)
     {
-        drawWreckwormSegmentShape(bossCenter, boss.size.x / 2, static_cast<float>(boss.segmentIndex + 1),
-                                  ufoColor, boss.isArmorSegment);
+        drawWreckwormSegmentShape(bossCenter, boss.size.x / 2,
+                                  static_cast<float>(boss.segmentIndex + 1), ufoColor,
+                                  boss.isArmorSegment);
     }
     else if (boss.isKraken && boss.krakenEncounter >= 3 && game.run.bossCutscenePhase == 4)
     {
@@ -2732,8 +2787,8 @@ void drawBoss(const Game& game, const Boss& boss)
             std::clamp(1.0F - game.run.bossCutsceneTimer / krakenOutroTwirlDuration, 0.0F, 1.0F);
         const float shrink = std::max(0.04F, 1.0F - progress);
         const Color shadowColor = ColorLerp(ufoColor, BLACK, progress);
-        const float twirlSeed =
-            static_cast<float>(boss.instanceId) + progress * 40.0F + static_cast<float>(GetTime()) * 4.0F;
+        const float twirlSeed = static_cast<float>(boss.instanceId) + progress * 40.0F +
+                                static_cast<float>(GetTime()) * 4.0F;
         drawKrakenShape(bossCenter, boss.size.x / 2 * shrink, twirlSeed, shadowColor);
     }
     else if (boss.isKraken)
@@ -2751,14 +2806,18 @@ void drawBoss(const Game& game, const Boss& boss)
     drawElementalDebuffEffects(bossCenter, std::max(boss.size.x, boss.size.y) / 2, boss.burnDps > 0,
                                boss.debuffStatic, boss.debuffFreeze);
 
-    if (boss.isKraken && boss.tentaclePhase != 0)
-    {
-        drawKrakenTentacle(boss);
-    }
     if (boss.isKraken)
     {
         for (int32_t slot = 0; slot < Boss::krakenLimbSlots; slot++)
         {
+            if (boss.tentaclePhase.at(static_cast<size_t>(slot)) != 0)
+            {
+                drawKrakenTentacle(boss, slot);
+            }
+            if (boss.tentacleStaggered.at(static_cast<size_t>(slot)))
+            {
+                drawKrakenStaggeredTentacle(boss, slot);
+            }
             drawKrakenLimb(boss, slot);
         }
     }
@@ -2775,8 +2834,8 @@ void drawBoss(const Game& game, const Boss& boss)
         if (game.run.player.launched && game.run.player.launchTargetTentacle >= 0 &&
             game.run.player.launchTargetTentacle < Boss::banishedTentacleCount)
         {
-            const Vector2 catcherTip = boss.banishedTip[static_cast<size_t>(
-                game.run.player.launchTargetTentacle)];
+            const Vector2 catcherTip =
+                boss.banishedTip[static_cast<size_t>(game.run.player.launchTargetTentacle)];
             DrawLineEx(game.run.player.position, catcherTip, 2.0F, Fade(Palette::Crit, 0.35F));
         }
     }
@@ -2796,18 +2855,19 @@ void drawBoss(const Game& game, const Boss& boss)
                 const float seed =
                     static_cast<float>(boss.instanceId) * 13.0F + static_cast<float>(i) * 7.0F;
                 const float angle = hashNoise(seed) * 2.0F * std::numbers::pi_v<float>;
-                const Vector2 start = Vector2Add(
-                    bossCenter, Vector2{.x = std::cos(angle) * radius * 0.15F,
-                                       .y = std::sin(angle) * radius * 0.15F});
-                const Vector2 end = Vector2Add(
-                    bossCenter, Vector2{.x = std::cos(angle) * radius * 0.95F,
-                                       .y = std::sin(angle) * radius * 0.95F});
+                const Vector2 start =
+                    Vector2Add(bossCenter, Vector2{.x = std::cos(angle) * radius * 0.15F,
+                                                   .y = std::sin(angle) * radius * 0.15F});
+                const Vector2 end =
+                    Vector2Add(bossCenter, Vector2{.x = std::cos(angle) * radius * 0.95F,
+                                                   .y = std::sin(angle) * radius * 0.95F});
                 DrawLineEx(start, end, 2.5F, Fade(Palette::Void, 0.75F));
             }
         }
         else if (deathElapsed >= bossDeathBlinkDuration + bossDeathCrackDuration)
         {
-            const float gatherElapsed = deathElapsed - bossDeathBlinkDuration - bossDeathCrackDuration;
+            const float gatherElapsed =
+                deathElapsed - bossDeathBlinkDuration - bossDeathCrackDuration;
             const float gatherProgress =
                 std::clamp(gatherElapsed / bossDeathGatherDuration, 0.0F, 1.0F);
             constexpr int32_t particleCount = 14;
@@ -2823,7 +2883,7 @@ void drawBoss(const Game& game, const Boss& boss)
                 DrawCircleV(pos, 4.0F, Fade(WHITE, 0.7F));
             }
             DrawCircleV(bossCenter, radius * (0.3F + gatherProgress * 0.5F),
-                       Fade(WHITE, gatherProgress * 0.6F));
+                        Fade(WHITE, gatherProgress * 0.6F));
         }
     }
 
@@ -2837,7 +2897,8 @@ void drawBoss(const Game& game, const Boss& boss)
 
         const float ringRadius = boss.size.x * 0.65F;
         DrawRing(bossCenter, ringRadius - 3, ringRadius + 3, -90.0F,
-                -90.0F + 360.0F * std::clamp(boss.shieldGenProgress, 0.0F, 1.0F), 48, Palette::Shield);
+                 -90.0F + 360.0F * std::clamp(boss.shieldGenProgress, 0.0F, 1.0F), 48,
+                 Palette::Shield);
     }
 
     if (boss.isBeltbreaker && boss.beltbreakerShielded)
@@ -2845,11 +2906,12 @@ void drawBoss(const Game& game, const Boss& boss)
 
         const float total = UpdateConstants::beltbreakerShieldedDuration(boss.plateCount);
         const float frac = std::clamp(boss.beltbreakerShieldTimer / total, 0.0F, 1.0F);
-        const float alpha = 0.35F + 0.25F * (std::sin(static_cast<float>(GetTime()) * 3.0F) + 1.0F) * 0.5F;
+        const float alpha =
+            0.35F + 0.25F * (std::sin(static_cast<float>(GetTime()) * 3.0F) + 1.0F) * 0.5F;
         const float ringRadius = boss.size.x * 0.65F;
         DrawCircleLinesV(bossCenter, ringRadius, ColorAlpha(Palette::Shield, alpha * 0.4F));
         DrawRing(bossCenter, ringRadius - 3, ringRadius + 3, -90.0F, -90.0F + 360.0F * frac, 48,
-                ColorAlpha(Palette::Shield, alpha + 0.3F));
+                 ColorAlpha(Palette::Shield, alpha + 0.3F));
     }
 
     if (boss.state == BossState::WINDING_UP)
@@ -3156,16 +3218,18 @@ void drawMeteorProjectile(const BossProjectile& projectile)
     for (int i = segments; i >= 1; i--)
     {
         const float frac = static_cast<float>(i) / segments;
-        const Vector2 segPos = Vector2Add(
-            projectile.position, Vector2Scale(tailDir, projectile.radius * 2.2F * static_cast<float>(i)));
+        const Vector2 segPos =
+            Vector2Add(projectile.position,
+                       Vector2Scale(tailDir, projectile.radius * 2.2F * static_cast<float>(i)));
         const Color flame =
             i % 2 == 0 ? Palette::ElementBurn : ColorLerp(Palette::ElementBurn, YELLOW, 0.5F);
-        DrawCircleV(segPos, projectile.radius * (1 - frac * 0.5F), Fade(flame, 0.55F * (1 - frac * 0.6F)));
+        DrawCircleV(segPos, projectile.radius * (1 - frac * 0.5F),
+                    Fade(flame, 0.55F * (1 - frac * 0.6F)));
     }
 
     DrawCircleV(projectile.position, projectile.radius * 1.15F, Fade(Palette::ElementBurn, 0.35F));
     DrawCircleV(projectile.position, projectile.radius,
-               ColorLerp(Palette::SolarForgeAccent, Palette::Void, 0.4F));
+                ColorLerp(Palette::SolarForgeAccent, Palette::Void, 0.4F));
     DrawCircleLines(static_cast<int32_t>(projectile.position.x),
                     static_cast<int32_t>(projectile.position.y), projectile.radius,
                     Fade(ColorLerp(Palette::SolarForgeAccent, WHITE, 0.3F), 0.5F));
@@ -3185,12 +3249,13 @@ void drawKrakenHurledEnemy(const BossProjectile& projectile)
     for (int32_t i = 0; i < lineCount; i++)
     {
         const float side = (i % 2 == 0) ? 1.0F : -1.0F;
-        const float offset = std::floor(static_cast<float>(i + 1) / 2.0F) * projectile.radius * 0.55F;
-        const Vector2 start =
-            Vector2Add(projectile.position, Vector2Scale(perp, offset * side));
-        const Vector2 end =
-            Vector2Add(start, Vector2Scale(tailDir, projectile.radius * (2.5F + static_cast<float>(i))));
-        DrawLineEx(start, end, 2.5F, Fade(Palette::PunctumHaze, 0.5F - static_cast<float>(i) * 0.07F));
+        const float offset =
+            std::floor(static_cast<float>(i + 1) / 2.0F) * projectile.radius * 0.55F;
+        const Vector2 start = Vector2Add(projectile.position, Vector2Scale(perp, offset * side));
+        const Vector2 end = Vector2Add(
+            start, Vector2Scale(tailDir, projectile.radius * (2.5F + static_cast<float>(i))));
+        DrawLineEx(start, end, 2.5F,
+                   Fade(Palette::PunctumHaze, 0.5F - static_cast<float>(i) * 0.07F));
     }
 
     const float angle = std::atan2(-tailDir.y, -tailDir.x);
@@ -3201,8 +3266,7 @@ void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color colo
 {
     const float speed = Vector2Length(velocity);
     const float stretchAmount = std::min(speed / 900.0F, 0.35F);
-    const Vector2 dir =
-        speed > 1.0F ? Vector2Normalize(velocity) : Vector2{.x = 0, .y = -1};
+    const Vector2 dir = speed > 1.0F ? Vector2Normalize(velocity) : Vector2{.x = 0, .y = -1};
     const Vector2 perp{.x = -dir.y, .y = dir.x};
 
     const auto t = static_cast<float>(GetTime());
@@ -3222,9 +3286,8 @@ void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color colo
         const float r = radius * jiggle;
         const float alongDir = local.x * dir.x + local.y * dir.y;
         const float alongPerp = local.x * perp.x + local.y * perp.y;
-        const Vector2 offset =
-            Vector2Add(Vector2Scale(dir, alongDir * stretchAlong * r),
-                      Vector2Scale(perp, alongPerp * stretchAcross * r));
+        const Vector2 offset = Vector2Add(Vector2Scale(dir, alongDir * stretchAlong * r),
+                                          Vector2Scale(perp, alongPerp * stretchAcross * r));
         verts.at(static_cast<size_t>(i)) = Vector2Add(center, offset);
     }
 
@@ -3234,11 +3297,11 @@ void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color colo
     }
 
     DrawCircleV(Vector2Add(center, Vector2Scale(perp, -radius * 0.28F)), radius * 0.3F,
-               Fade(WHITE, 0.16F));
+                Fade(WHITE, 0.16F));
     DrawCircleV(Vector2Add(center, Vector2{.x = radius * 0.18F, .y = -radius * 0.22F}),
-               radius * 0.14F, Fade(WHITE, 0.3F));
+                radius * 0.14F, Fade(WHITE, 0.3F));
     DrawCircleV(Vector2Add(center, Vector2Scale(dir, radius * 0.25F)), radius * 0.18F,
-               Fade(ColorLerp(color, Palette::Void, 0.3F), 0.35F));
+                Fade(ColorLerp(color, Palette::Void, 0.3F), 0.35F));
 }
 
 void drawKrakenShape(Vector2 center, float radius, float seed, Color color)
@@ -3254,7 +3317,7 @@ void drawKrakenShape(Vector2 center, float radius, float seed, Color color)
             Vector2Add(center, Vector2{.x = std::cos(angle) * radius * 0.78F,
                                        .y = std::sin(angle) * radius * 0.78F});
         drawPanelShape(podCenter, radius * 0.32F, 6, seed * 30.0F + static_cast<float>(i) * 40.0F,
-                      ColorLerp(color, Palette::StructDark, 0.25F), seed + static_cast<float>(i));
+                       ColorLerp(color, Palette::StructDark, 0.25F), seed + static_cast<float>(i));
     }
 
     const float pulse = 0.6F + 0.4F * std::sin(t * 2.0F + seed);
@@ -3263,8 +3326,9 @@ void drawKrakenShape(Vector2 center, float radius, float seed, Color color)
                     Fade(WHITE, 0.6F));
 }
 
-void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bodyRadius, float seed,
-                       float thicknessScale, float waveScale, bool calm, Color color, Color tipColor)
+void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bodyRadius,
+                       float seed, float thicknessScale, float waveScale, bool calm, Color color,
+                       Color tipColor)
 {
     const float length = Vector2Distance(anchor, tip);
     if (length < 4.0F)
@@ -3277,8 +3341,9 @@ void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bo
     const float minMidDist = bodyRadius * 1.25F;
     if (midDist < minMidDist)
     {
-        const Vector2 outDir = midDist > 0.01F ? Vector2Scale(Vector2Subtract(mid, bodyCenter), 1.0F / midDist)
-                                               : Vector2{.x = 0, .y = -1};
+        const Vector2 outDir = midDist > 0.01F
+                                   ? Vector2Scale(Vector2Subtract(mid, bodyCenter), 1.0F / midDist)
+                                   : Vector2{.x = 0, .y = -1};
         mid = Vector2Add(bodyCenter, Vector2Scale(outDir, minMidDist));
     }
 
@@ -3308,46 +3373,66 @@ void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bo
     DrawCircleV(prev, 14.0F * thicknessScale, Fade(tipColor, 0.8F));
 }
 
-void drawKrakenTentacle(const Boss& boss)
+void drawKrakenStaggeredTentacle(const Boss& boss, int32_t slot)
 {
-    const Vector2 portal = boss.tentaclePortalPos;
+    const Vector2 bodyCenter{.x = boss.position.x + boss.size.x / 2,
+                             .y = boss.position.y + boss.size.y / 2};
+    const Vector2 gate = krakenPodPosition(boss, slot % 4);
+    const Vector2 tip = boss.tentacleStaggerPos[static_cast<size_t>(slot)];
+    const auto t = static_cast<float>(GetTime());
+    const float flash = 0.5F + 0.5F * std::sin(t * 10.0F);
+    const Color hangColor = ColorLerp(Palette::Crit, WHITE, flash * 0.4F);
+    drawBendyTentacle(gate, tip, bodyCenter, boss.size.x / 2,
+                      static_cast<float>(boss.instanceId) + 7.0F, krakenLimbSizeMult, 20.0F, true,
+                      hangColor, hangColor);
+    DrawCircleLines(static_cast<int32_t>(tip.x), static_cast<int32_t>(tip.y),
+                    krakenTentacleHitRadius, Fade(WHITE, 0.5F + flash * 0.3F));
+}
+
+void drawKrakenTentacle(const Boss& boss, int32_t slot)
+{
+    const Vector2 portal = boss.tentaclePortalPos[static_cast<size_t>(slot)];
     const auto t = static_cast<float>(GetTime());
     const float ringPulse = 0.7F + 0.3F * std::sin(t * 6.0F);
     DrawCircleV(portal, krakenTentaclePortalRadius * ringPulse, Fade(Palette::Void, 0.7F));
     DrawCircleLines(static_cast<int32_t>(portal.x), static_cast<int32_t>(portal.y),
                     krakenTentaclePortalRadius * ringPulse, Fade(Palette::PunctumAccent, 0.8F));
     DrawCircleLines(static_cast<int32_t>(portal.x), static_cast<int32_t>(portal.y),
-                    krakenTentaclePortalRadius * ringPulse * 0.6F, Fade(Palette::PunctumHaze, 0.6F));
+                    krakenTentaclePortalRadius * ringPulse * 0.6F,
+                    Fade(Palette::PunctumHaze, 0.6F));
+
+    const int32_t phase = boss.tentaclePhase[static_cast<size_t>(slot)];
+    const float stateTimer = boss.tentacleStateTimer[static_cast<size_t>(slot)];
+    const float startAngle = boss.tentacleSwipeStartAngle[static_cast<size_t>(slot)];
+    const float endAngle = boss.tentacleSwipeEndAngle[static_cast<size_t>(slot)];
 
     float length = 0;
-    float angle = (boss.tentacleSwipeStartAngle + boss.tentacleSwipeEndAngle) / 2.0F;
-    if (boss.tentaclePhase == 1)
+    float angle = (startAngle + endAngle) / 2.0F;
+    if (phase == 1)
     {
         const float progress =
-            std::clamp(1.0F - boss.tentacleStateTimer / krakenTentacleEmergeDuration, 0.0F, 1.0F);
+            std::clamp(1.0F - stateTimer / krakenTentacleEmergeDuration, 0.0F, 1.0F);
         length = krakenTentacleReach * progress;
     }
-    else if (boss.tentaclePhase == 2)
+    else if (phase == 2)
     {
         const float progress =
-            std::clamp(1.0F - boss.tentacleStateTimer / krakenTentacleSwipeDuration, 0.0F, 1.0F);
-        angle = boss.tentacleSwipeStartAngle +
-                (boss.tentacleSwipeEndAngle - boss.tentacleSwipeStartAngle) * progress;
+            std::clamp(1.0F - stateTimer / krakenTentacleSwipeDuration, 0.0F, 1.0F);
+        angle = startAngle + (endAngle - startAngle) * progress;
         length = krakenTentacleReach;
     }
-    else if (boss.tentaclePhase == 3)
+    else if (phase == 3)
     {
-        const float progress =
-            std::clamp(boss.tentacleStateTimer / krakenTentacleRetreatDuration, 0.0F, 1.0F);
-        angle = boss.tentacleSwipeEndAngle;
+        const float progress = std::clamp(stateTimer / krakenTentacleRetreatDuration, 0.0F, 1.0F);
+        angle = endAngle;
         length = krakenTentacleReach * progress;
     }
-    else if (boss.tentaclePhase == 4)
+    else if (phase == 4)
     {
         const float progress =
-            std::clamp(boss.tentacleStateTimer / krakenTentacleStaggerRetreatDuration, 0.0F, 1.0F);
+            std::clamp(stateTimer / krakenTentacleStaggerRetreatDuration, 0.0F, 1.0F);
         const float jitter = std::sin(t * 40.0F) * 0.08F;
-        angle = boss.tentacleSwipeEndAngle + jitter;
+        angle = endAngle + jitter;
         length = krakenTentacleReach * progress;
     }
 
@@ -3358,7 +3443,8 @@ void drawKrakenTentacle(const Boss& boss)
 
     const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
     const Vector2 tip = Vector2Add(portal, Vector2Scale(dir, length));
-    const Vector2 bodyCenter{.x = boss.position.x + boss.size.x / 2, .y = boss.position.y + boss.size.y / 2};
+    const Vector2 bodyCenter{.x = boss.position.x + boss.size.x / 2,
+                             .y = boss.position.y + boss.size.y / 2};
     drawBendyTentacle(portal, tip, bodyCenter, boss.size.x / 2, static_cast<float>(boss.instanceId),
                       krakenLimbSizeMult, 20.0F, false, Palette::PunctumHaze, Palette::Crit);
 }
@@ -3384,13 +3470,14 @@ void drawKrakenLimb(const Boss& boss, int32_t slot)
         return;
     }
 
-    const Vector2 center{.x = boss.position.x + boss.size.x / 2, .y = boss.position.y + boss.size.y / 2};
+    const Vector2 center{.x = boss.position.x + boss.size.x / 2,
+                         .y = boss.position.y + boss.size.y / 2};
     const float bodyRadius = boss.size.x / 2;
     const float seed = static_cast<float>(boss.instanceId);
     const float podAngle = static_cast<float>(pod) * 90.0F * DEG2RAD + seed;
-    const Vector2 podPos = Vector2Add(
-        center, Vector2{.x = std::cos(podAngle) * boss.size.x / 2 * 0.78F,
-                        .y = std::sin(podAngle) * boss.size.y / 2 * 0.78F});
+    const Vector2 podPos =
+        Vector2Add(center, Vector2{.x = std::cos(podAngle) * boss.size.x / 2 * 0.78F,
+                                   .y = std::sin(podAngle) * boss.size.y / 2 * 0.78F});
 
     Vector2 tip = podPos;
     float openProgress = 1.0F;
@@ -3408,12 +3495,13 @@ void drawKrakenLimb(const Boss& boss, int32_t slot)
             grabbing = true;
             grabbedEnemyScale = 1.0F;
             const float progress =
-                1.0F - std::clamp(boss.limbThrowTimer[slot] / krakenLimbLeanBackDuration, 0.0F, 1.0F);
-            const Vector2 leanBackTarget =
-                Vector2Add(podPos, Vector2Scale(Vector2Subtract(podPos, boss.limbGrabTarget[slot]),
-                                               krakenLimbNearReach /
-                                                   std::max(1.0F, Vector2Distance(podPos,
-                                                                                 boss.limbGrabTarget[slot]))));
+                1.0F -
+                std::clamp(boss.limbThrowTimer[slot] / krakenLimbLeanBackDuration, 0.0F, 1.0F);
+            const Vector2 leanBackTarget = Vector2Add(
+                podPos, Vector2Scale(Vector2Subtract(podPos, boss.limbGrabTarget[slot]),
+                                     krakenLimbNearReach /
+                                         std::max(1.0F, Vector2Distance(
+                                                            podPos, boss.limbGrabTarget[slot]))));
             tip = Vector2Lerp(boss.limbPortalPos[slot], leanBackTarget, progress);
         }
         else if (boss.limbThrowPhase[slot] == 2)
@@ -3422,11 +3510,11 @@ void drawKrakenLimb(const Boss& boss, int32_t slot)
             grabbedEnemyScale = 1.0F;
             const float progress =
                 1.0F - std::clamp(boss.limbThrowTimer[slot] / krakenLimbThrowDuration, 0.0F, 1.0F);
-            const Vector2 leanBackTarget =
-                Vector2Add(podPos, Vector2Scale(Vector2Subtract(podPos, boss.limbGrabTarget[slot]),
-                                               krakenLimbNearReach /
-                                                   std::max(1.0F, Vector2Distance(podPos,
-                                                                                 boss.limbGrabTarget[slot]))));
+            const Vector2 leanBackTarget = Vector2Add(
+                podPos, Vector2Scale(Vector2Subtract(podPos, boss.limbGrabTarget[slot]),
+                                     krakenLimbNearReach /
+                                         std::max(1.0F, Vector2Distance(
+                                                            podPos, boss.limbGrabTarget[slot]))));
             tip = Vector2Lerp(leanBackTarget, boss.limbGrabTarget[slot], progress);
         }
         else if (boss.limbGrabAnimTimer[slot] > 0)
@@ -3436,8 +3524,9 @@ void drawKrakenLimb(const Boss& boss, int32_t slot)
             const float elapsed = krakenLimbGrabAnimDuration - boss.limbGrabAnimTimer[slot];
             if (elapsed < krakenLimbGrabAnimDuration / 3.0F)
             {
-                tip = Vector2Lerp(podPos, boss.limbPortalPos[slot],
-                                  std::clamp(elapsed / (krakenLimbGrabAnimDuration / 3.0F), 0.0F, 1.0F));
+                tip = Vector2Lerp(
+                    podPos, boss.limbPortalPos[slot],
+                    std::clamp(elapsed / (krakenLimbGrabAnimDuration / 3.0F), 0.0F, 1.0F));
             }
             else if (elapsed < krakenLimbGrabAnimDuration * 2.0F / 3.0F)
             {
@@ -3445,9 +3534,10 @@ void drawKrakenLimb(const Boss& boss, int32_t slot)
             }
             else
             {
-                grabbedEnemyScale = std::clamp(
-                    (elapsed - krakenLimbGrabAnimDuration * 2.0F / 3.0F) / (krakenLimbGrabAnimDuration / 3.0F),
-                    0.0F, 1.0F);
+                grabbedEnemyScale =
+                    std::clamp((elapsed - krakenLimbGrabAnimDuration * 2.0F / 3.0F) /
+                                   (krakenLimbGrabAnimDuration / 3.0F),
+                               0.0F, 1.0F);
             }
         }
         else
@@ -3467,7 +3557,7 @@ void drawKrakenLimb(const Boss& boss, int32_t slot)
 
     const float pulse = 0.6F + 0.4F * std::sin(static_cast<float>(GetTime()) * 3.0F + seed);
     DrawCircleV(podPos, boss.size.x / 2 * 0.32F * krakenLimbSizeMult * (0.7F + 0.3F * openProgress),
-               Fade(Palette::Void, 0.5F + 0.3F * pulse));
+                Fade(Palette::Void, 0.5F + 0.3F * pulse));
 
     const float length = Vector2Distance(podPos, tip);
     if (length < 4.0F)
@@ -3501,14 +3591,15 @@ void drawBanishedShape(Vector2 center, const Boss& boss)
 
     for (int32_t i = 0; i < 24; i++)
     {
-        const float seed = static_cast<float>(boss.instanceId) * 5.0F + static_cast<float>(i) * 11.0F;
+        const float seed =
+            static_cast<float>(boss.instanceId) * 5.0F + static_cast<float>(i) * 11.0F;
         const float angle = hashNoise(seed) * 2.0F * std::numbers::pi_v<float>;
         const float wobble = std::sin(t * 1.5F + seed) * 5.0F;
-        const Vector2 knot = Vector2Add(
-            center, Vector2{.x = std::cos(angle) * (coreRadius * 0.5F + wobble),
-                            .y = std::sin(angle) * (coreRadius * 0.5F + wobble)});
+        const Vector2 knot =
+            Vector2Add(center, Vector2{.x = std::cos(angle) * (coreRadius * 0.5F + wobble),
+                                       .y = std::sin(angle) * (coreRadius * 0.5F + wobble)});
         DrawCircleV(knot, coreRadius * (0.25F + hashNoise(seed * 3.0F) * 0.2F),
-                   Fade(Palette::Void, 0.85F));
+                    Fade(Palette::Void, 0.85F));
     }
     DrawCircleV(center, coreRadius * 0.6F, Fade(Palette::PunctumHaze, 0.5F));
 }
@@ -3522,7 +3613,8 @@ void drawBanishedPortal(Vector2 position, float progress)
     }
     const auto t = static_cast<float>(GetTime());
     DrawCircleV(position, radius, Fade(Palette::Void, 0.35F));
-    DrawRing(position, radius - 4, radius, t * -90.0F, t * -90.0F + 300.0F, 24, Fade(Palette::Crit, 0.8F));
+    DrawRing(position, radius - 4, radius, t * -90.0F, t * -90.0F + 300.0F, 24,
+             Fade(Palette::Crit, 0.8F));
     DrawCircleLines(static_cast<int32_t>(position.x), static_cast<int32_t>(position.y),
                     static_cast<int32_t>(radius), Fade(Palette::PunctumHaze, 0.6F));
 }
@@ -3532,22 +3624,22 @@ void drawBanishedTentacle(Vector2 center, const Boss& boss, int32_t slot)
     const int32_t phase = boss.banishedPhase[static_cast<size_t>(slot)];
     const bool staggered = boss.banishedStaggered[static_cast<size_t>(slot)];
     const auto t = static_cast<float>(GetTime());
-    const float seed = static_cast<float>(boss.instanceId) * 7.0F + static_cast<float>(slot) * 13.0F;
+    const float seed =
+        static_cast<float>(boss.instanceId) * 7.0F + static_cast<float>(slot) * 13.0F;
 
     if (staggered)
     {
-        const float angle =
-            static_cast<float>(slot) / static_cast<float>(Boss::banishedTentacleCount) * 2.0F *
-                std::numbers::pi_v<float> +
-            seed;
+        const float angle = static_cast<float>(slot) /
+                                static_cast<float>(Boss::banishedTentacleCount) * 2.0F *
+                                std::numbers::pi_v<float> +
+                            seed;
         const float r = boss.size.x * 0.3F;
         const Vector2 wrapPos =
             Vector2Add(center, Vector2{.x = std::cos(angle) * r, .y = std::sin(angle) * r});
         const float hitFlash = boss.banishedTentacleHitFlash[static_cast<size_t>(slot)];
-        const Color color = hitFlash > 0
-                                ? ColorLerp(Palette::Void, WHITE,
-                                            hitFlash / UpdateConstants::hitFlashDuration)
-                                : Palette::Void;
+        const Color color = hitFlash > 0 ? ColorLerp(Palette::Void, WHITE,
+                                                     hitFlash / UpdateConstants::hitFlashDuration)
+                                         : Palette::Void;
         DrawLineEx(center, wrapPos, 10.0F, Fade(color, 0.7F));
         if (hitFlash > 0)
         {
@@ -3560,10 +3652,10 @@ void drawBanishedTentacle(Vector2 center, const Boss& boss, int32_t slot)
 
     if (phase == 0)
     {
-        const float angle =
-            static_cast<float>(slot) / static_cast<float>(Boss::banishedTentacleCount) * 2.0F *
-                std::numbers::pi_v<float> +
-            seed + std::sin(t * 0.6F + seed) * 0.15F;
+        const float angle = static_cast<float>(slot) /
+                                static_cast<float>(Boss::banishedTentacleCount) * 2.0F *
+                                std::numbers::pi_v<float> +
+                            seed + std::sin(t * 0.6F + seed) * 0.15F;
         const float r = boss.size.x * (0.32F + std::sin(t * 1.2F + seed) * 0.04F);
         const Vector2 stub =
             Vector2Add(center, Vector2{.x = std::cos(angle) * r, .y = std::sin(angle) * r});
@@ -3605,16 +3697,15 @@ void drawBanishedTentacle(Vector2 center, const Boss& boss, int32_t slot)
         return;
     }
 
-    drawBendyTentacle(anchor, tip, center, boss.size.x / 2, seed, 0.7F, 12.0F, false, Palette::PunctumHaze,
-                      Palette::Crit);
+    drawBendyTentacle(anchor, tip, center, boss.size.x / 2, seed, 0.7F, 12.0F, false,
+                      Palette::PunctumHaze, Palette::Crit);
 }
 
 void drawBanishedEye(const Boss& boss)
 {
-    const Vector2 pos = boss.banishedStage == 1
-                            ? boss.banishedEyePos
-                            : Vector2{.x = boss.position.x + boss.size.x / 2,
-                                      .y = boss.position.y + boss.size.y / 2};
+    const Vector2 pos = boss.banishedStage == 1 ? boss.banishedEyePos
+                                                : Vector2{.x = boss.position.x + boss.size.x / 2,
+                                                          .y = boss.position.y + boss.size.y / 2};
     const float chargeFrac =
         boss.banishedStage == 1
             ? std::clamp(boss.banishedEyeTimer / banishedEyeChargeDuration, 0.0F, 1.0F)
@@ -3627,7 +3718,8 @@ void drawBanishedEye(const Boss& boss)
     const Vector2 pupilDir = Vector2Length(Vector2Subtract(mouse, pos)) > 1.0F
                                  ? Vector2Normalize(Vector2Subtract(mouse, pos))
                                  : Vector2{.x = 0, .y = 1};
-    DrawCircleV(Vector2Add(pos, Vector2Scale(pupilDir, radius * 0.35F)), radius * 0.45F, Palette::Void);
+    DrawCircleV(Vector2Add(pos, Vector2Scale(pupilDir, radius * 0.35F)), radius * 0.45F,
+                Palette::Void);
 
     if (boss.banishedStage == 2)
     {
@@ -3639,7 +3731,8 @@ void drawBanishedEye(const Boss& boss)
 void drawFluidBlob(Vector2 center, float radius, Color color, float seed, Vector2 trailDir)
 {
     const float dirLen = Vector2Length(trailDir);
-    const Vector2 dir = dirLen > 0.01F ? Vector2Scale(trailDir, 1.0F / dirLen) : Vector2{.x = 0, .y = -1};
+    const Vector2 dir =
+        dirLen > 0.01F ? Vector2Scale(trailDir, 1.0F / dirLen) : Vector2{.x = 0, .y = -1};
     const Vector2 perp{.x = -dir.y, .y = dir.x};
 
     DrawCircleV(center, radius, color);
@@ -3650,14 +3743,16 @@ void drawFluidBlob(Vector2 center, float radius, Color color, float seed, Vector
         const float frac = static_cast<float>(i) / static_cast<float>(notchCount - 1) - 0.5F;
         const float notchSeed = seed * 9.0F + static_cast<float>(i) * 7.0F;
         const float notchRadius = radius * (0.22F + hashNoise(notchSeed) * 0.3F);
-        const Vector2 edge = Vector2Add(
-            center, Vector2Add(Vector2Scale(dir, -radius * 0.75F), Vector2Scale(perp, frac * radius * 1.7F)));
+        const Vector2 edge =
+            Vector2Add(center, Vector2Add(Vector2Scale(dir, -radius * 0.75F),
+                                          Vector2Scale(perp, frac * radius * 1.7F)));
         DrawCircleV(edge, notchRadius, ColorLerp(color, Palette::Void, 0.6F));
     }
 
-    DrawCircleV(Vector2Add(center, Vector2Scale(perp, -radius * 0.3F)), radius * 0.22F, Fade(WHITE, 0.55F));
-    DrawCircleV(Vector2Add(center, Vector2{.x = radius * 0.15F, .y = -radius * 0.15F}), radius * 0.12F,
-               Fade(WHITE, 0.4F));
+    DrawCircleV(Vector2Add(center, Vector2Scale(perp, -radius * 0.3F)), radius * 0.22F,
+                Fade(WHITE, 0.55F));
+    DrawCircleV(Vector2Add(center, Vector2{.x = radius * 0.15F, .y = -radius * 0.15F}),
+                radius * 0.12F, Fade(WHITE, 0.4F));
 
     constexpr int32_t dripCount = 3;
     for (int32_t i = 0; i < dripCount; i++)
@@ -3669,7 +3764,7 @@ void drawFluidBlob(Vector2 center, float radius, Color color, float seed, Vector
         const Vector2 dripPos =
             Vector2Add(center, Vector2Add(Vector2Scale(dir, -dist), Vector2Scale(perp, side)));
         DrawCircleV(dripPos, radius * (0.14F - static_cast<float>(i) * 0.02F),
-                   Fade(color, 0.6F - static_cast<float>(i) * 0.15F));
+                    Fade(color, 0.6F - static_cast<float>(i) * 0.15F));
     }
 }
 
@@ -3719,7 +3814,7 @@ void drawBossHealthBars(const Game& game)
                 static_cast<int32_t>(MeasureTextEx(game.resources.font, meltingLabel, 16, 1).x);
             const float pulse = 0.6F + 0.4F * std::sin(static_cast<float>(GetTime()) * 10.0F);
             drawText(game, meltingLabel, barX + (barWidth - textWidth) / 2, barY + 1, 16,
-                    Fade(Palette::StructLight, pulse));
+                     Fade(Palette::StructLight, pulse));
         }
         barY -= barHeight + barGap;
     }
@@ -3744,7 +3839,7 @@ void drawBossHealthBars(const Game& game)
             const auto textWidth =
                 static_cast<int32_t>(MeasureTextEx(game.resources.font, shieldedLabel, 16, 1).x);
             drawText(game, shieldedLabel, barX + (barWidth - textWidth) / 2, barY + 1, 16,
-                    Palette::StructLight);
+                     Palette::StructLight);
         }
 
         barY -= barHeight + barGap;
@@ -3787,10 +3882,13 @@ void drawHUD(const Game& game)
     drawAbilitySlots(game, abilitySlotsX, 10);
     drawStatusRow(game, abilitySlotsX, 10 + abilityBoxSize + 10);
 
-    drawText(game,
-             "Move: WASD | Dash: L-Click | Shield: R-Click | Burst: Space | Pause: Esc | F11: "
-             "Fullscreen",
-             10, scaledScreenHeight - 28, 18, Palette::StructMid);
+    const char* controlHint =
+        touchInputActive(game)
+            ? "Move: Left Stick | Aim: Right Stick | Dash: Double-tap Left | Shield: Double-tap "
+              "Right | Burst: Nerve | Pause: Top Button"
+            : "Move: WASD | Dash: L-Click | Shield: R-Click | Burst: Space | Pause: Esc | F11: "
+              "Fullscreen";
+    drawText(game, controlHint, 10, scaledScreenHeight - 28, 18, Palette::StructMid);
 
     if (game.run.achievementToastTimer > 0)
     {
@@ -3799,7 +3897,61 @@ void drawHUD(const Game& game)
         drawText(game, game.run.achievementToast.c_str(), (scaledScreenWidth - textWidth) / 2, 100,
                  24, Palette::Charge);
     }
+}
 
+void drawTouchControls(const Game& game)
+{
+    if (!game.touch.visible)
+    {
+        return;
+    }
+
+    const auto& touch = game.touch;
+    const TouchLayout layout = touchControlLayout(game);
+
+    const auto drawStick = [&](const TouchStick& stick, Vector2 anchor)
+    {
+        const Vector2 knob = Vector2Add(anchor, stick.offset);
+        const bool active = stick.touchId != -1;
+
+        DrawCircleV(anchor, layout.stickRadius, Fade(Palette::StructMid, 0.25F));
+        DrawCircleLinesV(anchor, layout.stickRadius, Fade(Palette::StructLight, 0.5F));
+        DrawCircleV(knob, layout.stickRadius * 0.45F, Fade(Palette::Accent, active ? 0.55F : 0.3F));
+    };
+
+    drawStick(touch.moveStick, layout.moveStickAnchor);
+    drawStick(touch.aimStick, layout.aimStickAnchor);
+
+    const auto drawButton = [&](const TouchButton& button, Vector2 center, float radius,
+                                const char* label, int32_t fontSize)
+    {
+        DrawCircleV(
+            center, radius,
+            Fade(button.down ? Palette::Accent : Palette::StructMid, button.down ? 0.55F : 0.3F));
+        DrawCircleLinesV(center, radius, Fade(Palette::StructLight, 0.6F));
+        const int32_t textWidth = measureText(game, label, fontSize);
+        drawText(game, label, static_cast<int32_t>(center.x) - textWidth / 2,
+                 static_cast<int32_t>(center.y) - fontSize / 2, fontSize,
+                 button.down ? Palette::Accent : Palette::StructLight);
+    };
+
+    drawButton(touch.nerve, layout.nerveCenter, layout.nerveRadius, "NERVE", 18);
+    drawButton(touch.dash, layout.dashCenter, layout.actionButtonRadius, "DASH", 10);
+    drawButton(touch.shield, layout.shieldCenter, layout.actionButtonRadius, "SHIELD", 10);
+
+    DrawCircleV(layout.pauseCenter, layout.pauseRadius, Fade(Palette::StructMid, 0.3F));
+    DrawCircleLinesV(layout.pauseCenter, layout.pauseRadius, Fade(Palette::StructLight, 0.6F));
+    const float pauseBarWidth = layout.pauseRadius * 0.22F;
+    const float pauseBarHeight = layout.pauseRadius * 0.9F;
+    const float pauseBarGap = layout.pauseRadius * 0.18F;
+    DrawRectangle(static_cast<int32_t>(layout.pauseCenter.x - pauseBarGap - pauseBarWidth),
+                  static_cast<int32_t>(layout.pauseCenter.y - pauseBarHeight / 2),
+                  static_cast<int32_t>(pauseBarWidth), static_cast<int32_t>(pauseBarHeight),
+                  Palette::StructLight);
+    DrawRectangle(static_cast<int32_t>(layout.pauseCenter.x + pauseBarGap),
+                  static_cast<int32_t>(layout.pauseCenter.y - pauseBarHeight / 2),
+                  static_cast<int32_t>(pauseBarWidth), static_cast<int32_t>(pauseBarHeight),
+                  Palette::StructLight);
 }
 
 void drawDownwardTriangleIcon(float cx, int32_t y, float size, Color fillColor, bool filled)
@@ -3976,8 +4128,8 @@ void drawStatusIcon(const Game& game, const StatusEntry& entry, Vector2 center, 
         break;
     case StatusIconKind::Exclaim:
         DrawCircleV(center, radius, entry.color);
-        drawText(game, "!", static_cast<int32_t>(center.x) - 3,
-                 static_cast<int32_t>(center.y) - 7, 14, Palette::Void);
+        drawText(game, "!", static_cast<int32_t>(center.x) - 3, static_cast<int32_t>(center.y) - 7,
+                 14, Palette::Void);
         break;
     }
 }
@@ -3996,18 +4148,18 @@ void drawStatusRow(const Game& game, int32_t x, int32_t y)
         }
         entries.push_back(
             StatusEntry{.iconKind = StatusIconKind::Dot,
-                       .color = elementColors.at(e),
-                       .fracRemaining = timer / pickupEffectDuration,
-                       .label = std::format("{} {:.0f}s", elementNames.at(e), std::ceil(timer))});
+                        .color = elementColors.at(e),
+                        .fracRemaining = timer / pickupEffectDuration,
+                        .label = std::format("{} {:.0f}s", elementNames.at(e), std::ceil(timer))});
     }
 
     if (player.regenTimer > 0)
     {
         entries.push_back(
             StatusEntry{.iconKind = StatusIconKind::Dot,
-                       .color = Palette::Accent,
-                       .fracRemaining = player.regenTimer / pickupEffectDuration,
-                       .label = std::format("Regen {:.0f}s", std::ceil(player.regenTimer))});
+                        .color = Palette::Accent,
+                        .fracRemaining = player.regenTimer / pickupEffectDuration,
+                        .label = std::format("Regen {:.0f}s", std::ceil(player.regenTimer))});
     }
 
     if (player.overchargeTimer > 0)
@@ -4048,13 +4200,13 @@ void drawStatusRow(const Game& game, int32_t x, int32_t y)
     if (game.run.weaponDowngrade.has_value())
     {
         const auto& downgrade = *game.run.weaponDowngrade;
-        entries.push_back(StatusEntry{
-            .iconKind = StatusIconKind::Weapon,
-            .color = Palette::Accent,
-            .weaponType = downgrade.type,
-            .fracRemaining = downgrade.timer / dangerDowngradeDuration,
-            .label = std::format("{} stolen {:.0f}s", weaponDisplayName(downgrade.type),
-                                 std::ceil(downgrade.timer))});
+        entries.push_back(
+            StatusEntry{.iconKind = StatusIconKind::Weapon,
+                        .color = Palette::Accent,
+                        .weaponType = downgrade.type,
+                        .fracRemaining = downgrade.timer / dangerDowngradeDuration,
+                        .label = std::format("{} stolen {:.0f}s", weaponDisplayName(downgrade.type),
+                                             std::ceil(downgrade.timer))});
     }
 
     const bool suppressed = std::any_of(
@@ -4090,7 +4242,7 @@ void drawStatusRow(const Game& game, int32_t x, int32_t y)
         }
         drawStatusIcon(game, entry, center, iconRadius * 0.72F);
 
-        if (CheckCollisionPointCircle(mouse, center, iconRadius + 4))
+        if (hoverActive(game) && CheckCollisionPointCircle(mouse, center, iconRadius + 4))
         {
             hoveredIdx = i;
         }
@@ -4131,7 +4283,7 @@ void drawBrowserParticleDemo(int32_t style, Vector2 center)
             const Color flameColor =
                 bob > 0.6F ? Palette::ElementBurn : ColorLerp(Palette::ElementBurn, YELLOW, 0.5F);
             DrawTriangle(Vector2{.x = base.x - 4, .y = base.y}, tip,
-                        Vector2{.x = base.x + 4, .y = base.y}, Fade(flameColor, 0.75F));
+                         Vector2{.x = base.x + 4, .y = base.y}, Fade(flameColor, 0.75F));
         }
         break;
     case 1:
@@ -4142,15 +4294,14 @@ void drawBrowserParticleDemo(int32_t style, Vector2 center)
             const float fade = 1.0F - std::fmod(t * 0.7F + phase, 1.0F);
             const Vector2 pos{.x = center.x - (1.0F - fade) * 90.0F + 45,
                               .y = center.y + std::sin(t * 3 + phase * 6) * 12};
-            const float flicker =
-                0.75F + 0.25F * std::sin(t * 24.0F + pos.x * 0.1F + pos.y * 0.1F);
+            const float flicker = 0.75F + 0.25F * std::sin(t * 24.0F + pos.x * 0.1F + pos.y * 0.1F);
             constexpr float dashTrailRadiusDemo = 10.0F;
             DrawCircleV(pos, dashTrailRadiusDemo * fade,
-                       Fade(Palette::Accent, 0.18F * fade * flicker));
+                        Fade(Palette::Accent, 0.18F * fade * flicker));
             DrawCircleLines(static_cast<int32_t>(pos.x), static_cast<int32_t>(pos.y),
                             dashTrailRadiusDemo * fade * 0.65F, Fade(Palette::Crit, 0.5F * fade));
             DrawCircleV(pos, dashTrailRadiusDemo * fade * 0.22F,
-                       Fade(WHITE, 0.6F * fade * flicker));
+                        Fade(WHITE, 0.6F * fade * flicker));
         }
         break;
     case 2:
@@ -4213,23 +4364,23 @@ void drawSandboxBrowser(const Game& game)
     {
         const auto& type = bossTypes.at(static_cast<size_t>(game.browserBossTypeIndex));
         constexpr float previewBossSize = 110.0F;
-        Boss previewBoss{
-            .position = Vector2{.x = center.x - previewBossSize / 2,
-                               .y = center.y - previewBossSize / 2},
-            .size = Vector2{.x = previewBossSize, .y = previewBossSize},
-            .color = type.color,
-            .baseColor = type.color,
-            .health = 100,
-            .maxHealth = 100,
-            .state = BossState::IDLE,
-            .shape = type.shape};
+        Boss previewBoss{.position = Vector2{.x = center.x - previewBossSize / 2,
+                                             .y = center.y - previewBossSize / 2},
+                         .size = Vector2{.x = previewBossSize, .y = previewBossSize},
+                         .color = type.color,
+                         .baseColor = type.color,
+                         .health = 100,
+                         .maxHealth = 100,
+                         .state = BossState::IDLE,
+                         .shape = type.shape};
         drawBoss(game, previewBoss);
         break;
     }
     case 2:
     {
         const auto shipClass = static_cast<ShipClass>(game.browserShipIndex);
-        drawShipHull(shipClass, center, 20, 0, ships.at(static_cast<size_t>(game.browserShipIndex)).color);
+        drawShipHull(shipClass, center, 20, 0,
+                     ships.at(static_cast<size_t>(game.browserShipIndex)).color);
         break;
     }
     case 3:
@@ -4249,14 +4400,13 @@ void drawSandboxBrowser(const Game& game)
         break;
     }
 
-    windowText(game, browserCurrentName(game).c_str(),
-              static_cast<int32_t>(center.x), static_cast<int32_t>(preview.y + preview.height + 30),
-              22, Palette::Crit);
+    windowText(game, browserCurrentName(game).c_str(), static_cast<int32_t>(center.x),
+               static_cast<int32_t>(preview.y + preview.height + 30), 22, Palette::Crit);
 
     if (const std::string details = browserCurrentDetails(game); !details.empty())
     {
         windowText(game, details.c_str(), static_cast<int32_t>(center.x),
-                  static_cast<int32_t>(preview.y + preview.height + 62), 16, Palette::StructLight);
+                   static_cast<int32_t>(preview.y + preview.height + 62), 16, Palette::StructLight);
     }
 
     GuiButton(sandboxBrowserPrevButtonRect(game), "<");
@@ -4349,14 +4499,15 @@ void drawSandboxMenu(const Game& game)
         GuiButton(sandboxStepperMinusRect(game, i), "-");
         std::string value = stepper.valueText(game);
         GuiTextBox(sandboxStepperValueRect(game, i), value.data(),
-                  static_cast<int32_t>(value.size()) + 1, false);
+                   static_cast<int32_t>(value.size()) + 1, false);
         GuiButton(sandboxStepperPlusRect(game, i), "+");
     }
 
     const auto& buttons = sandboxMenuButtons();
     for (int32_t i = 0; i < static_cast<int32_t>(buttons.size()); i++)
     {
-        GuiButton(sandboxMenuButtonRect(game, i), buttons.at(static_cast<size_t>(i)).label(game).c_str());
+        GuiButton(sandboxMenuButtonRect(game, i),
+                  buttons.at(static_cast<size_t>(i)).label(game).c_str());
     }
 }
 
@@ -4493,6 +4644,7 @@ auto drawGame(Game& game) -> void
         {
             drawSandboxToggleIndicator(game);
         }
+        drawTouchControls(game);
         break;
     case GameState::SANDBOX_MENU:
         drawOverlay(game);

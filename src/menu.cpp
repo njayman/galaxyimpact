@@ -1,6 +1,7 @@
 #include "menu.hpp"
 
 #include "draw.hpp"
+#include "raymath.h"
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
@@ -31,6 +32,46 @@ auto guiUiScale(const Game& game) -> float
     return std::clamp(static_cast<float>(game.resources.windowHeight) / referenceHeight, minScale,
                       maxScale);
 }
+
+namespace
+{
+constexpr float pointerHoldThreshold = 0.3F;
+constexpr float pointerTapMaxDrift = 16.0F;
+}
+
+void updatePointerHold(Game& game)
+{
+    auto& hold = game.pointerHold;
+    hold.releasedAsTap = false;
+    hold.position = GetMousePosition();
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    {
+        hold.pressStartTime = static_cast<float>(GetTime());
+        hold.pressStartPos = hold.position;
+        hold.isHold = false;
+    }
+    else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+    {
+        if (static_cast<float>(GetTime()) - hold.pressStartTime >= pointerHoldThreshold)
+        {
+            hold.isHold = true;
+        }
+    }
+    else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
+    {
+        const float drift = Vector2Distance(hold.position, hold.pressStartPos);
+        hold.releasedAsTap = !hold.isHold && drift <= pointerTapMaxDrift;
+        hold.isHold = false;
+    }
+}
+
+auto hoverActive(const Game& game) -> bool
+{
+    return !IsMouseButtonDown(MOUSE_BUTTON_LEFT) || game.pointerHold.isHold;
+}
+
+auto quickTapReleased(const Game& game) -> bool { return game.pointerHold.releasedAsTap; }
 
 auto menuColumnRect(const Game& game, int32_t index, int32_t count, int32_t width, int32_t height,
                     int32_t gap, int32_t topY) -> Rectangle

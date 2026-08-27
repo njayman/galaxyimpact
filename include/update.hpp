@@ -49,6 +49,7 @@ struct WaveHitResult
 void triggerShake(Game& game, float intensity, float duration);
 void triggerHitPause(Game& game, float duration);
 void triggerBossShieldDashShake(Game& game);
+void triggerPlayerHitShake(Game& game, float intensity, float duration);
 void duckBGM(Game& game);
 auto updateTitle(Game& game) -> bool;
 auto updateShipSelect(Game& game) -> bool;
@@ -95,6 +96,36 @@ void updateBossDeathShockwave(Game& game, float deltaTime);
 void updatePlayerMovement(Game& game, float deltaTime);
 void updateShieldAndBarrier(Game& game, float deltaTime);
 void updateAbilityCharges(Game& game, float deltaTime);
+
+struct TouchLayout
+{
+    Vector2 moveStickAnchor;
+    Vector2 aimStickAnchor;
+    float stickRadius;
+    Vector2 nerveCenter;
+    float nerveRadius;
+    Vector2 pauseCenter;
+    float pauseRadius;
+    Vector2 dashCenter;
+    Vector2 shieldCenter;
+    float actionButtonRadius;
+    Vector2 comboCenter;
+    float comboRadius;
+};
+
+auto touchControlLayout(const Game& game) -> TouchLayout;
+void updateTouchControls(Game& game);
+// True on an Android build, or once any touch has been seen this session -
+// use this (not TouchControls::visible, which is gameplay-only) to pick
+// touch- vs desktop-flavored hint text on any screen.
+auto touchInputActive(const Game& game) -> bool;
+auto pausePressed(const Game& game) -> bool;
+auto dashPressed(const Game& game) -> bool;
+auto dashDown(const Game& game) -> bool;
+auto shieldPressed(const Game& game) -> bool;
+auto shieldDown(const Game& game) -> bool;
+auto nerveDown(const Game& game) -> bool;
+auto nervePressed(const Game& game) -> bool;
 auto nearestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>;
 auto farthestEnemy(const Game& game, Vector2 from) -> std::optional<Vector2>;
 auto nearestEnemyExcluding(const Game& game, Vector2 from,
@@ -152,6 +183,9 @@ void updateWreckwormChain(Game& game, Boss& head, float deltaTime);
 void updateWreckwormSegmentVolley(Game& game, Boss& segment, float deltaTime);
 void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime);
 void updateKrakenLimbs(Game& game, Boss& boss, float deltaTime);
+auto krakenPodPosition(const Boss& boss, int32_t podIndex) -> Vector2;
+auto krakenActiveTentacleCount(int32_t encounter) -> int32_t;
+void krakenStaggerSwipingTentacle(Boss& boss);
 void spawnKrakenSnake(Game& game, Vector2 nearPos);
 void updateKrakenSummon(Game& game, Boss& boss, float deltaTime);
 void spawnKraken(Game& game, int32_t wave);
@@ -159,7 +193,7 @@ void spawnBanished(Game& game);
 void updateBanished(Game& game, Boss& boss, float deltaTime);
 void damageBanishedEyeBurst(Game& game, Boss& boss, int32_t divisor);
 void spawnSlagmaw(Game& game, int32_t wave);
-void spawnSlagmawDrifterBreak(Game& game, Vector2 position);
+void spawnSlagmawDrifterBreak(Game& game, Vector2 position, int32_t generation);
 void spawnSlagmawHalfBreak(Game& game, const Boss& original, Vector2 bossCenter,
                            std::vector<Boss>& pendingHalves);
 void updateSafePathSegments(Game& game, float deltaTime);
@@ -183,7 +217,7 @@ void applyEvolution(Game& game, WeaponType kind);
 void updateBullets(Game& game, float deltaTime);
 void damageEnemy(Game& game, size_t index, int32_t amount);
 void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake = true,
-                bool piercesTailWrap = false);
+                bool piercesTailWrap = false, bool hitsStaggeredKrakenTentacle = false);
 void killEnemyForBossAttack(Game& game, size_t index, bool alwaysLoot);
 void spawnRareBonusPickup(Game& game, Vector2 position);
 void spawnRareDangerPickup(Game& game, Vector2 position);

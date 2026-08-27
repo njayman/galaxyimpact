@@ -44,30 +44,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(raygui)
 
-set(GALAXYIMPACT_SOURCES
-    src/achievements.cpp
-    src/bestiary.cpp
-    src/democonfig.cpp
-    src/draw.cpp
-    src/entities/boss.cpp
-    src/entities/enemy.cpp
-    src/entities/player.cpp
-    src/entities/space.cpp
-    src/game.cpp
-    src/guitheme.cpp
-    src/highscore.cpp
-    src/main.cpp
-    src/menu.cpp
-    src/platform.cpp
-    src/raygui_impl.cpp
-    src/sandbox.cpp
-    src/settings.cpp
-    src/ships/bastion.cpp
-    src/ships/interceptor.cpp
-    src/ships/ranger.cpp
-    src/sound.cpp
-    src/update.cpp
-)
+include(cmake/GalaxyImpactSources.cmake)
 
 add_executable(GalaxyImpact ${GALAXYIMPACT_SOURCES})
 

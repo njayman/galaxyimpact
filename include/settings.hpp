@@ -30,6 +30,7 @@ struct Settings
     int32_t fpsIndex{};
     int32_t hudScaleIndex{defaultHudScaleIndex};
     int32_t shipIndex{1};
+    bool swapTouchSticks{false};
 };
 
 auto loadSettings() -> Settings;

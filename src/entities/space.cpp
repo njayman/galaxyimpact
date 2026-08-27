@@ -1,7 +1,6 @@
 #include "entities/space.hpp"
 
 #include "raymath.h"
-#include "update.hpp"
 #include "update_constants.hpp"
 #include <cmath>
 
@@ -129,8 +128,6 @@ auto wormholeFacingVector(WormholeFacing facing) -> Vector2
 
 void breakAsteroid(Game& game, const Asteroid& asteroid)
 {
-    playSFX(game, game.resources.sounds.rockBreak);
-
     auto& asteroids = game.run.asteroids;
     if (asteroid.tier == AsteroidTier::Small || static_cast<int>(asteroids.size()) >= maxAsteroid)
     {

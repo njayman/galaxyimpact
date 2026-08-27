@@ -604,7 +604,7 @@ auto generateNerveFizzleSfx() -> std::vector<float>
 auto LoadSounds() -> Sounds
 {
     Sounds sounds{};
-    sounds.shoot = loadSoundFromSamples(generateShootSfx(), 0.16F);
+    sounds.shoot = loadSoundFromSamples(generateShootSfx(), 0.08F);
     sounds.hit = loadSoundFromSamples(generateHitSfx());
     sounds.explosion = loadSoundFromSamples(generateExplosionSfx());
     sounds.menuMove = loadSoundFromSamples(generateMenuMoveSfx());
@@ -614,7 +614,7 @@ auto LoadSounds() -> Sounds
     sounds.critical = loadSoundFromSamples(generateCriticalSfx());
     sounds.bossWindUp = loadSoundFromSamples(generateBossWindUpSfx());
     sounds.beamFire = loadSoundFromSamples(generateBeamFireSfx());
-    sounds.homingLaunch = loadSoundFromSamples(generateHomingLaunchSfx());
+    sounds.homingLaunch = loadSoundFromSamples(generateHomingLaunchSfx(), 0.16F);
     sounds.spreadBurst = loadSoundFromSamples(generateSpreadBurstSfx());
     sounds.slamBoom = loadSoundFromSamples(generateSlamBoomSfx());
     sounds.nerveCharge = loadSoundFromSamples(generateNerveChargeSfx());

@@ -50,6 +50,18 @@ auto generateBoundaryClouds() -> std::vector<GasCloud>
 
 auto loadGameFont() -> Font
 {
+#if defined(PLATFORM_ANDROID)
+    // Android assets live inside the APK and are only reachable through
+    // raylib's wrapped fopen()/AAssetManager, which takes a plain path
+    // relative to the assets root - no real filesystem entry to stat first.
+    const std::string path = "assets/fonts/HeavyDataNerdFont-Regular.ttf";
+    const Font font = LoadFontEx(path.c_str(), 96, nullptr, 0);
+    if (font.texture.id != 0)
+    {
+        SetTextureFilter(font.texture, TEXTURE_FILTER_BILINEAR);
+        return font;
+    }
+#else
     const std::string path =
         std::string(GetApplicationDirectory()) + "assets/fonts/HeavyDataNerdFont-Regular.ttf";
 
@@ -62,6 +74,7 @@ auto loadGameFont() -> Font
             return font;
         }
     }
+#endif
 
     return GetFontDefault();
 }
@@ -321,5 +334,6 @@ void resetRun(Game& game)
     game.run.bossCutscenePhase = 0;
     game.run.bossCutsceneTimer = 0;
     game.run.krakenFleePos = Vector2{};
+    game.run.endingTimer = 0;
     game.state = GameState::GAMEPLAY;
 }

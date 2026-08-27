@@ -99,7 +99,7 @@ constexpr float turretFireRange = 700;
 constexpr int32_t crossfireProjectileDamage = 5;
 constexpr int32_t shieldDropChance = 15;
 constexpr int32_t lifeOrbDropChance = 40;
-constexpr int32_t settingsRowCount = 7;
+constexpr int32_t settingsRowCount = 8;
 constexpr float nerveKillGain = 6;
 constexpr float chargeFeedDelay = 0.6F;
 constexpr float chargeFeedDrainRate = 12.0F;
@@ -326,7 +326,9 @@ constexpr float turretLife = 8.0F;
 
 constexpr float turretFireInterval = 0.7F;
 constexpr float flakSplashRadius = 40.0F;
-constexpr float flamethrowerRange = 260.0F;
+// Matches the laser (Beam weapon)'s level-1 length: 150 + 1 * 20, at the
+// neutral (non-Interceptor) ship multiplier.
+constexpr float flamethrowerRange = 170.0F;
 constexpr float flamethrowerHalfAngle = 20.0F * DEG2RAD;
 constexpr float flamethrowerOffAngle = 45.0F * DEG2RAD;
 constexpr float chainLightningRange = 260.0F;
@@ -378,19 +380,25 @@ constexpr float punctumTrapSpiralSwirlSpeed = 1.1F;
 constexpr float punctumTrapConsumeRadius = 40.0F;
 
 constexpr float krakenSize = 520.0F;
-constexpr float krakenTentacleCheckInterval = 5.0F;
-constexpr float krakenTentacleTriggerChance = 0.5F;
+constexpr float krakenTentacleCheckInterval = 2.0F;
+constexpr float krakenTentacleTriggerChance = 0.85F;
 constexpr float krakenTentacleEmergeDuration = 0.4F;
 constexpr float krakenTentacleSwipeDuration = 0.8F;
 constexpr float krakenTentacleRetreatDuration = 0.35F;
 constexpr float krakenTentacleStaggerRetreatDuration = 0.5F;
-constexpr float krakenTentacleCooldownDuration = 15.0F;
+constexpr float krakenTentacleCooldownDuration = 4.0F;
 constexpr float krakenTentacleReach = 260.0F;
 constexpr float krakenTentacleSwipeArcDeg = 140.0F;
 constexpr float krakenTentaclePortalRadius = 34.0F;
-constexpr float krakenTentacleHitRadius = 26.0F;
+constexpr float krakenTentacleHitRadius = 42.0F;
 constexpr int32_t krakenTentaclePlayerDamage = 2;
-constexpr int32_t krakenTentacleParryDamage = 180;
+
+// ponytail: stagger duration scales 5s -> 9s across the three encounters (linear), per
+// explicit request; no exact numbers were given beyond the 5-9s range.
+constexpr float krakenStaggerDurationE1 = 5.0F;
+constexpr float krakenStaggerDurationE2 = 7.0F;
+constexpr float krakenStaggerDurationE3 = 9.0F;
+constexpr float krakenStaggerGateOffset = 60.0F;
 
 constexpr float krakenLimbOpenDuration = 0.7F;
 constexpr float krakenLimbActiveDuration = 10.0F;
@@ -472,6 +480,8 @@ constexpr float krakenSnakeHealthMult = 0.35F;
 constexpr int32_t krakenSnakeSegmentCount = 6;
 
 constexpr float endingDriftSpeed = 6.0F;
+constexpr float endingDuration = 10.0F;
+constexpr float endingSkipGraceDuration = 1.5F;
 
 constexpr float bossDeathBlinkDuration = 0.5F;
 constexpr float bossDeathCrackDuration = 0.7F;
