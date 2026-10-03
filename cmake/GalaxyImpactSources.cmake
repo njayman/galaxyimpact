@@ -20,6 +20,7 @@ set(GALAXYIMPACT_SOURCES
     src/sandbox.cpp
     src/settings.cpp
     src/ships/bastion.cpp
+    src/ships/hull.cpp
     src/ships/interceptor.cpp
     src/ships/ranger.cpp
     src/sound.cpp
