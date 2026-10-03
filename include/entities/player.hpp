@@ -90,7 +90,9 @@ class Bullet
     float halfWidth = 0;
     bool arc = false;
     float arcSkew = 0; // radians the arc is rotated off-center, so each one leans left or right
-    Vector2 origin{}; // where the bolt left the ship's nose; it grows out from here
+    // Distance flown since leaving the nose (accumulated, so a wormhole jump doesn't count);
+    // the bolt grows out of the nose by this much instead of appearing through the hull.
+    float traveled = 0;
     // Laser bolts phase through enemies, hitting each once. ponytail: fixed ring of 64 covers an
     // ever-widening arc sweeping a crowd (a bolt overlaps an enemy for a few frames).
     std::array<uint32_t, 64> phasedThrough{};
@@ -108,7 +110,7 @@ struct LaserShape
 inline auto laserShape(const Bullet& b) -> LaserShape
 {
     const Vector2 fwd = Vector2Normalize(b.velocity);
-    const float traveled = Vector2Distance(b.position, b.origin);
+    const float traveled = b.traveled;
     LaserShape shape;
     if (!b.arc)
     {

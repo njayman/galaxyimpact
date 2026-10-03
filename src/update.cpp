@@ -1639,6 +1639,14 @@ auto estimatePlayerDps(const Game& game) -> float
         case WeaponType::ChainLightning:
             hitsPerCooldown = 3.0F;
             break;
+        case WeaponType::LaserShots:
+        {
+            // dmg here is the raw weaponDamage; mirror the fire code's per-shot multipliers.
+            const int32_t streaks = 3 + w.level / 4;
+            hitsPerCooldown = w.evolved ? 0.36F * 1.5F * heavyLanceSpacing
+                                        : static_cast<float>(streaks) * laserShotDamageMult;
+            break;
+        }
         default:
             break;
         }
@@ -2078,8 +2086,7 @@ void updateWeapons(Game& game, float deltaTime)
                     .streak = heavyLanceRadius * lengthMult * (1.0F + jitter(0.15F)),
                     .halfWidth = heavyLanceHalfWidth,
                     .arc = true,
-                    .arcSkew = jitter(heavyLanceMaxSkew) * DEG2RAD,
-                    .origin = nose});
+                    .arcSkew = jitter(heavyLanceMaxSkew) * DEG2RAD});
             }
             else
             {
@@ -2094,10 +2101,11 @@ void updateWeapons(Game& game, float deltaTime)
                 {
                     const Vector2 d =
                         Vector2Rotate(dir, jitter(laserShotSpreadDeg * field) * DEG2RAD);
+                    const auto ahead = static_cast<float>(GetRandomValue(0, 45));
                     const Vector2 start = Vector2Add(
                         Vector2Add(nose,
                                    Vector2Scale(side, jitter(laserShotFieldHalfWidth * field))),
-                        Vector2Scale(d, static_cast<float>(GetRandomValue(0, 45))));
+                        Vector2Scale(d, ahead));
                     game.run.bullets.push_back(Bullet{
                         .position = start,
                         .velocity = Vector2Scale(d, projectileSpeed * laserShotSpeedMult *
@@ -2109,7 +2117,7 @@ void updateWeapons(Game& game, float deltaTime)
                         .source = DamageSource::LaserShots,
                         .streak = laserShotStreak * lengthMult * (1.0F + jitter(0.3F)),
                         .halfWidth = laserShotHalfWidth,
-                        .origin = nose});
+                        .traveled = ahead});
                 }
             }
             playSFX(game, game.resources.sounds.shoot);
@@ -2931,8 +2939,9 @@ void fireNerveLaserStorm(Game& game)
     for (int32_t i = 0; i < nerveStormStreaks; i++)
     {
         const Vector2 d = Vector2Rotate(dir, jitter(nerveStormSpreadDeg) * DEG2RAD);
-        const Vector2 start = Vector2Add(Vector2Add(nose, Vector2Scale(side, jitter(30.0F))),
-                                         Vector2Scale(d, static_cast<float>(GetRandomValue(0, 140))));
+        const auto ahead = static_cast<float>(GetRandomValue(0, 140));
+        const Vector2 start =
+            Vector2Add(Vector2Add(nose, Vector2Scale(side, jitter(30.0F))), Vector2Scale(d, ahead));
         game.run.bullets.push_back(Bullet{
             .position = start,
             .velocity =
@@ -2944,7 +2953,7 @@ void fireNerveLaserStorm(Game& game)
             .source = DamageSource::Nerve,
             .streak = laserShotStreak * 1.8F * (1.0F + jitter(0.3F)),
             .halfWidth = 2.0F,
-            .origin = nose});
+            .traveled = ahead});
     }
 
     playSFX(game, game.resources.sounds.nerveRelease);
@@ -3830,6 +3839,56 @@ void applyEvolution(Game& game, WeaponType kind)
     }
 }
 
+namespace
+{
+// Laser bolts hit along their whole drawn shape; every other bullet at its head.
+auto bulletTouchesCircle(const Bullet& bullet, Vector2 center, float radius) -> bool
+{
+    if (bullet.streak <= 0)
+    {
+        return CheckCollisionCircles(bullet.position, bullet.radius, center, radius);
+    }
+    const LaserShape shape = laserShape(bullet);
+    for (int k = 0; k + 1 < shape.count; k++)
+    {
+        if (CheckCollisionCircleLine(center, radius + bullet.halfWidth,
+                                     shape.points.at(static_cast<size_t>(k)),
+                                     shape.points.at(static_cast<size_t>(k) + 1)))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+auto bulletTouchesRect(const Bullet& bullet, Rectangle rect) -> bool
+{
+    if (bullet.streak <= 0)
+    {
+        return CheckCollisionCircleRec(bullet.position, bullet.radius, rect);
+    }
+    // ponytail: samples the bolt's points, not its segments; fine while points sit closer
+    // together than a boss is wide (an arc spaces 21 points over its length).
+    const LaserShape shape = laserShape(bullet);
+    for (int k = 0; k < shape.count; k++)
+    {
+        if (CheckCollisionCircleRec(shape.points.at(static_cast<size_t>(k)), bullet.halfWidth, rect))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Laser Storm streaks pile onto anything big that absorbs them, so a whole fan landing on a boss,
+// tentacle or hazard deals one Nerve burst, not one per streak.
+auto bulletDamageVsLarge(const Bullet& bullet) -> int32_t
+{
+    return bullet.source == DamageSource::Nerve ? nerveBurstDamage / nerveStormStreaks
+                                                : bullet.damage;
+}
+} // namespace
+
 void updateBullets(Game& game, float deltaTime)
 {
     for (auto& bullet : game.run.bullets)
@@ -3841,6 +3900,7 @@ void updateBullets(Game& game, float deltaTime)
 
         bullet.position =
             Vector2Add(bullet.position, Vector2Scale(bullet.velocity, deltaTime * frameScale));
+        bullet.traveled += Vector2Length(bullet.velocity) * deltaTime * frameScale;
         applyWormholeTransit(game, bullet.position, bullet.velocity, bullet.radius);
 
         for (auto& boss : game.run.bosses)
@@ -3855,13 +3915,14 @@ void updateBullets(Game& game, float deltaTime)
                 for (int32_t slot = 0; slot < Boss::krakenLimbSlots; slot++)
                 {
                     if (bullet.active && boss.tentacleStaggered.at(static_cast<size_t>(slot)) &&
-                        CheckCollisionCircles(bullet.position, bullet.radius,
-                                              boss.tentacleStaggerPos.at(static_cast<size_t>(slot)),
-                                              krakenTentacleHitRadius))
+                        bulletTouchesCircle(bullet,
+                                            boss.tentacleStaggerPos.at(static_cast<size_t>(slot)),
+                                            krakenTentacleHitRadius))
                     {
                         bullet.active = false;
-                        damageBoss(game, boss, bullet.damage, true, false, true);
-                        recordDamage(game, bullet.source, bullet.damage);
+                        const int32_t dmg = bulletDamageVsLarge(bullet);
+                        damageBoss(game, boss, dmg, true, false, true);
+                        recordDamage(game, bullet.source, dmg);
                     }
                 }
                 continue;
@@ -3871,7 +3932,7 @@ void updateBullets(Game& game, float deltaTime)
                                      .y = boss.position.y,
                                      .width = boss.size.x,
                                      .height = boss.size.y};
-            if (bullet.active && CheckCollisionCircleRec(bullet.position, bullet.radius, bossRect))
+            if (bullet.active && bulletTouchesRect(bullet, bossRect))
             {
                 bullet.active = false;
                 if (bullet.source == DamageSource::Nerve && boss.isBanished &&
@@ -3881,10 +3942,7 @@ void updateBullets(Game& game, float deltaTime)
                     damageBanishedEyeBurst(game, boss, banishedEyeBurstDamageDivisor);
                     continue;
                 }
-                // A whole Laser Storm fan on a boss matches one Nerve burst, not one per streak.
-                const int32_t bossDamage = bullet.source == DamageSource::Nerve
-                                               ? nerveBurstDamage / nerveStormStreaks
-                                               : bullet.damage;
+                const int32_t bossDamage = bulletDamageVsLarge(bullet);
                 damageBoss(game, boss, bossDamage, true, bullet.source == DamageSource::Railgun);
                 recordDamage(game, bullet.source, bossDamage);
             }
@@ -3907,12 +3965,12 @@ void updateBullets(Game& game, float deltaTime)
         {
             auto& hazard = game.run.eliteHazards.at(j);
             if (bullet.active && hazard.active &&
-                CheckCollisionCircles(bullet.position, bullet.radius, hazard.position,
-                                      EliteHazardConstants::radius))
+                bulletTouchesCircle(bullet, hazard.position, EliteHazardConstants::radius))
             {
                 bullet.active = false;
-                damageEliteHazard(game, j, bullet.damage);
-                recordDamage(game, bullet.source, bullet.damage);
+                const int32_t dmg = bulletDamageVsLarge(bullet);
+                damageEliteHazard(game, j, dmg);
+                recordDamage(game, bullet.source, dmg);
             }
         }
 
@@ -3925,24 +3983,7 @@ void updateBullets(Game& game, float deltaTime)
             {
                 continue;
             }
-            bool touching = false;
-            if (bullet.streak > 0)
-            {
-                const LaserShape shape = laserShape(bullet);
-                const float reach = enemyCollisionRadius(enemy) + bullet.halfWidth;
-                for (int k = 0; k + 1 < shape.count && !touching; k++)
-                {
-                    touching = CheckCollisionCircleLine(
-                        enemy.position, reach, shape.points.at(static_cast<size_t>(k)),
-                        shape.points.at(static_cast<size_t>(k) + 1));
-                }
-            }
-            else
-            {
-                touching = CheckCollisionCircles(bullet.position, bullet.radius, enemy.position,
-                                                 enemyCollisionRadius(enemy));
-            }
-            if (touching)
+            if (bulletTouchesCircle(bullet, enemy.position, enemyCollisionRadius(enemy)))
             {
                 damageEnemy(game, j, bullet.damage);
                 recordDamage(game, bullet.source, bullet.damage);
