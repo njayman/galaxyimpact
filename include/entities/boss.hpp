@@ -366,6 +366,7 @@ class BossProjectile
     Color fluidColor = Palette::RustbloomAccent;
 
     int32_t ricochetRemaining = 0;
+    uint32_t ricochetLastHit = 0; // Enemy::id bounced off last; never re-hit in a row
 
     int32_t visualEnemyKind = -1;
 };

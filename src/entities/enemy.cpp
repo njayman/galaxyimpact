@@ -125,7 +125,8 @@ void spawnEnemyAt(Game& game, int kindIndex, Vector2 pos)
                                      .hitByDash = false,
                                      .hitFlashTimer = 0,
                                      .organicSeed =
-                                         static_cast<float>(GetRandomValue(0, 6283)) / 1000.0F});
+                                         static_cast<float>(GetRandomValue(0, 6283)) / 1000.0F,
+                                     .id = ++game.run.nextEnemyId});
 }
 
 auto organicVertexRadius(float baseRadius, int32_t vertexIndex, float seed) -> float

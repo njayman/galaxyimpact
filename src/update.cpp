@@ -171,7 +171,7 @@ auto updateTitle(Game& game) -> bool
 {
     const auto [index, confirmed] = updateMenuSelectionWindow(
         game, game.menuIndex, 5, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
-        MenuLayout::buttonGap, MenuLayout::titleMenuY);
+        MenuLayout::buttonGap, titleLayout().menuY);
     playMenuSounds(game, index, confirmed);
     game.menuIndex = index;
 
@@ -209,20 +209,34 @@ auto updateTitle(Game& game) -> bool
 
 auto updateAchievements(Game& game) -> bool
 {
-    // A quick tap/click backs out; a tap-and-hold previews a weapon's
-    // unlock details instead (see hoverActive) without instantly exiting.
-    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) || quickTapReleased(game))
+    applyScrollInput(game.achievementsScroll);
+
+    // Esc/Enter or the Back button close it; a tap-and-hold previews a
+    // weapon's unlock details instead (see hoverActive). A press-edge check
+    // (not a release-edge one like quickTapReleased) is required here: the
+    // click that opened this screen still has its release pending on this
+    // screen's first frame, and a release-triggered close would misfire on
+    // that leftover release.
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) ||
+        (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+         CheckCollisionPointRec(GetMousePosition(), backButtonRect(game))))
     {
         game.state = game.settingsReturnState;
+        game.achievementsScroll.offset = 0;
     }
     return false;
 }
 
 auto updateBestiary(Game& game) -> bool
 {
-    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) || quickTapReleased(game))
+    applyScrollInput(game.bestiaryScroll);
+
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) ||
+        (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+         CheckCollisionPointRec(GetMousePosition(), backButtonRect(game))))
     {
         game.state = game.settingsReturnState;
+        game.bestiaryScroll.offset = 0;
     }
     return false;
 }
@@ -236,15 +250,43 @@ auto updateShipSelect(Game& game) -> bool
         return false;
     }
 
-    const auto [index, confirmed] = updateMenuSelectionWindow(
-        game, game.menuIndex, static_cast<int32_t>(ShipClass::Count), MenuLayout::buttonWidth,
-        MenuLayout::buttonHeight, MenuLayout::buttonGap, MenuLayout::titleMenuY);
-    playMenuSounds(game, index, confirmed);
-    game.menuIndex = index;
+    const auto count = static_cast<int32_t>(ShipClass::Count);
+    int32_t newIndex = game.menuIndex;
+    bool confirmed = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
+
+    if (IsKeyPressed(KEY_A) || IsKeyPressed(KEY_LEFT))
+    {
+        newIndex = (newIndex - 1 + count) % count;
+    }
+    if (IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT))
+    {
+        newIndex = (newIndex + 1) % count;
+    }
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    {
+        const ShipSelectLayout layout = shipSelectLayout(game);
+        const Vector2 mouse = GetMousePosition();
+        if (CheckCollisionPointRec(mouse, layout.leftTapZone))
+        {
+            newIndex = (newIndex - 1 + count) % count;
+        }
+        else if (CheckCollisionPointRec(mouse, layout.rightTapZone))
+        {
+            newIndex = (newIndex + 1) % count;
+        }
+        else if (CheckCollisionPointRec(mouse, layout.selectRect))
+        {
+            confirmed = true;
+        }
+    }
+
+    playMenuSounds(game, newIndex, confirmed);
+    game.menuIndex = newIndex;
 
     if (confirmed)
     {
-        game.resources.settings.shipIndex = index;
+        game.resources.settings.shipIndex = newIndex;
         saveSettings(game.resources.settings);
         resetRun(game);
     }
@@ -1522,6 +1564,10 @@ auto weaponCooldown(const Game& game, WeaponType kind, int32_t level, bool evolv
     {
         base /= 2.0F; // evolution doubles Shockwave's attack speed
     }
+    if (kind == WeaponType::LaserShots && evolved)
+    {
+        base *= heavyLanceSpacing; // spaced-out arcs; damage per bolt scales up to match
+    }
     base *= 1 - 0.1F * static_cast<float>(
                            game.run.skillLevels.at(static_cast<size_t>(SkillType::Cooldown)));
 
@@ -1560,7 +1606,7 @@ auto ricochetLevel(const Game& game) -> int32_t
 {
     for (const auto& w : game.run.weapons)
     {
-        if (w.type == WeaponType::Ricochet)
+        if (w.type == WeaponType::Ricochet && !w.disabled)
         {
             return w.level;
         }
@@ -2004,6 +2050,68 @@ void updateWeapons(Game& game, float deltaTime)
                 .damage = dmg,
                 .pierceRemaining = 999,
                 .source = DamageSource::Railgun});
+            playSFX(game, game.resources.sounds.shoot);
+            break;
+        }
+        case WeaponType::LaserShots:
+        {
+            const Vector2 dir = aimAtMouse(game);
+            const float lengthMult = currentShip(game).beamLengthMult;
+            const Vector2 nose = Vector2Add(game.run.player.position,
+                                            Vector2Scale(dir, game.run.player.radius * 1.05F));
+            const auto jitter = [](float range)
+            { return static_cast<float>(GetRandomValue(-100, 100)) / 100.0F * range; };
+            const auto baseDamage = static_cast<float>(weaponDamage(game, w.level));
+            if (w.evolved)
+            {
+                // One wide arc; the 0.36 matches a 3-streak barrage's single-target damage.
+                const auto dmg =
+                    static_cast<int32_t>(baseDamage * 0.36F * 1.5F * heavyLanceSpacing);
+                game.run.bullets.push_back(Bullet{
+                    .position = nose,
+                    .velocity = Vector2Scale(dir, projectileSpeed * heavyLanceSpeedMult),
+                    .radius = heavyLanceHalfWidth,
+                    .color = Palette::Crit,
+                    .active = true,
+                    .damage = std::max(1, dmg),
+                    .source = DamageSource::LaserShots,
+                    .streak = heavyLanceRadius * lengthMult * (1.0F + jitter(0.15F)),
+                    .halfWidth = heavyLanceHalfWidth,
+                    .arc = true,
+                    .arcSkew = jitter(heavyLanceMaxSkew) * DEG2RAD,
+                    .origin = nose});
+            }
+            else
+            {
+                // A loose barrage: a few thin streaks scattered across a wide field in angle,
+                // side offset, start position and length, so it reads as a volley, not one line.
+                const int32_t streaks = 3 + w.level / 4;
+                const auto dmg = std::max(1, static_cast<int32_t>(baseDamage * laserShotDamageMult));
+                const Vector2 side{.x = -dir.y, .y = dir.x};
+                // Each level widens the field a bit: +8%/level, so 1.64x at level 8.
+                const float field = 1.0F + 0.08F * static_cast<float>(w.level);
+                for (int32_t s = 0; s < streaks; s++)
+                {
+                    const Vector2 d =
+                        Vector2Rotate(dir, jitter(laserShotSpreadDeg * field) * DEG2RAD);
+                    const Vector2 start = Vector2Add(
+                        Vector2Add(nose,
+                                   Vector2Scale(side, jitter(laserShotFieldHalfWidth * field))),
+                        Vector2Scale(d, static_cast<float>(GetRandomValue(0, 45))));
+                    game.run.bullets.push_back(Bullet{
+                        .position = start,
+                        .velocity = Vector2Scale(d, projectileSpeed * laserShotSpeedMult *
+                                                        (1.0F + jitter(0.06F))),
+                        .radius = laserShotHalfWidth,
+                        .color = Palette::ElementStatic,
+                        .active = true,
+                        .damage = dmg,
+                        .source = DamageSource::LaserShots,
+                        .streak = laserShotStreak * lengthMult * (1.0F + jitter(0.3F)),
+                        .halfWidth = laserShotHalfWidth,
+                        .origin = nose});
+                }
+            }
             playSFX(game, game.resources.sounds.shoot);
             break;
         }
@@ -2757,86 +2865,6 @@ void updateBeamContact(Game& game, float deltaTime)
     }
 }
 
-void nerveConeHit(Game& game, Vector2 origin, Vector2 direction, float range, float halfAngleRad,
-                  int32_t dmg)
-{
-    const auto inCone = [&](Vector2 pos, float entityRadius)
-    {
-        const Vector2 toEntity = Vector2Subtract(pos, origin);
-        const float dist = Vector2Length(toEntity);
-        if (dist > range + entityRadius)
-        {
-            return false;
-        }
-        if (dist < 0.01F)
-        {
-            return true;
-        }
-        const Vector2 dirToEntity = Vector2Scale(toEntity, 1.0F / dist);
-        const float dot =
-            std::clamp(direction.x * dirToEntity.x + direction.y * dirToEntity.y, -1.0F, 1.0F);
-        const float angle = std::acos(dot);
-        const float padding = std::atan2(entityRadius, dist);
-        return angle <= halfAngleRad + padding;
-    };
-
-    for (size_t j = 0; j < game.run.enemies.size(); j++)
-    {
-        const auto& enemy = game.run.enemies.at(j);
-        if (enemy.active && !enemy.phased && inCone(enemy.position, enemyCollisionRadius(enemy)))
-        {
-            damageEnemy(game, j, dmg);
-            recordDamage(game, DamageSource::Nerve, dmg);
-            if (!enemy.active)
-            {
-                recordDashOrNerveKill(game);
-            }
-        }
-    }
-
-    for (size_t j = 0; j < game.run.eliteHazards.size(); j++)
-    {
-        const auto& hazard = game.run.eliteHazards.at(j);
-        if (hazard.active && inCone(hazard.position, EliteHazardConstants::radius))
-        {
-            damageEliteHazard(game, j, dmg);
-            recordDamage(game, DamageSource::Nerve, dmg);
-        }
-    }
-
-    for (auto& asteroid : game.run.asteroids)
-    {
-        if (asteroid.active && inCone(asteroid.position, asteroid.radius))
-        {
-            asteroid.active = false;
-            game.run.score += asteroidScore(asteroid.tier);
-            breakAsteroid(game, asteroid);
-        }
-    }
-
-    for (auto& boss : game.run.bosses)
-    {
-        if (boss.health <= 0)
-        {
-            continue;
-        }
-        const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
-                                 .y = boss.position.y + boss.size.y / 2};
-        if (inCone(bossCenter, boss.size.x / 2))
-        {
-            if (boss.isBanished && boss.banishedStage == 1 && !boss.banishedEyeChargeBurstUsed)
-            {
-                damageBanishedEyeBurst(game, boss, banishedEyeBurstDamageDivisor);
-            }
-            else
-            {
-                damageBoss(game, boss, dmg);
-                recordDamage(game, DamageSource::Nerve, dmg);
-            }
-        }
-    }
-}
-
 void sniperLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg)
 {
     for (size_t j = 0; j < game.run.enemies.size(); j++)
@@ -2891,17 +2919,33 @@ void updateSniperShots(Game& game, float deltaTime)
                   { return bolt.timer <= 0; });
 }
 
-void fireNerveCone(Game& game)
+// Laser Storm, the Interceptor's Nerve burst: one dense, wide fan of gold Laser Shots streaks.
+void fireNerveLaserStorm(Game& game)
 {
     const Vector2 dir = aimAtMouse(game);
-    const Vector2 start = game.run.player.position;
-    const Vector2 end = Vector2Add(start, Vector2Scale(dir, nerveBurstLength));
-
-    nerveConeHit(game, start, dir, nerveBurstLength, nerveConeHalfAngleDeg * DEG2RAD,
-                nerveBurstDamage);
-
-    game.run.nerveBurstFlashTimer = 0.15F;
-    game.run.nerveBurstFlashEnd = end;
+    const Vector2 nose =
+        Vector2Add(game.run.player.position, Vector2Scale(dir, game.run.player.radius * 1.05F));
+    const Vector2 side{.x = -dir.y, .y = dir.x};
+    const auto jitter = [](float range)
+    { return static_cast<float>(GetRandomValue(-100, 100)) / 100.0F * range; };
+    for (int32_t i = 0; i < nerveStormStreaks; i++)
+    {
+        const Vector2 d = Vector2Rotate(dir, jitter(nerveStormSpreadDeg) * DEG2RAD);
+        const Vector2 start = Vector2Add(Vector2Add(nose, Vector2Scale(side, jitter(30.0F))),
+                                         Vector2Scale(d, static_cast<float>(GetRandomValue(0, 140))));
+        game.run.bullets.push_back(Bullet{
+            .position = start,
+            .velocity =
+                Vector2Scale(d, projectileSpeed * laserShotSpeedMult * 1.5F * (1.0F + jitter(0.1F))),
+            .radius = 2.0F,
+            .color = Palette::Crit,
+            .active = true,
+            .damage = nerveBurstDamage / nerveStormDamageDivisor,
+            .source = DamageSource::Nerve,
+            .streak = laserShotStreak * 1.8F * (1.0F + jitter(0.3F)),
+            .halfWidth = 2.0F,
+            .origin = nose});
+    }
 
     playSFX(game, game.resources.sounds.nerveRelease);
     duckBGM(game);
@@ -2966,7 +3010,7 @@ void fireNerveBurst(Game& game)
         fireNerveBladeTornado(game);
         break;
     case ShipClass::Interceptor:
-        fireNerveCone(game);
+        fireNerveLaserStorm(game);
         break;
     case ShipClass::Ranger:
     case ShipClass::Count:
@@ -3639,10 +3683,13 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
         }
     }
 
-    constexpr size_t evolvableWeaponCount = 6;
     std::vector<WeaponType> evolvable;
-    for (size_t i = 0; i < evolvableWeaponCount; i++)
+    for (size_t i = 0; i < weaponEvolves.size(); i++)
     {
+        if (!weaponEvolves.at(i))
+        {
+            continue;
+        }
         const auto kind = static_cast<WeaponType>(i);
         const auto grantSkill = weaponGrantSkill.at(i);
         const auto passive = skillLinkedPassive.at(i);
@@ -3827,8 +3874,19 @@ void updateBullets(Game& game, float deltaTime)
             if (bullet.active && CheckCollisionCircleRec(bullet.position, bullet.radius, bossRect))
             {
                 bullet.active = false;
-                damageBoss(game, boss, bullet.damage, true, bullet.source == DamageSource::Railgun);
-                recordDamage(game, bullet.source, bullet.damage);
+                if (bullet.source == DamageSource::Nerve && boss.isBanished &&
+                    boss.banishedStage == 1 && !boss.banishedEyeChargeBurstUsed)
+                {
+                    // Laser Storm opens the Banished's eye, as the Nerve cone it replaced did.
+                    damageBanishedEyeBurst(game, boss, banishedEyeBurstDamageDivisor);
+                    continue;
+                }
+                // A whole Laser Storm fan on a boss matches one Nerve burst, not one per streak.
+                const int32_t bossDamage = bullet.source == DamageSource::Nerve
+                                               ? nerveBurstDamage / nerveStormStreaks
+                                               : bullet.damage;
+                damageBoss(game, boss, bossDamage, true, bullet.source == DamageSource::Railgun);
+                recordDamage(game, bullet.source, bossDamage);
             }
         }
 
@@ -3861,16 +3919,36 @@ void updateBullets(Game& game, float deltaTime)
         for (size_t j = 0; j < game.run.enemies.size(); j++)
         {
             auto& enemy = game.run.enemies.at(j);
-            if (!bullet.active || !enemy.active || enemy.phased)
+            if (!bullet.active || !enemy.active || enemy.phased ||
+                (bullet.ricochetLastHit != 0 && enemy.id == bullet.ricochetLastHit) ||
+                std::ranges::find(bullet.phasedThrough, enemy.id) != bullet.phasedThrough.end())
             {
                 continue;
             }
-            if (CheckCollisionCircles(bullet.position, bullet.radius, enemy.position,
-                                      enemyCollisionRadius(enemy)))
+            bool touching = false;
+            if (bullet.streak > 0)
+            {
+                const LaserShape shape = laserShape(bullet);
+                const float reach = enemyCollisionRadius(enemy) + bullet.halfWidth;
+                for (int k = 0; k + 1 < shape.count && !touching; k++)
+                {
+                    touching = CheckCollisionCircleLine(
+                        enemy.position, reach, shape.points.at(static_cast<size_t>(k)),
+                        shape.points.at(static_cast<size_t>(k) + 1));
+                }
+            }
+            else
+            {
+                touching = CheckCollisionCircles(bullet.position, bullet.radius, enemy.position,
+                                                 enemyCollisionRadius(enemy));
+            }
+            if (touching)
             {
                 damageEnemy(game, j, bullet.damage);
                 recordDamage(game, bullet.source, bullet.damage);
-                if (!enemy.active)
+                // damageEnemy can spawn enemies (Hive Node), invalidating `enemy`.
+                const Enemy& hit = game.run.enemies.at(j);
+                if (!hit.active)
                 {
                     if (bullet.source == DamageSource::Forward)
                     {
@@ -3888,6 +3966,14 @@ void updateBullets(Game& game, float deltaTime)
                     {
                         recordWeaponKill(game, WeaponType::TurretDeploy);
                     }
+                    else if (bullet.source == DamageSource::LaserShots)
+                    {
+                        recordWeaponKill(game, WeaponType::LaserShots);
+                    }
+                    else if (bullet.source == DamageSource::Nerve)
+                    {
+                        recordDashOrNerveKill(game);
+                    }
                 }
 
                 if (bullet.splashRadius > 0)
@@ -3896,7 +3982,14 @@ void updateBullets(Game& game, float deltaTime)
                              bullet.source);
                 }
 
-                if (bullet.pierceRemaining > 0)
+                if (bullet.streak > 0)
+                {
+                    // Laser bolt: phases on through, never hitting this enemy again.
+                    bullet.phasedThrough.at(bullet.phasedCount % bullet.phasedThrough.size()) =
+                        hit.id;
+                    bullet.phasedCount++;
+                }
+                else if (bullet.pierceRemaining > 0)
                 {
 
                     bullet.pierceRemaining--;
@@ -3905,7 +3998,7 @@ void updateBullets(Game& game, float deltaTime)
                 {
 
                     if (const auto next =
-                            nearestEnemyExcluding(game, bullet.position, enemy.position);
+                            nearestEnemyExcluding(game, bullet.position, hit.position);
                         next.has_value())
                     {
                         bullet.velocity =
@@ -3913,10 +4006,8 @@ void updateBullets(Game& game, float deltaTime)
                                          Vector2Length(bullet.velocity));
                         bullet.ricochetRemaining--;
                     }
-                    else
-                    {
-                        bullet.active = false;
-                    }
+                    // No bounce target: keep flying straight, past the enemy just hit.
+                    bullet.ricochetLastHit = hit.id;
                     break;
                 }
                 else if (bullet.phasing)
@@ -3926,6 +4017,11 @@ void updateBullets(Game& game, float deltaTime)
                 else if (bullet.ricochetThenPhase)
                 {
                     bullet.phasing = true;
+                }
+                else if (bullet.ricochetLastHit != 0)
+                {
+                    // Bounces spent: the shot goes on through, hitting each enemy it passes once.
+                    bullet.ricochetLastHit = hit.id;
                 }
                 else
                 {
@@ -4297,16 +4393,19 @@ void updateTurrets(Game& game, float deltaTime)
 
 auto flamethrowerRangeFor(int32_t level) -> float
 {
-    return flamethrowerRange + (level >= 3 ? 40.0F : 0.0F);
+    return flamethrowerRange + (level >= 2 ? flamethrowerLevel2RangeBonus : 0.0F);
 }
 
 auto flamethrowerHalfAngleRad() -> float { return flamethrowerHalfAngle; }
 
+// Level 1-2: forward cone only (level 2 just reaches further, via
+// flamethrowerRangeFor). Level 3: keeps the forward cone and adds two side
+// streams.
 auto flamethrowerConeDirs(const Game& game, int32_t level) -> std::vector<Vector2>
 {
     const Vector2 aim = aimAtMouse(game);
-    std::vector<Vector2> coneDirs;
-    if (level >= 2)
+    std::vector<Vector2> coneDirs{aim};
+    if (level >= 3)
     {
         const float aimAngle = std::atan2(aim.y, aim.x);
         coneDirs.push_back(Vector2{.x = std::cos(aimAngle + flamethrowerOffAngle),
@@ -4314,11 +4413,14 @@ auto flamethrowerConeDirs(const Game& game, int32_t level) -> std::vector<Vector
         coneDirs.push_back(Vector2{.x = std::cos(aimAngle - flamethrowerOffAngle),
                                    .y = std::sin(aimAngle - flamethrowerOffAngle)});
     }
-    else
-    {
-        coneDirs.push_back(aim);
-    }
     return coneDirs;
+}
+
+// 1.0 at the nozzle, fading to flamethrowerFarDamageMult at the trail's tip.
+auto flamethrowerFalloff(float dist, float range) -> float
+{
+    const float t = std::clamp(dist / range, 0.0F, 1.0F);
+    return flamethrowerNearDamageMult + (flamethrowerFarDamageMult - flamethrowerNearDamageMult) * t;
 }
 
 auto flamethrowerActive(int32_t level) -> bool
@@ -4403,7 +4505,7 @@ void updateFlamethrower(Game& game, float deltaTime)
         {
             continue;
         }
-        const auto tick = static_cast<int32_t>(dps * deltaTime);
+        const auto tick = static_cast<int32_t>(dps * flamethrowerFalloff(dist, range) * deltaTime);
         if (tick <= 0)
         {
             continue;
@@ -4438,7 +4540,7 @@ void updateFlamethrower(Game& game, float deltaTime)
         {
             continue;
         }
-        const auto tick = static_cast<int32_t>(dps * deltaTime);
+        const auto tick = static_cast<int32_t>(dps * flamethrowerFalloff(dist, range) * deltaTime);
         if (tick <= 0)
         {
             continue;
@@ -4667,12 +4769,22 @@ void updateProjectiles(Game& game, float deltaTime)
                         projectile.huntingNewTarget = false;
                     }
                 }
-                else if (const auto target = nearestEnemy(game, projectile.position);
-                         target.has_value())
+                else
                 {
-                    const Vector2 direction =
-                        Vector2Normalize(Vector2Subtract(*target, projectile.position));
-                    projectile.velocity = Vector2Scale(direction, homingProjSpeed * 1.5F);
+                    // After a ricochet, don't steer back into the enemy just bounced off.
+                    const auto lastHit = std::ranges::find_if(
+                        game.run.enemies, [&](const Enemy& e)
+                        { return e.active && e.id == projectile.ricochetLastHit; });
+                    const auto target =
+                        (projectile.ricochetLastHit != 0 && lastHit != game.run.enemies.end())
+                            ? nearestEnemyExcluding(game, projectile.position, lastHit->position)
+                            : nearestEnemy(game, projectile.position);
+                    if (target.has_value())
+                    {
+                        const Vector2 direction =
+                            Vector2Normalize(Vector2Subtract(*target, projectile.position));
+                        projectile.velocity = Vector2Scale(direction, homingProjSpeed * 1.5F);
+                    }
                 }
             }
             else
@@ -4729,6 +4841,7 @@ void updateProjectiles(Game& game, float deltaTime)
         {
             auto& enemy = game.run.enemies.at(j);
             if (!projectile.active || !enemy.active || enemy.phased ||
+                (projectile.ricochetLastHit != 0 && enemy.id == projectile.ricochetLastHit) ||
                 !CheckCollisionCircles(projectile.position, projectile.radius, enemy.position,
                                        enemyCollisionRadius(enemy)))
             {
@@ -4739,7 +4852,9 @@ void updateProjectiles(Game& game, float deltaTime)
             {
                 damageEnemy(game, j, projectile.damage);
                 recordDamage(game, DamageSource::Homing, projectile.damage);
-                if (!enemy.active)
+                // damageEnemy can spawn enemies (Hive Node), invalidating `enemy`.
+                const Enemy& hit = game.run.enemies.at(j);
+                if (!hit.active)
                 {
                     recordWeaponKill(game, WeaponType::Homing);
                 }
@@ -4747,7 +4862,7 @@ void updateProjectiles(Game& game, float deltaTime)
                 {
 
                     if (const auto next =
-                            nearestEnemyExcluding(game, projectile.position, enemy.position);
+                            nearestEnemyExcluding(game, projectile.position, hit.position);
                         next.has_value())
                     {
                         projectile.velocity = Vector2Scale(
@@ -4755,10 +4870,14 @@ void updateProjectiles(Game& game, float deltaTime)
                             homingProjSpeed * 1.5F);
                         projectile.ricochetRemaining--;
                     }
-                    else
-                    {
-                        projectile.active = false;
-                    }
+                    // No bounce target: keep flying, past the enemy just hit.
+                    projectile.ricochetLastHit = hit.id;
+                }
+                else if (projectile.ricochetLastHit != 0)
+                {
+                    // Bounces spent: stop homing and fly straight on through until despawn.
+                    projectile.ricochetLastHit = hit.id;
+                    projectile.homing = false;
                 }
                 else
                 {

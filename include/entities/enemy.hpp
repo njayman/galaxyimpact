@@ -95,6 +95,9 @@ class Enemy
     float organicRadiusMult = 1.0F;
 
     float fadeAlpha = 1.0F;
+
+    // Stable per-run identity (0 = none); vector indices shift on compaction.
+    uint32_t id = 0;
 };
 
 enum class EliteHazardRole : std::uint8_t

@@ -126,6 +126,7 @@ enum class WeaponType : std::uint8_t
     TurretDeploy,
     Flamethrower,
     Sniper,
+    LaserShots,
 
     Count
 };
@@ -168,6 +169,7 @@ enum class SkillType : std::uint8_t
     TurretDeploy,
     Flamethrower,
     Sniper,
+    LaserShots,
     Damage,
     Barrier,
     Cooldown,
@@ -226,6 +228,9 @@ constexpr std::array<Skill, static_cast<size_t>(SkillType::Count)> Skills{
     Skill{.name = "Sniper",
           .description = "Auto-fires a piercing bolt at the farthest enemy.",
           .maxLevel = 3},
+    Skill{.name = "Laser Shots",
+          .description = "Rapid thin laser bolts toward your cursor. Phase through enemies.",
+          .maxLevel = 8},
     Skill{.name = "Warhead Tuning", .description = "+15% damage on all weapons.", .maxLevel = 5},
     Skill{.name = "Barrier Mastery",
           .description = "+shield duration, faster charge regen.",
@@ -241,18 +246,26 @@ constexpr std::array<SkillType, static_cast<size_t>(WeaponType::Count)> weaponGr
     SkillType::MineLayers,   SkillType::BeamSweep,     SkillType::ShockWave,
     SkillType::Ricochet,     SkillType::FollowerDrone, SkillType::LaserDrone,
     SkillType::FlakCannon,   SkillType::Railgun,       SkillType::ChainLightning,
-    SkillType::TurretDeploy, SkillType::Flamethrower,  SkillType::Sniper};
+    SkillType::TurretDeploy, SkillType::Flamethrower,  SkillType::Sniper,
+    SkillType::LaserShots};
 
 constexpr std::array<SkillType, static_cast<size_t>(WeaponType::Count)> skillLinkedPassive{
     SkillType::Damage,    SkillType::Barrier, SkillType::Cooldown, SkillType::PickupRadius,
     SkillType::MoveSpeed, SkillType::MaxHp,   SkillType::Damage,   SkillType::Damage,
     SkillType::Damage,    SkillType::Damage,  SkillType::Damage,   SkillType::Damage,
-    SkillType::Damage,    SkillType::Damage,  SkillType::Damage};
+    SkillType::Damage,    SkillType::Damage,  SkillType::Damage,   SkillType::MoveSpeed};
 
 constexpr std::array<std::string_view, static_cast<size_t>(WeaponType::Count)> evolvedWeaponName{
-    "Photon Cannon", "Aegis Ring",      "Seeker Swarm",   "Cluster Charges", "Lance Sweep",
+    "Photon Cannon", "Aegis Ring",      "Seeker Swarm",   "Cluster Charges", "Beam Sweep",
     "Bulwark Pulse", "Ricochet",        "Follower Drone", "Laser Drone",     "Flak Cannon",
-    "Railgun",       "Chain Lightning", "Turret Deploy",  "Flamethrower",    "Sniper"};
+    "Railgun",       "Chain Lightning", "Turret Deploy",  "Flamethrower",    "Sniper",
+    "Heavy Lance"};
+
+// Which weapons have an evolution at all. Beam lost its (Lance Sweep) when Laser Shots replaced it
+// as the Interceptor's default; the amplifier weapons never had one.
+constexpr std::array<bool, static_cast<size_t>(WeaponType::Count)> weaponEvolves{
+    true,  true,  true,  true,  false, true,  false, false,
+    false, false, false, false, false, false, false, true};
 
 enum class ChoiceType : std::uint8_t
 {
@@ -290,6 +303,7 @@ enum class DamageSource : std::uint8_t
     TurretDeploy,
     Flamethrower,
     Sniper,
+    LaserShots,
 
     Count
 };
@@ -297,7 +311,7 @@ enum class DamageSource : std::uint8_t
 constexpr std::array<std::string_view, static_cast<size_t>(DamageSource::Count)> damageSourceNames{
     "Forward", "Orbit",           "Homing",        "Mine",           "Beam",        "Shock",
     "Dash",    "Nerve",           "Elemental",     "Follower Drone", "Laser Drone", "Flak Cannon",
-    "Railgun", "Chain Lightning", "Turret Deploy", "Flamethrower",   "Sniper"};
+    "Railgun", "Chain Lightning", "Turret Deploy", "Flamethrower",   "Sniper",      "Laser Shots"};
 
 struct DamageMeter
 {

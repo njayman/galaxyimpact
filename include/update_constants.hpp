@@ -104,9 +104,12 @@ constexpr float nerveKillGain = 6;
 constexpr float chargeFeedDelay = 0.6F;
 constexpr float chargeFeedDrainRate = 12.0F;
 constexpr float chargeFeedRegenMult = 3.0F;
-constexpr float nerveBurstLength = 900.0F;
 constexpr int32_t nerveBurstDamage = 260;
-constexpr float nerveConeHalfAngleDeg = 32.0F;
+// Laser Storm (Interceptor's Nerve burst): a dense fan of streaks. Each streak deals
+// nerveBurstDamage / divisor to enemies; a few overlap any one target, roughly one burst's worth.
+constexpr int32_t nerveStormStreaks = 32;
+constexpr float nerveStormSpreadDeg = 30.0F;
+constexpr int32_t nerveStormDamageDivisor = 3;
 constexpr float maxHealthPerLevel = 0.4F;
 constexpr float pickupRadiusPerLevel = 1.5F;
 constexpr float postCapDamageBonusPerLevel = 0.05F;
@@ -311,7 +314,7 @@ constexpr float gravityWellDuration = 2.0F;
 constexpr float gravityWellFanSpinMult = 7.0F;
 
 constexpr std::array<float, static_cast<size_t>(WeaponType::Count)> weaponBaseCooldown{
-    0.38F, 0.85F, 1.0F, 0.7F, 0.6F, 1.5F, 0.0F, 0.0F, 0.0F, 0.9F, 1.8F, 1.0F, 6.0F, 0.0F, 2.0F};
+    0.38F, 0.85F, 1.0F, 0.7F, 0.6F, 1.5F, 0.0F, 0.0F, 0.0F, 0.9F, 1.8F, 1.0F, 6.0F, 0.0F, 2.0F, 0.2F};
 
 constexpr float droneMeleeRange = 60.0F;
 constexpr float droneAttackIntervalBase = 0.6F;
@@ -326,15 +329,32 @@ constexpr float turretLife = 8.0F;
 
 constexpr float turretFireInterval = 0.7F;
 constexpr float flakSplashRadius = 40.0F;
-// Matches the laser (Beam weapon)'s level-1 length: 150 + 1 * 20, at the
-// neutral (non-Interceptor) ship multiplier.
-constexpr float flamethrowerRange = 170.0F;
+constexpr float flamethrowerRange = 340.0F;
+constexpr float flamethrowerLevel2RangeBonus = 120.0F; // level 2+: reaches further
 constexpr float flamethrowerHalfAngle = 20.0F * DEG2RAD;
 constexpr float flamethrowerOffAngle = 45.0F * DEG2RAD;
+// Damage falls off along the trail - hottest right at the nozzle, weakest at
+// the tip - instead of a flat DPS regardless of distance.
+constexpr float flamethrowerNearDamageMult = 1.4F;
+constexpr float flamethrowerFarDamageMult = 0.6F;
 constexpr float chainLightningRange = 260.0F;
 constexpr float chainLightningBoltLife = 0.2F;
 
 constexpr float forwardDamageMult = 0.5F;
+// Laser Shots: each shot is a barrage of thin comet streaks that phase through enemies (each
+// enemy hit once). Evolved (Heavy Lance): a wide U-shaped arc that widens as it flies.
+// ponytail: tuned by hand near Forward's single-target dps; re-run tools/balance_sim.
+constexpr float laserShotDamageMult = 0.12F;  // per streak; a barrage is 3 + level/4 streaks
+constexpr float laserShotSpeedMult = 1.8F;
+constexpr float laserShotStreak = 62.0F;      // streak length, also the hit segment
+constexpr float laserShotHalfWidth = 1.5F;
+constexpr float laserShotSpreadDeg = 7.0F;      // each streak's random angle off the aim, +-
+constexpr float laserShotFieldHalfWidth = 18.0F; // random side offset at the nose, +-
+constexpr float heavyLanceSpeedMult = 2.8F;   // evolved: faster than base
+constexpr float heavyLanceSpacing = 2.0F;     // evolved fires this many times slower, x dmg/bolt
+constexpr float heavyLanceRadius = 50.0F;     // arc radius at launch, doubles by 480 units out
+constexpr float heavyLanceHalfWidth = 5.0F;
+constexpr float heavyLanceMaxSkew = 32.0F;    // degrees an arc can lean left/right, random per arc
 constexpr float mineDamageMult = 0.7F;
 constexpr float shockDamageMult = 1.5F;
 constexpr float shockKnockbackBase = 20.0F;

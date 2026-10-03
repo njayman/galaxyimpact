@@ -76,8 +76,8 @@ void drawGameOver(const Game& game);
 void drawEnding(const Game& game);
 void drawOverlay(const Game& game);
 void drawSettings(const Game& game);
-void drawSkillIcon(SkillType id, Vector2 c, float s, Color color);
-void drawWeaponIcon(WeaponType kind, Vector2 c, float s, Color color);
+void drawSkillIcon(SkillType id, Vector2 c, float s, Color color, bool evolved = false);
+void drawWeaponIcon(WeaponType kind, Vector2 c, float s, Color color, bool evolved = false);
 void drawPassiveIcon(SkillType id, Vector2 c, float s, Color color);
 auto evolutionHint(const Game& game, SkillType id) -> std::string;
 void drawAbilitySlots(const Game& game, int32_t x, int32_t y);
@@ -90,7 +90,6 @@ void drawPunctumLightning(const Game& game);
 void drawShipHull(ShipClass shipClass, Vector2 p, float r, float angle, Color shipColor);
 void drawShip(const Game& game);
 void drawEngineFlame(Vector2 p, float r, float angle);
-void drawNerveBurstFlash(const Game& game);
 void drawEnemy(const Game& game, const Enemy& enemy, bool buffed);
 void drawEliteHazard(const EliteHazard& hazard);
 void drawBoss(const Game& game, const Boss& boss);
@@ -138,15 +137,94 @@ auto hashNoise(float seed) -> float;
 void drawSandboxToggleIndicator(const Game& game);
 void drawSandboxMenu(const Game& game);
 void drawSandboxBrowser(const Game& game);
+void drawLaserBolt(const Bullet& b);
 void drawPickupIcon(PickupType type, ElementType element, Vector2 position, float alpha);
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius);
 
+// Straight bolt: a comet streak, faint thin tail to a bright head. Arc: a few thin strands along
+// the U, brightest and thickest at the front, thinning and fading toward the trailing ends.
+void drawLaserBolt(const Bullet& b)
+{
+    const LaserShape shape = laserShape(b);
+    if (shape.count == 2)
+    {
+        constexpr int steps = 5;
+        for (int i = 0; i < steps; i++)
+        {
+            const float t0 = static_cast<float>(i) / steps;
+            const float t1 = static_cast<float>(i + 1) / steps;
+            DrawLineEx(Vector2Lerp(shape.points[0], shape.points[1], t0),
+                       Vector2Lerp(shape.points[0], shape.points[1], t1),
+                       b.halfWidth * 2.0F * (0.3F + 0.7F * t1), Fade(b.color, 0.08F + 0.92F * t1 * t1));
+        }
+        DrawCircleV(shape.points[1], b.halfWidth * 1.1F, Fade(WHITE, 0.9F));
+        return;
+    }
+
+    const int mid = shape.count / 2;
+    std::array<Vector2, LaserShape::arcPoints> normals{};
+    for (int i = 0; i < shape.count; i++)
+    {
+        const Vector2 d = Vector2Subtract(shape.points.at(static_cast<size_t>(std::min(i + 1, shape.count - 1))),
+                                          shape.points.at(static_cast<size_t>(std::max(i - 1, 0))));
+        normals.at(static_cast<size_t>(i)) = Vector2Normalize(Vector2{.x = -d.y, .y = d.x});
+    }
+    struct Strand
+    {
+        float offset; // in half-widths, across the arc
+        float width;  // x half-width at the front
+        float alpha;
+    };
+    // A white-hot core over the bolt's tint, so it glows instead of reading as a dull band.
+    const Color core = ColorLerp(b.color, WHITE, 0.5F);
+    for (const Strand strand : {Strand{.offset = 0, .width = 4.5F, .alpha = 0.16F},
+                                Strand{.offset = -1.9F, .width = 0.7F, .alpha = 0.8F},
+                                Strand{.offset = 1.9F, .width = 0.7F, .alpha = 0.8F},
+                                Strand{.offset = 0, .width = 1.8F, .alpha = 1.0F}})
+    {
+        const Color tint = strand.width < 1.0F || strand.alpha >= 1.0F ? core : b.color;
+        // Joined quads (shared edges, no overlap), so translucent strands don't band at joints.
+        const auto edge = [&](int k, float sign)
+        {
+            const auto idx = static_cast<size_t>(k);
+            const float u = static_cast<float>(std::abs(k - mid)) / static_cast<float>(mid);
+            const float half = std::max(0.3F, b.halfWidth * strand.width * 0.5F * (1.0F - 0.85F * u));
+            return Vector2Add(shape.points.at(idx),
+                              Vector2Scale(normals.at(idx), strand.offset * b.halfWidth + sign * half));
+        };
+        for (int i = 0; i + 1 < shape.count; i++)
+        {
+            const float u = static_cast<float>(std::abs(i - mid) + std::abs(i + 1 - mid)) /
+                            (2.0F * static_cast<float>(mid)); // 0 at the front, 1 at the ends
+            const Color color = Fade(tint, strand.alpha * (1.0F - 0.8F * u));
+            Vector2 a = edge(i, 1);
+            Vector2 c = edge(i + 1, -1);
+            Vector2 q1 = edge(i + 1, 1);
+            Vector2 q2 = edge(i, -1);
+            // raylib culls clockwise triangles; flip both when this quad winds the other way
+            if ((q1.x - a.x) * (c.y - a.y) - (q1.y - a.y) * (c.x - a.x) > 0)
+            {
+                std::swap(q1, q2);
+            }
+            DrawTriangle(a, q1, c, color);
+            DrawTriangle(a, c, q2, color);
+        }
+    }
+}
+
 void beginPixelZoom(const Game& game)
 {
-    BeginMode2D(Camera2D{.offset = Vector2{},
+    // Stars are tiled centered on world-space origin (see drawBackgroundStars /
+    // tiledWorldPos), so the camera needs the same origin-at-screen-center offset
+    // beginWorldCamera uses - a zero offset put the whole starfield in the
+    // top-left, empty everywhere else, since half the tiled range is negative.
+    const float zoom = game.resources.renderScale;
+    const Vector2 center{.x = static_cast<float>(game.resources.screenWidth) / 2,
+                         .y = static_cast<float>(game.resources.screenHeight) / 2};
+    BeginMode2D(Camera2D{.offset = Vector2Scale(center, zoom),
                          .target = Vector2{},
                          .rotation = 0,
-                         .zoom = game.resources.renderScale});
+                         .zoom = zoom});
 }
 
 void beginWorldCamera(const Game& game)
@@ -261,56 +339,67 @@ void windowText(const Game& game, const char* text, int32_t centerX, int32_t y, 
 void drawTitle(const Game& game)
 {
     applyGuiScale(game);
-    windowText(game, "GALAXY IMPACT", game.resources.windowWidth / 2, 80, 50, Palette::Accent);
+    const TitleLayout layout = titleLayout();
+    windowText(game, "GALAXY IMPACT", game.resources.windowWidth / 2, layout.titleY, 100,
+              Palette::Accent);
 
-    drawMenu(game, "", {"Start", "Achievements", "Bestiary", "Settings", "Exit"},
-             MenuLayout::titleMenuY);
-    drawHighScores(game,
-                   game.resources.windowWidth / 2 - static_cast<int32_t>(80 * guiUiScale(game)),
-                   static_cast<int32_t>(280 * guiUiScale(game)), game.resources.highScores);
+    drawMenu(game, "", {"Start", "Achievements", "Bestiary", "Settings", "Exit"}, layout.menuY);
+    drawHighScores(game, game.resources.windowWidth / 2, layout.highScoreY,
+                   game.resources.highScores);
 }
 
 void drawShipSelect(const Game& game)
 {
     applyGuiScale(game);
-    windowText(game, "SELECT SHIP", game.resources.windowWidth / 2, 80, 40, Palette::Accent);
-
+    const auto shipClass = static_cast<ShipClass>(game.menuIndex);
     const ShipDef& highlighted = ships.at(static_cast<size_t>(game.menuIndex));
 
-    const float scale = guiUiScale(game);
-    const Vector2 previewPos{.x = static_cast<float>(game.resources.windowWidth) / 2,
-                             .y = 260 * scale};
-    const float previewRadius = 70 * scale;
+    const ShipSelectLayout layout = shipSelectLayout(game);
+    windowText(game, std::string(highlighted.name).c_str(), game.resources.windowWidth / 2,
+              layout.nameY, 40, Palette::Accent);
     const Vector2 dir = aimAtMouse(game);
     const float previewAngle = std::atan2(dir.y, dir.x) + std::numbers::pi_v<float> / 2;
-    const auto shipClass = static_cast<ShipClass>(game.menuIndex);
     if (shipClass != ShipClass::Bastion && shipClass != ShipClass::Interceptor &&
         shipClass != ShipClass::Ranger)
     {
-        drawEngineFlame(previewPos, previewRadius, previewAngle);
+        drawEngineFlame(layout.previewPos, layout.previewRadius, previewAngle);
     }
-    drawShipHull(shipClass, previewPos, previewRadius, previewAngle, highlighted.color);
+    drawShipHull(shipClass, layout.previewPos, layout.previewRadius, previewAngle,
+                highlighted.color);
 
-    std::vector<std::string> names;
-    names.reserve(ships.size());
-    for (const auto& ship : ships)
+    const Vector2 mouse = GetMousePosition();
+    const auto drawChevron = [&](Vector2 center, bool left, Rectangle tapZone)
     {
-        names.emplace_back(ship.name);
-    }
-    drawMenu(game, "", names, MenuLayout::titleMenuY);
+        const bool hovered = hoverActive(game) && CheckCollisionPointRec(mouse, tapZone);
+        const Color color = hovered ? Palette::Accent : Palette::StructLight;
+        const float size = layout.arrowHitRadius * 0.5F;
+        const float sign = left ? -1.0F : 1.0F;
+        const Vector2 tip{.x = center.x + sign * size, .y = center.y};
+        const Vector2 top{.x = center.x - sign * size, .y = center.y - size};
+        const Vector2 bottom{.x = center.x - sign * size, .y = center.y + size};
+        const float thickness = 4.0F * guiUiScale(game);
+        DrawLineEx(top, tip, thickness, color);
+        DrawLineEx(tip, bottom, thickness, color);
+    };
+    drawChevron(layout.leftArrow, true, layout.leftTapZone);
+    drawChevron(layout.rightArrow, false, layout.rightTapZone);
 
-    const int32_t descY =
-        MenuLayout::titleMenuY +
-        (MenuLayout::buttonHeight + MenuLayout::buttonGap) * static_cast<int32_t>(ships.size()) +
-        30;
     windowText(game, std::string(highlighted.description).c_str(), game.resources.windowWidth / 2,
-               descY, 18, Palette::StructLight);
+              layout.descY, 18, Palette::StructLight);
 
     const std::string stats = std::format(
         "HP {:.0f}   Armor {:.0f}   Dmg {:+.0f}%   Shields {}", highlighted.maxHealth,
         highlighted.armor, (highlighted.damageMult - 1.0F) * 100.0F, highlighted.maxShieldStacks);
-    windowText(game, stats.c_str(), game.resources.windowWidth / 2, descY + 30, 18,
-               Palette::StructMid);
+    windowText(game, stats.c_str(), game.resources.windowWidth / 2, layout.statsY, 18,
+              Palette::StructMid);
+
+    const bool selectHovered = CheckCollisionPointRec(mouse, layout.selectRect);
+    if (selectHovered)
+    {
+        GuiSetState(STATE_FOCUSED);
+    }
+    GuiButton(layout.selectRect, "Select");
+    GuiSetState(STATE_NORMAL);
 }
 
 void drawGameOver(const Game& game)
@@ -324,9 +413,7 @@ void drawGameOver(const Game& game)
     windowText(game, statsText.c_str(), game.resources.windowWidth / 2, 120, 20,
                Palette::StructLight);
 
-    drawHighScores(game,
-                   game.resources.windowWidth / 2 - static_cast<int32_t>(80 * guiUiScale(game)),
-                   static_cast<int32_t>(160 * guiUiScale(game)), game.resources.highScores);
+    drawHighScores(game, game.resources.windowWidth / 2, 160, game.resources.highScores);
     drawMenu(game, "", {"New Game", "Exit"}, MenuLayout::gameOverMenuY);
 }
 
@@ -504,6 +591,8 @@ auto weaponUnlockHint(const Game& game, WeaponType weapon) -> UnlockHint
     case WeaponType::Orbit:
         return {"Bastion's default weapon", ""};
     case WeaponType::Beam:
+        return {"Max the Laser Shots skill", skillProgress(SkillType::LaserShots)};
+    case WeaponType::LaserShots:
         return {"Interceptor's default weapon", ""};
     case WeaponType::Homing:
         return {"Reach wave 3", std::format("Best: wave {}", ach.highestWaveReached)};
@@ -539,27 +628,49 @@ auto weaponUnlockHint(const Game& game, WeaponType weapon) -> UnlockHint
     return {"", ""};
 }
 
-void drawAchievements(const Game& game)
+void drawAchievements(Game& game)
 {
     applyGuiScale(game);
     const auto& ach = game.resources.achievements;
     const float scale = guiUiScale(game);
-    windowText(game, "ACHIEVEMENTS", game.resources.windowWidth / 2, 60, 34, Palette::Accent);
-
-    const std::string summary =
-        std::format("Weapon Slots: {} / 6   Highest Wave: {}   Infinite Mode: {}", ach.slotCap,
-                    ach.highestWaveReached, ach.infiniteModeUnlocked ? "Unlocked" : "Locked");
-    windowText(game, summary.c_str(), game.resources.windowWidth / 2, 110, 18,
-               Palette::StructLight);
 
     constexpr int32_t rowsPerColumn = 7;
     constexpr int32_t rowHeight = 46;
     constexpr int32_t columnWidth = 520;
     constexpr int32_t iconBoxSize = 30;
-    constexpr size_t evolvableWeaponCount = 6;
+
+    // Whole screen (title through hint) is one invisible container, centered
+    // in the space above the Back button - and, if it's ever taller than
+    // that space, scrollable instead of overflowing.
+    constexpr float titleYRel = 20.0F;
+    constexpr float summaryYRel = titleYRel + 50.0F;
+    constexpr float gridTopYRel = summaryYRel + 60.0F;
+    constexpr float gridHeight = static_cast<float>(rowsPerColumn * rowHeight);
+    constexpr float hintYRel = gridTopYRel + gridHeight + 30.0F;
+    constexpr float contentHeightBase = hintYRel + 40.0F;
+
+    const float viewportHeight = static_cast<float>(game.resources.windowHeight) - 150.0F * scale;
+    const float contentHeight = contentHeightBase * scale;
+    game.achievementsScroll.maxOffset = std::max(0.0F, contentHeight - viewportHeight);
+    const float blockTop = std::max(0.0F, (viewportHeight - contentHeight) / 2) -
+                           game.achievementsScroll.offset;
+
+    BeginScissorMode(0, 0, game.resources.windowWidth,
+                     static_cast<int32_t>(viewportHeight));
+
+    windowText(game, "ACHIEVEMENTS", game.resources.windowWidth / 2,
+              static_cast<int32_t>((blockTop + titleYRel * scale) / scale), 34, Palette::Accent);
+
+    const std::string summary =
+        std::format("Weapon Slots: {} / 6   Highest Wave: {}   Infinite Mode: {}", ach.slotCap,
+                    ach.highestWaveReached, ach.infiniteModeUnlocked ? "Unlocked" : "Locked");
+    windowText(game, summary.c_str(), game.resources.windowWidth / 2,
+              static_cast<int32_t>((blockTop + summaryYRel * scale) / scale), 18,
+              Palette::StructLight);
+
     const int32_t leftX = game.resources.windowWidth / 2 -
                           static_cast<int32_t>(static_cast<float>(columnWidth) * scale);
-    const int32_t topY = 170;
+    const float topY = blockTop + gridTopYRel * scale;
 
     const Vector2 mouse = GetMousePosition();
     std::optional<WeaponType> hovered;
@@ -598,7 +709,7 @@ void drawAchievements(const Game& game)
         std::string line = std::string(weaponDisplayName(weapon)) + ": " +
                            (unlocked ? "Unlocked" : "Locked") +
                            std::format(" ({} kills)", ach.killsByWeapon.at(i));
-        if (i < evolvableWeaponCount)
+        if (weaponEvolves.at(i))
         {
             line += ach.evolutionUnlocked.at(i) ? "  [Evo unlocked]" : "  [Evo locked]";
         }
@@ -625,7 +736,7 @@ void drawAchievements(const Game& game)
                 lines.push_back(hint.progress);
             }
         }
-        if (idx < evolvableWeaponCount)
+        if (weaponEvolves.at(idx))
         {
             lines.push_back(ach.evolutionUnlocked.at(idx)
                                 ? "Evolution: unlocked"
@@ -661,13 +772,45 @@ void drawAchievements(const Game& game)
     }
 
     windowText(game,
-               touchInputActive(game)
-                   ? "Tap & hold a weapon for unlock details   |   Tap: back"
-                   : "Hover a weapon for unlock details   |   Click / Enter / Esc: back",
-               game.resources.windowWidth / 2,
-               topY + static_cast<int32_t>(static_cast<float>(rowsPerColumn * rowHeight) * scale) +
-                   30,
+               touchInputActive(game) ? "Tap & hold a weapon for unlock details"
+                                      : "Hover a weapon for unlock details",
+               game.resources.windowWidth / 2, static_cast<int32_t>((blockTop + hintYRel * scale) / scale),
                16, Palette::StructMid);
+
+    EndScissorMode();
+
+    const Rectangle back = backButtonRect(game);
+    if (hoverActive(game) && CheckCollisionPointRec(mouse, back))
+    {
+        GuiSetState(STATE_FOCUSED);
+    }
+    GuiButton(back, "Back");
+    GuiSetState(STATE_NORMAL);
+}
+
+// Predicts one Bestiary section's drawn height without drawing it, so
+// updateBestiary can size its scroll range before drawBestiary runs. Keep
+// this in sync with drawBestiarySection's own cellSize/gap/labelGap/columns
+// math below.
+auto bestiarySectionHeight(const Game& game, float scale, size_t count) -> float
+{
+    constexpr float cellSize = 52.0F;
+    constexpr float gap = 14.0F;
+    constexpr float labelGap = 20.0F;
+    const float cellStep = (cellSize + gap) * scale;
+    const float rowHeight = (cellSize + labelGap + gap) * scale;
+    const float usableWidth = static_cast<float>(game.resources.windowWidth) * 0.88F;
+    const auto columns = std::max(1, static_cast<int32_t>(usableWidth / cellStep));
+    const auto rows = (static_cast<int32_t>(count) + columns - 1) / columns;
+    return 34.0F * scale + static_cast<float>(rows) * rowHeight + 16.0F * scale;
+}
+
+auto bestiaryContentHeight(const Game& game, float scale) -> float
+{
+    constexpr float headerHeight = 140.0F; // "BESTIARY" title + summary line, unscaled
+    return headerHeight * scale + bestiarySectionHeight(game, scale, enemyKinds.size()) +
+          bestiarySectionHeight(game, scale, bestiaryBossKindCount) +
+          bestiarySectionHeight(game, scale, bestiaryHazardKindCount);
 }
 
 namespace
@@ -756,13 +899,25 @@ auto drawBestiarySection(const Game& game, std::string_view title, float y, floa
 }
 }
 
-void drawBestiary(const Game& game)
+void drawBestiary(Game& game)
 {
     applyGuiScale(game);
     const auto& bestiary = game.resources.bestiary;
     const float scale = guiUiScale(game);
 
-    windowText(game, "BESTIARY", game.resources.windowWidth / 2, 60, 34, Palette::Accent);
+    // Whole screen (title through footer) is one invisible container,
+    // centered in the space above the Back button - and, since the section
+    // grids' height depends on window width, scrollable if it doesn't fit.
+    const float viewportHeight = static_cast<float>(game.resources.windowHeight) - 150.0F * scale;
+    const float contentHeight = bestiaryContentHeight(game, scale);
+    game.bestiaryScroll.maxOffset = std::max(0.0F, contentHeight - viewportHeight);
+    const float blockTop =
+        std::max(0.0F, (viewportHeight - contentHeight) / 2) - game.bestiaryScroll.offset;
+
+    BeginScissorMode(0, 0, game.resources.windowWidth, static_cast<int32_t>(viewportHeight));
+
+    windowText(game, "BESTIARY", game.resources.windowWidth / 2,
+              static_cast<int32_t>((blockTop + 60.0F * scale) / scale), 34, Palette::Accent);
 
     const auto enemyCount =
         std::count(bestiary.enemyKilled.begin(), bestiary.enemyKilled.end(), true);
@@ -772,10 +927,10 @@ void drawBestiary(const Game& game)
     const std::string summary = std::format(
         "Enemies: {} of {}   Bosses: {} of {}   Hazards: {} of {}", enemyCount, enemyKinds.size(),
         bossCount, bestiaryBossKindCount, hazardCount, bestiaryHazardKindCount);
-    windowText(game, summary.c_str(), game.resources.windowWidth / 2, 100, 18,
-               Palette::StructLight);
+    windowText(game, summary.c_str(), game.resources.windowWidth / 2,
+              static_cast<int32_t>((blockTop + 100.0F * scale) / scale), 18, Palette::StructLight);
 
-    float y = 140 * scale;
+    float y = blockTop + 140.0F * scale;
     y = drawBestiarySection(
         game, "ENEMIES", y, scale, enemyKinds.size(),
         [&](size_t i) { return bestiary.enemyKilled.at(i); }, [](size_t i) -> std::string_view
@@ -811,25 +966,35 @@ void drawBestiary(const Game& game)
         });
 
     const auto footerSize = static_cast<int32_t>(16 * scale);
-    const char* footerText = touchInputActive(game)
-                                 ? "Tap & hold an entry for its name   |   Tap: back"
-                                 : "Click, Enter, or Esc: back";
+    const char* footerText =
+        touchInputActive(game) ? "Tap & hold an entry for its name" : "Hover an entry for its name";
     const int32_t footerWidth = measureText(game, footerText, footerSize);
     drawText(game, footerText, game.resources.windowWidth / 2 - footerWidth / 2,
              static_cast<int32_t>(y), footerSize, Palette::StructMid);
+
+    EndScissorMode();
+
+    const Vector2 mouse = GetMousePosition();
+    const Rectangle back = backButtonRect(game);
+    if (hoverActive(game) && CheckCollisionPointRec(mouse, back))
+    {
+        GuiSetState(STATE_FOCUSED);
+    }
+    GuiButton(back, "Back");
+    GuiSetState(STATE_NORMAL);
 }
 
-void drawSkillIcon(SkillType id, Vector2 c, float s, Color color)
+void drawSkillIcon(SkillType id, Vector2 c, float s, Color color, bool evolved)
 {
     if (const auto kind = weaponForGrantSkill(id); kind.has_value())
     {
-        drawWeaponIcon(*kind, c, s, color);
+        drawWeaponIcon(*kind, c, s, color, evolved);
         return;
     }
     drawPassiveIcon(id, c, s, color);
 }
 
-void drawWeaponIcon(WeaponType kind, Vector2 c, float s, Color color)
+void drawWeaponIcon(WeaponType kind, Vector2 c, float s, Color color, bool evolved)
 {
     switch (kind)
     {
@@ -895,6 +1060,34 @@ void drawWeaponIcon(WeaponType kind, Vector2 c, float s, Color color)
     case WeaponType::Flamethrower:
         DrawTriangle(Vector2{.x = c.x - s, .y = c.y}, Vector2{.x = c.x + s * 0.6F, .y = c.y + s},
                      Vector2{.x = c.x + s * 0.6F, .y = c.y - s}, color);
+        break;
+    case WeaponType::LaserShots:
+        if (evolved)
+        {
+            // Heavy Lance: a small pointed arch, like the bolt itself.
+            constexpr int points = 9;
+            Vector2 prev{};
+            for (int i = 0; i < points; i++)
+            {
+                const float rel = -1.0F + 2.0F * static_cast<float>(i) / (points - 1);
+                const float a = rel * 105.0F * DEG2RAD;
+                const float pull = 0.35F * (1.0F - std::abs(rel)) * (1.0F - std::abs(rel));
+                const Vector2 p{.x = c.x + std::sin(a) * s,
+                                .y = c.y + s * 0.35F - (std::cos(a) + pull) * s};
+                if (i > 0)
+                {
+                    DrawLineEx(prev, p, 2.0F, color);
+                }
+                prev = p;
+            }
+            break;
+        }
+        for (const float dy : {-0.5F, 0.0F, 0.5F})
+        {
+            DrawLineEx(Vector2{.x = c.x - s + (dy == 0 ? s * 0.4F : 0), .y = c.y + dy * s},
+                       Vector2{.x = c.x + s * (dy == 0 ? 1.0F : 0.6F), .y = c.y + dy * s}, 1.5F,
+                       color);
+        }
         break;
     case WeaponType::Sniper:
         DrawCircleLines(static_cast<int32_t>(c.x), static_cast<int32_t>(c.y), s, color);
@@ -1011,11 +1204,10 @@ auto pickupChoiceDescription(PickupType type, ElementType element, ElementMechan
 auto evolutionHint(const Game& game, SkillType id) -> std::string
 {
 
-    constexpr size_t evolvableWeaponCount = 6;
-    for (size_t i = 0; i < evolvableWeaponCount; i++)
+    for (size_t i = 0; i < weaponEvolves.size(); i++)
     {
         const auto kind = static_cast<WeaponType>(i);
-        if (skillLinkedPassive.at(i) == id && hasWeapon(game, kind))
+        if (weaponEvolves.at(i) && skillLinkedPassive.at(i) == id && hasWeapon(game, kind))
         {
             return std::string(evolvedWeaponName.at(i));
         }
@@ -1029,8 +1221,6 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
     constexpr float gap = 34;
     constexpr float iconScale = 0.32F;
 
-    constexpr size_t evolvableWeaponCount = 6;
-
     struct Slot
     {
         SkillType id;
@@ -1038,6 +1228,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
         int32_t level = 0;
         bool stolen = false;
         bool evolutionReady = false;
+        bool evolved = false;
     };
     std::vector<Slot> slots;
 
@@ -1045,7 +1236,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
     {
         const Color color = w.evolved ? Palette::Crit : Palette::Shield;
         const auto typeIndex = static_cast<size_t>(w.type);
-        const bool evolutionReady = typeIndex < evolvableWeaponCount && !w.evolved &&
+        const bool evolutionReady = weaponEvolves.at(typeIndex) && !w.evolved &&
                                     game.resources.achievements.evolutionUnlocked.at(typeIndex);
         const bool stolen =
             game.run.weaponDowngrade.has_value() && game.run.weaponDowngrade->type == w.type;
@@ -1053,7 +1244,8 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
                              .color = color,
                              .level = w.level,
                              .stolen = stolen,
-                             .evolutionReady = evolutionReady});
+                             .evolutionReady = evolutionReady,
+                             .evolved = w.evolved});
     }
 
     for (size_t i = 0; i < static_cast<size_t>(SkillType::Count); i++)
@@ -1087,7 +1279,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
         {
             const Slot& slot = slots.at(static_cast<size_t>(i));
             const Vector2 center{.x = bx + boxSize / 2, .y = by + boxSize / 2};
-            drawSkillIcon(slot.id, center, boxSize * iconScale, slot.color);
+            drawSkillIcon(slot.id, center, boxSize * iconScale, slot.color, slot.evolved);
 
             if (slot.level > 0)
             {
@@ -1187,6 +1379,7 @@ void drawLevelUp(const Game& game)
         std::string desc;
         SkillType icon{};
         bool hasIcon = false;
+        bool evolvedIcon = false;
 
         switch (choice.type)
         {
@@ -1194,6 +1387,9 @@ void drawLevelUp(const Game& game)
             name = std::format("EVOLVE: {}",
                                evolvedWeaponName.at(static_cast<size_t>(choice.weapon.value())));
             desc = "Fuses the weapon and its linked passive into a super weapon.";
+            icon = weaponGrantSkill.at(static_cast<size_t>(choice.weapon.value()));
+            hasIcon = true;
+            evolvedIcon = true;
             if (i == game.menuIndex)
             {
                 color = Palette::Crit;
@@ -1270,7 +1466,7 @@ void drawLevelUp(const Game& game)
                 icon,
                 Vector2{.x = static_cast<float>(nameX) - static_cast<float>(iconOffsetX) * scale,
                         .y = static_cast<float>(nameY) + static_cast<float>(nameSize) / 2},
-                iconRadius * scale, color);
+                iconRadius * scale, color, evolvedIcon);
         }
         drawText(game, name.c_str(), nameX, nameY, nameSize, color);
         windowText(game, desc.c_str(), static_cast<int32_t>(rect.x + rect.width / 2),
@@ -1303,21 +1499,24 @@ void drawMenu(const Game& game, const std::string& heading, const std::vector<st
     }
 }
 
-void drawHighScores(const Game& game, int32_t x, int32_t y, const std::vector<int32_t>& scores)
+// x/y are unscaled (like windowText) - scaling happens internally, so the
+// block's own height always stays proportional to the gap callers reserve
+// for it, at any guiUiScale.
+void drawHighScores(const Game& game, int32_t centerX, int32_t y, const std::vector<int32_t>& scores)
 {
-    drawText(game, "Top Scores", x, y, 26, Palette::AccentDim);
+    windowText(game, "Top Scores", centerX, y, 26, Palette::AccentDim);
 
     if (scores.empty())
     {
-        drawText(game, "(none yet)", x, y + 32, 24, Palette::StructMid);
+        windowText(game, "(none yet)", centerX, y + 36, 22, Palette::StructMid);
         return;
     }
 
     for (size_t i = 0; i < scores.size(); i++)
     {
         const std::string line = std::format("{}. {}", i + 1, scores.at(i));
-        drawText(game, line.c_str(), x, y + 32 + static_cast<int32_t>(i) * 30, 24,
-                 Palette::StructLight);
+        windowText(game, line.c_str(), centerX, y + 36 + static_cast<int32_t>(i) * 28, 22,
+                  Palette::StructLight);
     }
 }
 
@@ -1882,11 +2081,6 @@ void drawGameplayWorld(const Game& game)
         drawShip(game);
     }
 
-    if (game.run.nerveBurstFlashTimer > 0)
-    {
-        drawNerveBurstFlash(game);
-    }
-
     if (game.run.player.shieldActive)
     {
         const float shieldRadius = game.run.player.radius + 5;
@@ -1902,6 +2096,11 @@ void drawGameplayWorld(const Game& game)
 
     for (const auto& b : game.run.bullets)
     {
+        if (b.streak > 0)
+        {
+            drawLaserBolt(b);
+            continue;
+        }
         if (b.phasing)
         {
             DrawCircleV(b.position, b.radius * 1.6F, Fade(WHITE, 0.35F));
@@ -2095,41 +2294,6 @@ void drawShip(const Game& game)
                         r * (1.2F + flare * 0.6F), Fade(Palette::Charge, flare));
         DrawCircleV(p, r * 0.5F * flare, Fade(WHITE, flare));
     }
-}
-
-void drawNerveBurstFlash(const Game& game)
-{
-    const float flashFrac = game.run.nerveBurstFlashTimer / 0.15F;
-    const Vector2 start = game.run.player.position;
-    const Vector2 end = game.run.nerveBurstFlashEnd;
-    const Vector2 toEnd = Vector2Subtract(end, start);
-    const float range = Vector2Length(toEnd);
-    if (range < 0.01F)
-    {
-        return;
-    }
-    const Vector2 dir = Vector2Scale(toEnd, 1.0F / range);
-    const float halfAngle = nerveConeHalfAngleDeg * DEG2RAD;
-
-    const auto rotate = [&](float angle) -> Vector2
-    {
-        const float cosA = std::cos(angle);
-        const float sinA = std::sin(angle);
-        return Vector2Add(start, Vector2Scale(Vector2{.x = dir.x * cosA - dir.y * sinA,
-                                                      .y = dir.x * sinA + dir.y * cosA},
-                                              range));
-    };
-
-    constexpr int32_t segments = 12;
-    for (int32_t i = 0; i < segments; i++)
-    {
-        const float a0 = -halfAngle + 2 * halfAngle * static_cast<float>(i) / segments;
-        const float a1 = -halfAngle + 2 * halfAngle * static_cast<float>(i + 1) / segments;
-        DrawTriangle(start, rotate(a1), rotate(a0), Fade(Palette::Charge, flashFrac * 0.35F));
-    }
-    DrawLineEx(start, rotate(-halfAngle), 4 * flashFrac, Fade(WHITE, flashFrac));
-    DrawLineEx(start, rotate(halfAngle), 4 * flashFrac, Fade(WHITE, flashFrac));
-    DrawCircleV(start, 14 * flashFrac, Fade(WHITE, flashFrac * 0.8F));
 }
 
 void drawNerveBallProjectiles(const Game& game)
@@ -3884,8 +4048,8 @@ void drawHUD(const Game& game)
 
     const char* controlHint =
         touchInputActive(game)
-            ? "Move: Left Stick | Aim: Right Stick | Dash: Double-tap Left | Shield: Double-tap "
-              "Right | Burst: Nerve | Pause: Top Button"
+            ? "Move: Left Stick | Aim: Right Stick | Shield/Combo/Dash: Either Panel | "
+              "Burst: Nerve | Pause: Top Button"
             : "Move: WASD | Dash: L-Click | Shield: R-Click | Burst: Space | Pause: Esc | F11: "
               "Fullscreen";
     drawText(game, controlHint, 10, scaledScreenHeight - 28, 18, Palette::StructMid);
@@ -3908,36 +4072,84 @@ void drawTouchControls(const Game& game)
 
     const auto& touch = game.touch;
     const TouchLayout layout = touchControlLayout(game);
+    const auto fontSize = [&](float base) -> int32_t
+    { return static_cast<int32_t>(base * guiUiScale(game)); };
 
+    // Very faint - the stick's own track shouldn't compete visually with the
+    // gameplay behind it, only the knob (your thumb's actual position) needs
+    // to read clearly.
     const auto drawStick = [&](const TouchStick& stick, Vector2 anchor)
     {
         const Vector2 knob = Vector2Add(anchor, stick.offset);
         const bool active = stick.touchId != -1;
 
-        DrawCircleV(anchor, layout.stickRadius, Fade(Palette::StructMid, 0.25F));
-        DrawCircleLinesV(anchor, layout.stickRadius, Fade(Palette::StructLight, 0.5F));
+        DrawCircleV(anchor, layout.stickRadius, Fade(Palette::StructMid, 0.10F));
+        DrawCircleLinesV(anchor, layout.stickRadius, Fade(Palette::StructLight, 0.10F));
         DrawCircleV(knob, layout.stickRadius * 0.45F, Fade(Palette::Accent, active ? 0.55F : 0.3F));
     };
 
     drawStick(touch.moveStick, layout.moveStickAnchor);
     drawStick(touch.aimStick, layout.aimStickAnchor);
 
-    const auto drawButton = [&](const TouchButton& button, Vector2 center, float radius,
-                                const char* label, int32_t fontSize)
+    const auto drawCircleButton = [&](const TouchButton& button, Vector2 center, float radius,
+                                      const char* label)
     {
         DrawCircleV(
             center, radius,
             Fade(button.down ? Palette::Accent : Palette::StructMid, button.down ? 0.55F : 0.3F));
         DrawCircleLinesV(center, radius, Fade(Palette::StructLight, 0.6F));
-        const int32_t textWidth = measureText(game, label, fontSize);
+        const int32_t size = fontSize(18.0F);
+        const int32_t textWidth = measureText(game, label, size);
         drawText(game, label, static_cast<int32_t>(center.x) - textWidth / 2,
-                 static_cast<int32_t>(center.y) - fontSize / 2, fontSize,
+                 static_cast<int32_t>(center.y) - size / 2, size,
                  button.down ? Palette::Accent : Palette::StructLight);
     };
 
-    drawButton(touch.nerve, layout.nerveCenter, layout.nerveRadius, "NERVE", 18);
-    drawButton(touch.dash, layout.dashCenter, layout.actionButtonRadius, "DASH", 10);
-    drawButton(touch.shield, layout.shieldCenter, layout.actionButtonRadius, "SHIELD", 10);
+    drawCircleButton(touch.nerve, layout.nerveCenter, layout.nerveRadius, "NERVE");
+
+    // Dash/shield/combo: three separate chamfered-corner button panels per
+    // side (shield/dash stacked, combo as its own full-height bar next to
+    // them) - real distinct filled buttons, not one connected outline shape.
+    // Filled solid with the current ship's own color (brightened when held);
+    // outlined by drawing the same chamfered shape slightly larger in a dark
+    // color first, then the true-size fill on top.
+    const Color shipColor = currentShip(game).color;
+    const float chamfer = layout.buttonChamfer;
+    const float outlineExtra = 4.0F * guiUiScale(game);
+
+    const auto chamferPoints = [](Rectangle r, float c) -> std::array<Vector2, 8>
+    {
+        const float cc = std::min(c, std::min(r.width, r.height) / 2.0F);
+        const float x0 = r.x;
+        const float y0 = r.y;
+        const float x1 = r.x + r.width;
+        const float y1 = r.y + r.height;
+        return {
+            Vector2{.x = x0 + cc, .y = y0}, Vector2{.x = x1 - cc, .y = y0},
+            Vector2{.x = x1, .y = y0 + cc}, Vector2{.x = x1, .y = y1 - cc},
+            Vector2{.x = x1 - cc, .y = y1}, Vector2{.x = x0 + cc, .y = y1},
+            Vector2{.x = x0, .y = y1 - cc}, Vector2{.x = x0, .y = y0 + cc},
+        };
+    };
+    const auto drawButtonPanel = [&](Rectangle rect, bool down)
+    {
+        const Color fillColor = down ? ColorBrightness(shipColor, 0.35F) : shipColor;
+        const Rectangle outlineRect{.x = rect.x - outlineExtra,
+                                    .y = rect.y - outlineExtra,
+                                    .width = rect.width + outlineExtra * 2,
+                                    .height = rect.height + outlineExtra * 2};
+        auto outlinePts = chamferPoints(outlineRect, chamfer + outlineExtra);
+        DrawTriangleFan(outlinePts.data(), static_cast<int32_t>(outlinePts.size()),
+                        Palette::StructDark);
+        auto fillPts = chamferPoints(rect, chamfer);
+        DrawTriangleFan(fillPts.data(), static_cast<int32_t>(fillPts.size()), fillColor);
+    };
+    drawButtonPanel(layout.leftShieldRect, touch.leftShield.down);
+    drawButtonPanel(layout.leftComboRect, touch.leftCombo.down);
+    drawButtonPanel(layout.leftDashRect, touch.leftDash.down);
+    drawButtonPanel(layout.rightShieldRect, touch.rightShield.down);
+    drawButtonPanel(layout.rightComboRect, touch.rightCombo.down);
+    drawButtonPanel(layout.rightDashRect, touch.rightDash.down);
 
     DrawCircleV(layout.pauseCenter, layout.pauseRadius, Fade(Palette::StructMid, 0.3F));
     DrawCircleLinesV(layout.pauseCenter, layout.pauseRadius, Fade(Palette::StructLight, 0.6F));
@@ -4493,8 +4705,14 @@ void drawSandboxMenu(const Game& game)
     {
         const auto& stepper = steppers.at(static_cast<size_t>(i));
         const Rectangle row = sandboxStepperRowRect(game, i);
-        windowText(game, std::string(stepper.label).c_str(), static_cast<int32_t>(row.x),
-                   static_cast<int32_t>(row.y) - 18, 14, Palette::StructLight);
+        // Label sits left of the row, right-aligned and vertically centered on it.
+        const float scale = guiUiScale(game);
+        const auto labelSize = static_cast<int32_t>(16 * scale);
+        const std::string label(stepper.label);
+        drawText(game, label.c_str(),
+                 static_cast<int32_t>(row.x - 12 * scale) - measureText(game, label.c_str(), labelSize),
+                 static_cast<int32_t>(row.y + (row.height - static_cast<float>(labelSize)) / 2),
+                 labelSize, Palette::StructLight);
 
         GuiButton(sandboxStepperMinusRect(game, i), "-");
         std::string value = stepper.valueText(game);

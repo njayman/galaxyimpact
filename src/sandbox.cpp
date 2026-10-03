@@ -8,6 +8,7 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "update.hpp"
+#include <algorithm>
 #include <cmath>
 #include <format>
 
@@ -102,6 +103,50 @@ void sandboxCycleShip(Game& game, int32_t dir)
     resetRun(game);
 }
 
+// Swaps only the first weapon slot to the next weapon type, skipping types already equipped in
+// another slot. The other slots are left alone; the swapped-in weapon starts unevolved.
+void sandboxCycleWeapon(Game& game, int32_t dir)
+{
+    if (game.run.weapons.empty())
+    {
+        return;
+    }
+    Weapon& first = game.run.weapons.front();
+    const auto count = static_cast<int32_t>(WeaponType::Count);
+    auto type = first.type;
+    for (int32_t step = 0; step < count; step++)
+    {
+        type = static_cast<WeaponType>((static_cast<int32_t>(type) + dir + count) % count);
+        const bool equippedElsewhere = std::any_of(game.run.weapons.begin() + 1,
+                                                   game.run.weapons.end(),
+                                                   [type](const Weapon& w) { return w.type == type; });
+        if (!equippedElsewhere)
+        {
+            break;
+        }
+    }
+    if (type == first.type)
+    {
+        return; // every other type is already equipped
+    }
+
+    const auto oldGrant = static_cast<size_t>(weaponGrantSkill.at(static_cast<size_t>(first.type)));
+    const auto newGrant = static_cast<size_t>(weaponGrantSkill.at(static_cast<size_t>(type)));
+    const int32_t level = std::min(first.level, Skills.at(newGrant).maxLevel);
+    game.run.skillLevels.at(oldGrant) = 0;
+    game.run.skillLevels.at(newGrant) = level;
+    first = Weapon{.type = type, .level = level};
+}
+
+void sandboxToggleEvolve(Game& game)
+{
+    if (!game.run.weapons.empty() &&
+        weaponEvolves.at(static_cast<size_t>(game.run.weapons.front().type)))
+    {
+        game.run.weapons.front().evolved = !game.run.weapons.front().evolved;
+    }
+}
+
 void sandboxForceAttackNearestBoss(Game& game)
 {
     if (game.run.bosses.empty())
@@ -135,7 +180,7 @@ void sandboxDropSelectedPickup(Game& game)
 
 namespace SandboxMenuLayout
 {
-constexpr int32_t stepperCount = 5;
+constexpr int32_t stepperCount = 6; // keep in sync with sandboxMenuSteppers()
 constexpr int32_t stepperRowWidth = 480;
 constexpr int32_t stepperRowHeight = 40;
 constexpr int32_t stepperRowGap = 10;
@@ -178,7 +223,7 @@ auto sandboxMenuButtons() -> const std::vector<SandboxMenuButton>&
         {[](const Game&) { return std::string("Spawn Swarm Boss"); }, spawnSwarmBoss},
         {[](const Game&) { return std::string("Spawn Signature Boss"); },
          sandboxSpawnSignatureBoss},
-        {[](const Game&) { return std::string("Force Selected Attack (Nearest Boss)"); },
+        {[](const Game&) { return std::string("Force Boss Attack"); },
          sandboxForceAttackNearestBoss},
         {[](const Game&) { return std::string("Drop Selected Pickup"); },
          sandboxDropSelectedPickup},
@@ -186,11 +231,22 @@ auto sandboxMenuButtons() -> const std::vector<SandboxMenuButton>&
         {[](const Game&) { return std::string("Level-Up Picker"); }, startLevelUp},
         {[](const Game&) { return std::string("Full Heal"); }, sandboxFullHeal},
         {[](const Game&) { return std::string("Reset Abilities"); }, sandboxResetAbilities},
+        {[](const Game& game)
+         {
+             if (game.run.weapons.empty() ||
+                 !weaponEvolves.at(static_cast<size_t>(game.run.weapons.front().type)))
+             {
+                 return std::string("Evolve Weapon: n/a");
+             }
+             return std::format("Evolve Weapon: {}",
+                                game.run.weapons.front().evolved ? "ON" : "OFF");
+         },
+         sandboxToggleEvolve},
         {[](const Game&) { return std::string("Spawn Black Hole"); }, spawnBlackHole},
         {[](const Game&) { return std::string("Spawn Wormhole"); }, spawnWormholePair},
-        {[](const Game&) { return std::string("Spawn Warlord Hazard"); },
+        {[](const Game&) { return std::string("Spawn Warlord"); },
          [](Game& game) { spawnEliteHazard(game, EliteHazardRole::Warlord); }},
-        {[](const Game&) { return std::string("Spawn Suppressor Hazard"); },
+        {[](const Game&) { return std::string("Spawn Suppressor"); },
          [](Game& game) { spawnEliteHazard(game, EliteHazardRole::Suppressor); }},
         {[](const Game& game)
          { return std::format("Death: {}", game.sandboxDeathEnabled ? "ON" : "OFF"); },
@@ -247,6 +303,15 @@ auto sandboxMenuSteppers() -> const std::vector<SandboxMenuStepper>&
         {"Ship", [](const Game& game) { return std::string(currentShip(game).name); },
          [](Game& game) { sandboxCycleShip(game, -1); },
          [](Game& game) { sandboxCycleShip(game, 1); }},
+        {"Weapon",
+         [](const Game& game)
+         {
+             return game.run.weapons.empty()
+                        ? std::string("None")
+                        : std::string(effectiveWeaponName(game.run.weapons.front()));
+         },
+         [](Game& game) { sandboxCycleWeapon(game, -1); },
+         [](Game& game) { sandboxCycleWeapon(game, 1); }},
         {"Pickup",
          [](const Game& game) { return std::string(sandboxPickupName(game.sandboxPickupIndex)); },
          [](Game& game)
@@ -630,6 +695,16 @@ void updateSandboxInput(Game& game)
     {
         const int32_t dir = IsKeyDown(KEY_LEFT_SHIFT) ? -1 : 1;
         sandboxCycleShip(game, dir);
+    }
+
+    if (IsKeyPressed(KEY_J))
+    {
+        sandboxCycleWeapon(game, IsKeyDown(KEY_LEFT_SHIFT) ? -1 : 1);
+    }
+
+    if (IsKeyPressed(KEY_X))
+    {
+        sandboxToggleEvolve(game);
     }
 
     if (IsKeyPressed(KEY_PERIOD))

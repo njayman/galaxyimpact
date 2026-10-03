@@ -332,6 +332,8 @@ Launch with `-sandbox` (or `--sandbox`) for a clean, empty arena with no waves o
 | `H` | Full heal + max shield stacks + max Nerve |
 | `R` | Reset weapons/skills back to the current ship's starting weapon |
 | `I` / `Shift+I` | Cycle ship forward/backward (applies immediately via a full reset) |
+| `J` / `Shift+J` | Cycle the first weapon slot forward/backward, skipping weapons already in other slots (keeps its level, starts unevolved) |
+| `X` | Toggle evolution on the first weapon slot (only weapons that have one) |
 | `G` | Toggle death (god mode) — off by default, so damage doesn't matter until you turn it on |
 | `,` / `.` | Cycle the boss attack to command |
 | `O` | Force the nearest boss to immediately wind up and use the selected attack |

@@ -58,6 +58,50 @@ auto effectiveWeaponName(const Weapon& weapon) -> std::string_view
     return weaponDisplayName(weapon.type);
 }
 
+namespace
+{
+// Reads `count` ints into arr, ignoring any past its size (a newer file) and leaving the defaults
+// for any missing (an older file).
+template <typename T, size_t N>
+void readInts(std::istream& file, std::array<T, N>& arr, size_t count)
+{
+    for (size_t i = 0; i < count; i++)
+    {
+        int32_t value = 0;
+        if (!(file >> value))
+        {
+            return;
+        }
+        if (i < N)
+        {
+            arr.at(i) = static_cast<T>(value);
+        }
+    }
+}
+
+template <typename T, size_t N>
+void readSizedInts(std::istream& file, std::array<T, N>& arr)
+{
+    if (size_t count = 0; file >> count)
+    {
+        readInts(file, arr, count);
+    }
+}
+
+template <typename T, size_t N>
+void writeSizedInts(std::ostream& file, const std::array<T, N>& arr)
+{
+    file << ' ' << N;
+    for (const T value : arr)
+    {
+        file << ' ' << static_cast<int32_t>(value);
+    }
+}
+
+// Unversioned saves had 15 weapon types (before Laser Shots) and no array lengths.
+constexpr size_t legacyWeaponTypeCount = 15;
+} // namespace
+
 auto loadAchievements() -> Achievements
 {
     Achievements achievements{};
@@ -68,19 +112,24 @@ auto loadAchievements() -> Achievements
         return achievements;
     }
 
-    for (auto& count : achievements.killsByWeapon)
+    std::string marker;
+    file >> marker;
+    const bool sized = marker == "v2";
+    if (!sized)
     {
-        if (int32_t value = 0; file >> value)
-        {
-            count = value;
-        }
+        file.clear();
+        file.seekg(0);
     }
-    for (auto& count : achievements.dashKillsByEnemyKind)
+
+    if (sized)
     {
-        if (int32_t value = 0; file >> value)
-        {
-            count = value;
-        }
+        readSizedInts(file, achievements.killsByWeapon);
+        readSizedInts(file, achievements.dashKillsByEnemyKind);
+    }
+    else
+    {
+        readInts(file, achievements.killsByWeapon, legacyWeaponTypeCount);
+        readInts(file, achievements.dashKillsByEnemyKind, achievements.dashKillsByEnemyKind.size());
     }
     if (int32_t value = 0; file >> value)
     {
@@ -94,19 +143,15 @@ auto loadAchievements() -> Achievements
     {
         achievements.slotCap = value;
     }
-    for (auto& unlocked : achievements.typeUnlocked)
+    if (sized)
     {
-        if (int32_t value = 0; file >> value)
-        {
-            unlocked = value != 0;
-        }
+        readSizedInts(file, achievements.typeUnlocked);
+        readSizedInts(file, achievements.evolutionUnlocked);
     }
-    for (auto& unlocked : achievements.evolutionUnlocked)
+    else
     {
-        if (int32_t value = 0; file >> value)
-        {
-            unlocked = value != 0;
-        }
+        readInts(file, achievements.typeUnlocked, legacyWeaponTypeCount);
+        readInts(file, achievements.evolutionUnlocked, legacyWeaponTypeCount);
     }
     if (int32_t value = 0; file >> value)
     {
@@ -124,24 +169,13 @@ void saveAchievements(const Achievements& achievements)
         return;
     }
 
-    for (const auto count : achievements.killsByWeapon)
-    {
-        file << count << ' ';
-    }
-    for (const auto count : achievements.dashKillsByEnemyKind)
-    {
-        file << count << ' ';
-    }
-    file << achievements.dashOrNerveKills << ' ' << achievements.highestWaveReached << ' '
+    file << "v2";
+    writeSizedInts(file, achievements.killsByWeapon);
+    writeSizedInts(file, achievements.dashKillsByEnemyKind);
+    file << ' ' << achievements.dashOrNerveKills << ' ' << achievements.highestWaveReached << ' '
          << achievements.slotCap;
-    for (const auto unlocked : achievements.typeUnlocked)
-    {
-        file << ' ' << (unlocked ? 1 : 0);
-    }
-    for (const auto unlocked : achievements.evolutionUnlocked)
-    {
-        file << ' ' << (unlocked ? 1 : 0);
-    }
+    writeSizedInts(file, achievements.typeUnlocked);
+    writeSizedInts(file, achievements.evolutionUnlocked);
     file << ' ' << (achievements.infiniteModeUnlocked ? 1 : 0);
 
     file.close();
@@ -232,6 +266,10 @@ void recordSkillMaxed(Game& game, SkillType id)
     else if (id == SkillType::Railgun)
     {
         unlockType(game, achievements, WeaponType::Sniper, "Sniper");
+    }
+    else if (id == SkillType::LaserShots)
+    {
+        unlockType(game, achievements, WeaponType::Beam, "Beam Sweep");
     }
 }
 

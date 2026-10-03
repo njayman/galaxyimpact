@@ -73,9 +73,18 @@ struct TouchControls
     TouchStick aimStick;
     Vector2 aimDir{.x = 0, .y = -1};
 
-    TouchButton dash;
-    TouchButton shield;
-    TouchButton combo; // dash + shield together, dedicated button
+    // Dash/shield/combo are each a 3-band kite split top=shield,
+    // middle=combo, bottom=dash, duplicated on both sides of the screen so
+    // either thumb can reach any of the three. Combo is its own dedicated
+    // touch (simultaneous two-finger presses on one capsule turned out
+    // unreliable to land on separate halves), and just ORs into both
+    // dash/shield being pressed, same as any dash+shield overlap.
+    TouchButton leftShield;
+    TouchButton leftCombo;
+    TouchButton leftDash;
+    TouchButton rightShield;
+    TouchButton rightCombo;
+    TouchButton rightDash;
     TouchButton nerve;
     TouchButton pause;
 };
@@ -95,6 +104,16 @@ struct PointerHold
     float pressStartTime = 0;
     bool isHold = false;
     bool releasedAsTap = false;
+};
+
+// Vertical scroll for a screen whose content height isn't known until it's
+// actually drawn (Bestiary's section count depends on window width). Draw
+// writes maxOffset from what it just measured; update reads/clamps it next
+// frame. A 1-frame lag on the clamp bound is imperceptible.
+struct ContentScroll
+{
+    float offset = 0;
+    float maxOffset = 0;
 };
 
 struct GameResources
@@ -124,6 +143,7 @@ struct GameplayState
     std::vector<Asteroid> asteroids;
     std::vector<BossProjectile> bossProjectiles;
     std::vector<Enemy> enemies;
+    uint32_t nextEnemyId = 0;
     std::vector<EliteHazard> eliteHazards;
     float eliteHazardSpawnTimer;
     std::vector<Pickup> pickups;
@@ -175,8 +195,6 @@ struct GameplayState
     float shakeDuration;
     float shakeIntensity;
     float hitPauseTimer;
-    float nerveBurstFlashTimer;
-    Vector2 nerveBurstFlashEnd;
     std::string achievementToast;
     float achievementToastTimer;
     float punctumThunderTimer;
@@ -227,6 +245,8 @@ struct Game
     GameplayState run;
     TouchControls touch;
     PointerHold pointerHold;
+    ContentScroll achievementsScroll;
+    ContentScroll bestiaryScroll;
 };
 
 auto InitGame() -> Game;

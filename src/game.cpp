@@ -54,7 +54,7 @@ auto loadGameFont() -> Font
     // Android assets live inside the APK and are only reachable through
     // raylib's wrapped fopen()/AAssetManager, which takes a plain path
     // relative to the assets root - no real filesystem entry to stat first.
-    const std::string path = "assets/fonts/HeavyDataNerdFont-Regular.ttf";
+    const std::string path = "assets/fonts/PeaberryDoublespace.ttf";
     const Font font = LoadFontEx(path.c_str(), 96, nullptr, 0);
     if (font.texture.id != 0)
     {
@@ -63,7 +63,7 @@ auto loadGameFont() -> Font
     }
 #else
     const std::string path =
-        std::string(GetApplicationDirectory()) + "assets/fonts/HeavyDataNerdFont-Regular.ttf";
+        std::string(GetApplicationDirectory()) + "assets/fonts/PeaberryDoublespace.ttf";
 
     if (std::filesystem::exists(path))
     {
@@ -318,8 +318,6 @@ void resetRun(Game& game)
     game.run.shakeDuration = 0;
     game.run.shakeIntensity = 0;
     game.run.hitPauseTimer = 0;
-    game.run.nerveBurstFlashTimer = 0;
-    game.run.nerveBurstFlashEnd = Vector2{};
     game.run.score = 0;
     game.run.scoreRecorded = false;
     game.run.achievementToast.clear();

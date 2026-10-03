@@ -41,11 +41,6 @@ void updateNerve(Game& game, float deltaTime)
 {
     auto& player = game.run.player;
 
-    if (game.run.nerveBurstFlashTimer > 0)
-    {
-        game.run.nerveBurstFlashTimer -= deltaTime;
-    }
-
     if (player.charges >= UpdateConstants::maxCharges)
     {
         player.nerveChargeFeedTimer = 0;
@@ -820,7 +815,8 @@ auto dashPressed(const Game& game) -> bool
 {
     if (game.touch.visible)
     {
-        return game.touch.dash.pressed || game.touch.combo.pressed;
+        return game.touch.leftDash.pressed || game.touch.rightDash.pressed ||
+              game.touch.leftCombo.pressed || game.touch.rightCombo.pressed;
     }
     return IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
@@ -829,7 +825,8 @@ auto dashDown(const Game& game) -> bool
 {
     if (game.touch.visible)
     {
-        return game.touch.dash.down || game.touch.combo.down;
+        return game.touch.leftDash.down || game.touch.rightDash.down || game.touch.leftCombo.down ||
+              game.touch.rightCombo.down;
     }
     return IsMouseButtonDown(MOUSE_BUTTON_LEFT);
 }
@@ -838,7 +835,8 @@ auto shieldPressed(const Game& game) -> bool
 {
     if (game.touch.visible)
     {
-        return game.touch.shield.pressed || game.touch.combo.pressed;
+        return game.touch.leftShield.pressed || game.touch.rightShield.pressed ||
+              game.touch.leftCombo.pressed || game.touch.rightCombo.pressed;
     }
     return IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
 }
@@ -847,7 +845,8 @@ auto shieldDown(const Game& game) -> bool
 {
     if (game.touch.visible)
     {
-        return game.touch.shield.down || game.touch.combo.down;
+        return game.touch.leftShield.down || game.touch.rightShield.down ||
+              game.touch.leftCombo.down || game.touch.rightCombo.down;
     }
     return IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
 }
@@ -885,32 +884,71 @@ auto touchControlLayout(const Game& game) -> TouchLayout
     // assumption were too small on Android's much higher pixel density.
     constexpr float margin = 180.0F;
     constexpr float stickRadius = 170.0F;
-    constexpr float nerveMargin = 100.0F;
-    constexpr float nerveRadius = 140.0F;
     constexpr float pauseMargin = 80.0F;
     constexpr float pauseRadius = 68.0F;
-    constexpr float actionMargin = 50.0F;
-    constexpr float actionButtonRadius = 130.0F;
-    constexpr float actionButtonY = 260.0F; // below the HUD's top-corner clusters
-    constexpr float comboRadius = 100.0F;
-    constexpr float comboGap = 20.0F;
+    constexpr float nerveRadius = 70.0F;
+    constexpr float nerveGap = 30.0F; // gap above the cluster
+    // Shield and dash stacked vertically as one panel (split by a gap),
+    // combo as a separate full-height bar next to that panel - real,
+    // distinct button shapes rather than a connected outline.
+    constexpr float panelHeight = 240.0F;
+    constexpr float panelWidth = 150.0F;
+    constexpr float comboBarWidth = 64.0F;
+    constexpr float innerGap = 14.0F; // between shield/dash halves, and panel/combo bar
+    constexpr float clusterGap = 40.0F; // gap from the stick's edge
+    constexpr float buttonChamfer = 18.0F; // corner cut size, drawn shape only
 
     const float scaledMargin = margin * scale;
     const float scaledStickRadius = stickRadius * scale;
-    const float scaledNerveMargin = nerveMargin * scale;
-    const float scaledNerveRadius = nerveRadius * scale;
     const float scaledPauseMargin = pauseMargin * scale;
     const float scaledPauseRadius = pauseRadius * scale;
-    const float scaledActionButtonRadius = actionButtonRadius * scale;
-    const float scaledComboRadius = comboRadius * scale;
+    const float scaledNerveRadius = nerveRadius * scale;
+    const float scaledPanelHeight = panelHeight * scale;
+    const float scaledPanelWidth = panelWidth * scale;
+    const float scaledComboBarWidth = comboBarWidth * scale;
+    const float scaledInnerGap = innerGap * scale;
+    const float scaledClusterGap = clusterGap * scale;
+    const float scaledButtonChamfer = buttonChamfer * scale;
+    const float scaledHalfHeight = (scaledPanelHeight - scaledInnerGap) / 2.0F;
 
+    // Fixed physical positions, independent of the move/aim swap below - the
+    // clusters sit next to whichever stick is physically on that side, and
+    // provide the same dash+shield either way.
     const Vector2 leftStickAnchor{.x = scaledMargin + scaledStickRadius,
                                   .y = h - scaledMargin - scaledStickRadius};
     const Vector2 rightStickAnchor{.x = w - scaledMargin - scaledStickRadius,
                                    .y = h - scaledMargin - scaledStickRadius};
     const bool swap = game.resources.settings.swapTouchSticks;
 
-    const Vector2 pauseCenter{.x = w / 2, .y = scaledPauseMargin + scaledPauseRadius};
+    const float clusterY = leftStickAnchor.y;
+    const float panelTop = clusterY - scaledPanelHeight / 2.0F;
+
+    // Combo bar sits nearest the stick; the shield/dash panel sits further
+    // out towards the screen edge. Mirrored for the right side.
+    const float leftComboX = leftStickAnchor.x + scaledStickRadius + scaledClusterGap;
+    const float leftPanelX = leftComboX + scaledComboBarWidth + scaledInnerGap;
+    const float rightComboX =
+        rightStickAnchor.x - scaledStickRadius - scaledClusterGap - scaledComboBarWidth;
+    const float rightPanelX = rightComboX - scaledInnerGap - scaledPanelWidth;
+
+    const auto stackedRects = [&](float panelX) -> std::pair<Rectangle, Rectangle>
+    {
+        const Rectangle shieldRect{
+            .x = panelX, .y = panelTop, .width = scaledPanelWidth, .height = scaledHalfHeight};
+        const Rectangle dashRect{.x = panelX,
+                                 .y = panelTop + scaledHalfHeight + scaledInnerGap,
+                                 .width = scaledPanelWidth,
+                                 .height = scaledHalfHeight};
+        return {shieldRect, dashRect};
+    };
+    const auto comboRect = [&](float comboX) -> Rectangle
+    {
+        return Rectangle{
+            .x = comboX, .y = panelTop, .width = scaledComboBarWidth, .height = scaledPanelHeight};
+    };
+
+    const auto [leftShieldRect, leftDashRect] = stackedRects(leftPanelX);
+    const auto [rightShieldRect, rightDashRect] = stackedRects(rightPanelX);
 
     return TouchLayout{
         // Move/aim can swap which physical side they're on (Settings ->
@@ -918,25 +956,22 @@ auto touchControlLayout(const Game& game) -> TouchLayout
         .moveStickAnchor = swap ? rightStickAnchor : leftStickAnchor,
         .aimStickAnchor = swap ? leftStickAnchor : rightStickAnchor,
         .stickRadius = scaledStickRadius,
-        // Bottom-center, between the two sticks - clear of the HUD.
-        .nerveCenter = Vector2{.x = w / 2, .y = h - scaledNerveMargin - scaledNerveRadius},
+        // Above the left panel.
+        .nerveCenter = Vector2{.x = leftPanelX + scaledPanelWidth / 2.0F,
+                               .y = panelTop - nerveGap * scale - scaledNerveRadius},
         .nerveRadius = scaledNerveRadius,
         // Top-center - the HUD hugs both top corners (health/score/XP on the
         // left, ability slots/status icons on the right), so this is the one
         // top-edge spot that stays clear of it.
-        .pauseCenter = pauseCenter,
+        .pauseCenter = Vector2{.x = w / 2, .y = scaledPauseMargin + scaledPauseRadius},
         .pauseRadius = scaledPauseRadius,
-        // Top corners, index-finger reach, dropped below the HUD clusters.
-        .dashCenter = Vector2{.x = actionMargin * scale + scaledActionButtonRadius,
-                              .y = actionButtonY * scale},
-        .shieldCenter = Vector2{.x = w - actionMargin * scale - scaledActionButtonRadius,
-                                .y = actionButtonY * scale},
-        .actionButtonRadius = scaledActionButtonRadius,
-        // Stacked under the pause button, top-center.
-        .comboCenter = Vector2{.x = w / 2,
-                               .y = pauseCenter.y + scaledPauseRadius + comboGap * scale +
-                                    scaledComboRadius},
-        .comboRadius = scaledComboRadius,
+        .buttonChamfer = scaledButtonChamfer,
+        .leftShieldRect = leftShieldRect,
+        .leftComboRect = comboRect(leftComboX),
+        .leftDashRect = leftDashRect,
+        .rightShieldRect = rightShieldRect,
+        .rightComboRect = comboRect(rightComboX),
+        .rightDashRect = rightDashRect,
     };
 }
 
@@ -1050,22 +1085,32 @@ void updateTouchControls(Game& game)
     const TouchLayout layout = touchControlLayout(game);
     const int32_t count = GetTouchPointCount();
 
-    releaseIfGone(touch.dash.touchId, count);
-    releaseIfGone(touch.shield.touchId, count);
-    releaseIfGone(touch.combo.touchId, count);
+    releaseIfGone(touch.leftShield.touchId, count);
+    releaseIfGone(touch.leftCombo.touchId, count);
+    releaseIfGone(touch.leftDash.touchId, count);
+    releaseIfGone(touch.rightShield.touchId, count);
+    releaseIfGone(touch.rightCombo.touchId, count);
+    releaseIfGone(touch.rightDash.touchId, count);
     releaseIfGone(touch.nerve.touchId, count);
     releaseIfGone(touch.pause.touchId, count);
 
-    const std::array<std::pair<TouchButton*, std::pair<Vector2, float>>, 5> buttons{{
+    const std::array<std::pair<TouchButton*, std::pair<Vector2, float>>, 2> circleButtons{{
         {&touch.pause, {layout.pauseCenter, layout.pauseRadius}},
-        {&touch.combo, {layout.comboCenter, layout.comboRadius}},
         {&touch.nerve, {layout.nerveCenter, layout.nerveRadius}},
-        {&touch.dash, {layout.dashCenter, layout.actionButtonRadius}},
-        {&touch.shield, {layout.shieldCenter, layout.actionButtonRadius}},
+    }};
+    const std::array<std::pair<TouchButton*, Rectangle>, 6> rectButtons{{
+        {&touch.leftShield, layout.leftShieldRect},
+        {&touch.leftCombo, layout.leftComboRect},
+        {&touch.leftDash, layout.leftDashRect},
+        {&touch.rightShield, layout.rightShieldRect},
+        {&touch.rightCombo, layout.rightComboRect},
+        {&touch.rightDash, layout.rightDashRect},
     }};
 
-    const std::array<bool, 5> wasDown{touch.pause.down, touch.combo.down, touch.nerve.down,
-                                      touch.dash.down, touch.shield.down};
+    const std::array<bool, 2> circleWasDown{touch.pause.down, touch.nerve.down};
+    const std::array<bool, 6> rectWasDown{touch.leftShield.down,  touch.leftCombo.down,
+                                          touch.leftDash.down,    touch.rightShield.down,
+                                          touch.rightCombo.down,  touch.rightDash.down};
 
     for (int32_t i = 0; i < count; i++)
     {
@@ -1073,7 +1118,11 @@ void updateTouchControls(Game& game)
         const Vector2 pos = GetTouchPosition(i);
 
         bool claimed = id == touch.moveStick.touchId || id == touch.aimStick.touchId;
-        for (const auto& [button, zone] : buttons)
+        for (const auto& [button, zone] : circleButtons)
+        {
+            claimed = claimed || id == button->touchId;
+        }
+        for (const auto& [button, zone] : rectButtons)
         {
             claimed = claimed || id == button->touchId;
         }
@@ -1083,13 +1132,25 @@ void updateTouchControls(Game& game)
         }
 
         bool claimedByButton = false;
-        for (const auto& [button, zone] : buttons)
+        for (const auto& [button, zone] : circleButtons)
         {
             if (button->touchId == -1 && CheckCollisionPointCircle(pos, zone.first, zone.second))
             {
                 button->touchId = id;
                 claimedByButton = true;
                 break;
+            }
+        }
+        for (const auto& [button, zone] : rectButtons)
+        {
+            if (claimedByButton)
+            {
+                break;
+            }
+            if (button->touchId == -1 && CheckCollisionPointRec(pos, zone))
+            {
+                button->touchId = id;
+                claimedByButton = true;
             }
         }
         if (claimedByButton)
@@ -1109,11 +1170,17 @@ void updateTouchControls(Game& game)
         }
     }
 
-    for (size_t i = 0; i < buttons.size(); i++)
+    for (size_t i = 0; i < circleButtons.size(); i++)
     {
-        TouchButton& button = *buttons.at(i).first;
+        TouchButton& button = *circleButtons.at(i).first;
         button.down = button.touchId != -1;
-        button.pressed = button.down && !wasDown.at(i);
+        button.pressed = button.down && !circleWasDown.at(i);
+    }
+    for (size_t i = 0; i < rectButtons.size(); i++)
+    {
+        TouchButton& button = *rectButtons.at(i).first;
+        button.down = button.touchId != -1;
+        button.pressed = button.down && !rectWasDown.at(i);
     }
 
     updateTouchStick(touch.moveStick, layout.moveStickAnchor, layout.stickRadius, count);

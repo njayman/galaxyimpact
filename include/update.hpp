@@ -70,7 +70,7 @@ void gainNerve(Game& game);
 void updateNerve(Game& game, float deltaTime);
 void updateNerveBurstInput(Game& game);
 void fireNerveBurst(Game& game);
-void fireNerveCone(Game& game);
+void fireNerveLaserStorm(Game& game);
 void fireNerveBladeTornado(Game& game);
 void fireNerveBall(Game& game);
 void sniperLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg);
@@ -106,11 +106,18 @@ struct TouchLayout
     float nerveRadius;
     Vector2 pauseCenter;
     float pauseRadius;
-    Vector2 dashCenter;
-    Vector2 shieldCenter;
-    float actionButtonRadius;
-    Vector2 comboCenter;
-    float comboRadius;
+    // Each cluster is 3 separate chamfered-corner button panels - shield and
+    // dash stacked vertically side by side, combo as a full-height bar next
+    // to them - real distinct filled buttons rather than one outlined shape.
+    // Draw reads these same rects (as chamfered rectangles) so the rendered
+    // shape and its hit-test can't drift apart.
+    float buttonChamfer;
+    Rectangle leftShieldRect;
+    Rectangle leftComboRect;
+    Rectangle leftDashRect;
+    Rectangle rightShieldRect;
+    Rectangle rightComboRect;
+    Rectangle rightDashRect;
 };
 
 auto touchControlLayout(const Game& game) -> TouchLayout;
