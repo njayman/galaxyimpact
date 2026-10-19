@@ -23,6 +23,10 @@ From [Biome rework scope: what is open to change](https://github.com/njayman/gal
 - Wave timing, spawn pacing and boss wave numbers are fixed. HP, damage and speed of anything reworked are open.
 - Ships, weapons, skills, Nerve and controls are not changed.
 
+### Palette
+
+- Danger red `#C43A3A` is shared by every Biome so threats always read the same (from [Rustbloom: theme, Native Enemies and background](https://github.com/njayman/galaxyimpact/issues/11)).
+
 ### Boss QTE
 
 From [Shared Boss QTE rules](https://github.com/njayman/galaxyimpact/issues/3).
@@ -178,6 +182,43 @@ Waves 10, 20, 25 with 4, 6, 8 plates. Skeleton kept: a core ringed by rotating p
 
 **Status:** Draft. Waves 26-50, Biome Boss Wreckworm.
 
+### Theme and palette
+
+A dead fleet's graveyard, eaten by a rust-feeding fungal bloom: hulls rot into spore pods, and everything that dies feeds the bloom.
+
+| Role       | Hex       | Note                                   |
+| ---------- | --------- | -------------------------------------- |
+| Base       | `#967850` | rust haze (`Palette::RustbloomHaze`)   |
+| Accent     | `#8CA546` | sickly green (`Palette::RustbloomAccent`) |
+| Danger     | `#C43A3A` | shared danger red                      |
+| Background | `#100E0A` | (`Palette::RustbloomVoid`)             |
+
+### Native Enemies
+
+No new enemy: fodder, turret, spawner, charger and slow are all covered. All organic; organic merging stays.
+
+| Name | Status | Role | Look | Behaviour | Counterplay | Starting numbers |
+| --- | --- | --- | --- | --- | --- | --- |
+| `Spore Swarmling` | keep | fast fodder | green spore | chases | sweep with fire | unchanged |
+| `Husk Sentinel` | keep (look) | turret | fungus-crusted wreck turret | fires every 2.5 s | break line of sight, close in | unchanged |
+| `Hive Node` | keep | spawner | green pod cluster | spawns 2 Spore Swarmlings every 3 s | kill early | unchanged |
+| `Boarder` | keep | charger | rust haze | charges; the step up from Rockhide's roll | sidestep | unchanged |
+| `Carrion Drone` | keep (recolour) | slow | amber to rust haze with green spots | on contact slows the player 2 s and dies | shoot before contact; dash through | unchanged |
+
+The Carrion Drone's slow overlaps the Blight Gate's on purpose: attrition is Rustbloom's flavour.
+
+### Global Enemy tint
+
+Green-brown tint, about 15%.
+
+### Background
+
+Rework of `drawRustbloomBackground` into three layers, far to near:
+
+- **Far** (parallax 0.05): huge derelict capital-ship silhouettes furred with bloom.
+- **Mid** (parallax 0.3): the existing hull fragments plus slow spore motes.
+- **Near** (parallax 0.8): the existing pods and tendrils, pulsing.
+
 ### Biome Hazard
 
 **Rust Patches** (always on): rust blooms where enemies die and slowly spreads; crossing it deals damage over time; shooting or dashing through burns it away. Affects the player only. Distinct from the Blight Gate (slow only, wormhole exits only).
@@ -188,7 +229,7 @@ Waves 10, 20, 25 with 4, 6, 8 plates. Skeleton kept: a core ringed by rotating p
 
 ### Wave Boss flavour
 
-Mini Wave Bosses at waves 35 and 45. Themed pool of 4-5 Wave Boss types: to be named in this Biome's design ticket.
+Mini Wave Bosses at waves 35 and 45. Pool: The Last Signal, Hollow Idol, Dim Reaver, Static Wraith (dead-fleet and ghost names; Structural Wyrm left out as a Wreckworm echo).
 
 ## Solar Forge
 
