@@ -90,6 +90,43 @@ Every Biome section uses these headings in this order:
 
 **Status:** Draft. Waves 1-25, Biome Boss Beltbreaker.
 
+### Theme and palette
+
+The broken ring of a shattered planet: cold stone, amber dust lanes, the planet's split husk looming far behind. The opening Biome, where the basics are taught.
+
+| Role       | Hex       | Note                                   |
+| ---------- | --------- | -------------------------------------- |
+| Base       | `#384254` | stone (`Palette::StructMid`)           |
+| Accent     | `#D9A55B` | amber dust                             |
+| Danger     | `#C43A3A` | (`Palette::Accent`)                    |
+| Background | `#0A0C12` | void (`Palette::Void`)                 |
+
+### Native Enemies
+
+No new enemy: every role is covered and this Biome teaches the basics.
+
+| Name | Status | Role | Look | Behaviour | Counterplay | Starting numbers |
+| --- | --- | --- | --- | --- | --- | --- |
+| `Rockhide` | rework | tank chaser, teaches dashing | boulder with plates; cracks glow amber during the tell | chases; every ~4 s a roll charge after a 0.6 s tell | dash sideways out of the roll line | 36 HP, 3 contact; roll 2.5x speed over 220 units, 3 contact |
+| `Rock Debris` | keep (recolour) | stationary fodder | palette stone | stationary | shoot | unchanged |
+| `Rubble Splitter` | keep (recolour) | chaser that splits | palette stone | chases, splits into 2 Rock Debris on death | kill away from your path | unchanged |
+| `Ricochet Strafer` | keep | turret | brown/amber (already fits) | shots bounce off asteroids | watch rebound angles, use asteroids as cover with care | unchanged |
+| `Beltcrawler` | keep (recolour) | orbiter | shield-blue to amber | orbits the nearest asteroid | catch it on the open side of the orbit | unchanged |
+
+### Global Enemy tint
+
+Light amber dust tint, about 15%.
+
+### Background
+
+Three layers, far to near:
+
+- **Far** (parallax 0.05): the planet's huge split husk with a broken ring arc, dark silhouette with amber rim light.
+- **Mid** (parallax 0.3): faint diagonal amber dust lanes drifting slowly. Debris Squalls arrive along the lane direction, so the background foreshadows them.
+- **Near** (parallax 0.8): small drifting rock specks.
+
+Described in words only; looks the build finds open can become a prototype ticket.
+
 ### Biome Hazard
 
 **Debris Squall** (event): a few times per wave an edge warning shows, then a band of fast rocks sweeps across the field in one direction; move out of the band. Damages enemies too, so they can be lured in.
@@ -100,7 +137,7 @@ Every Biome section uses these headings in this order:
 
 ### Wave Boss flavour
 
-Mini Wave Bosses at waves 5 and 15. Themed pool of 4-5 Wave Boss types: to be named in this Biome's design ticket.
+Mini Wave Bosses at waves 5 and 15. Pool: Shatter Prime, Fracture Queen, Ashen Sentinel, Barrier Colossus, Warbringer (stone and fracture names; Structural Wyrm left out as a Wreckworm echo).
 
 ## Rustbloom
 
