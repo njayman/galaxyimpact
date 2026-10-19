@@ -42,6 +42,15 @@ From [Shared Boss QTE rules](https://github.com/njayman/galaxyimpact/issues/3).
 
 - **Mash** is used only where a grip or struggle fits the fiction.
 
+### Biome Hazards
+
+From [One signature Biome Hazard per Biome](https://github.com/njayman/galaxyimpact/issues/7).
+
+- Every Biome has exactly one signature Biome Hazard.
+- It applies movement pressure and only hurts when its tell is ignored: every damaging moment is telegraphed at least 1 s ahead and avoidable by moving. It never instakills, and it ramps gently across the Biome's 25 waves. Always-on or event-driven is per Biome.
+- It pauses during a Boss QTE. During the rest of a Biome Boss fight it stays on unless that Biome Boss's section suppresses or weaponises it.
+- A HUD element appears only when the hazard has hidden state (like the heat meter); otherwise all tells are in-world.
+
 ### Anomalies
 
 From [Anomaly variants per Biome](https://github.com/njayman/galaxyimpact/issues/5).
@@ -81,6 +90,10 @@ Every Biome section uses these headings in this order:
 
 **Status:** Draft. Waves 1-25, Biome Boss Beltbreaker.
 
+### Biome Hazard
+
+**Debris Squall** (event): a few times per wave an edge warning shows, then a band of fast rocks sweeps across the field in one direction; move out of the band. Damages enemies too, so they can be lured in.
+
 ### Anomaly variant
 
 **Grinder** (black hole): loose rock caught in its pull orbits it as contact-damage shrapnel; shooting the orbit breaks it up. Details may be refined in this Biome's tickets.
@@ -92,6 +105,10 @@ Mini Wave Bosses at waves 5 and 15. Themed pool of 4-5 Wave Boss types: to be na
 ## Rustbloom
 
 **Status:** Draft. Waves 26-50, Biome Boss Wreckworm.
+
+### Biome Hazard
+
+**Rust Patches** (always on): rust blooms where enemies die and slowly spreads; crossing it deals damage over time; shooting or dashing through burns it away. Affects the player only. Distinct from the Blight Gate (slow only, wormhole exits only).
 
 ### Anomaly variant
 
@@ -105,6 +122,10 @@ Mini Wave Bosses at waves 35 and 45. Themed pool of 4-5 Wave Boss types: to be n
 
 **Status:** Draft. Waves 51-75, Biome Boss Slagmaw.
 
+### Biome Hazard
+
+**Heat and caves** (always on, existing): the heat meter climbs outside open caves and drains inside; above the melt threshold it ticks damage. Kept as is; tuning notes only. Affects the player only; keeps its HUD meter.
+
 ### Anomaly variant
 
 **Flare Gate** (wormhole): each exit fires a brief, telegraphed flame jet along its facing. Details may be refined in this Biome's tickets.
@@ -117,6 +138,10 @@ Mini Wave Bosses at waves 55 and 65. Themed pool of 4-5 Wave Boss types: to be n
 
 **Status:** Draft. Waves 76-100, Biome Boss Kraken.
 
+### Biome Hazard
+
+**Thunder Strike** (event): the existing thunder flash becomes the tell; a target ring marks a spot near the player about 1 s before a bolt hits it for radius damage. Damages enemies too, so they can be lured in.
+
 ### Anomaly variant
 
 **Collapse** (black hole): every few seconds its pull flips to an outward push, telegraphed by the dust reversing; builds on the Kraken portal look. Details may be refined in this Biome's tickets.
@@ -128,6 +153,10 @@ Mini Wave Bosses at waves 85 and 95. Themed pool of 4-5 Wave Boss types: to be n
 ## Banished realm
 
 **Status:** Draft. Biome Boss Banished.
+
+### Biome Hazard
+
+None by default; final call in [Banished realm as a fifth Biome](https://github.com/njayman/galaxyimpact/issues/8).
 
 ### Anomaly variant
 
