@@ -88,7 +88,7 @@ Every Biome section uses these headings in this order:
 
 ## Shattered Belt
 
-**Status:** Draft. Waves 1-25, Biome Boss Beltbreaker.
+**Status:** Approved, 2026-10-19. Waves 1-25, Biome Boss Beltbreaker.
 
 ### Theme and palette
 
@@ -129,7 +129,7 @@ Described in words only; looks the build finds open can become a prototype ticke
 
 ### Biome Hazard
 
-**Debris Squall** (event): a few times per wave an edge warning shows, then a band of fast rocks sweeps across the field in one direction; move out of the band. Damages enemies too, so they can be lured in.
+**Debris Squall** (event): a few times per wave an edge warning shows, then a band of fast rocks sweeps across the field in one direction; move out of the band. Damages enemies too, so they can be lured in. Switched off during Beltbreaker fights.
 
 ### Anomaly variant
 
@@ -138,6 +138,41 @@ Described in words only; looks the build finds open can become a prototype ticke
 ### Wave Boss flavour
 
 Mini Wave Bosses at waves 5 and 15. Pool: Shatter Prime, Fracture Queen, Ashen Sentinel, Barrier Colossus, Warbringer (stone and fracture names; Structural Wyrm left out as a Wreckworm echo).
+
+### Biome Boss: Beltbreaker
+
+Waves 10, 20, 25 with 4, 6, 8 plates. Skeleton kept: a core ringed by rotating plates that act as breakable armour (220 HP per tier each); fewer attached plates speed the core up (down to 0.4x attack interval); dashes deal 2.5x to the open core; generic enrage below 25% HP.
+
+**Phases**
+
+1. **Plated:** plates orbit and occasionally leave on harass excursions; the core attacks from the table below.
+2. **Shield charge:** attached plates charge the core's shield over ~8 s (faster with more plates).
+3. **Shield complete:** plates burst away and the Boss QTE starts. Clean clear: shield shatters into the Punish Window. Fail: the core stays shielded for its full duration (12 s + 2 s per plate above 4) while plates harass, then plates return.
+
+**Attacks**
+
+| Attack | Tell | Effect | Counter | Starting numbers |
+| --- | --- | --- | --- | --- |
+| Rubble Barrage (replaces `Barrage`) | core flashes amber 0.5 s | fan of stone shards, Barrage behaviour with Belt look | strafe through gaps | as `Barrage` |
+| Ring Crush (replaces `GravityWell`) | plates contract tight round the core 0.8 s | plates fling outward as an expanding ring, then return | hug the core, stay far out, or dash through a broken plate's gap | ring speed 6, 2 damage per plate |
+| Plate Hurl (`PlateHurl`, kept) | plate glows amber 0.6 s | one plate flies straight at the player, then returns | sidestep | as today |
+| Overload Beam (`Beam`, kept, wave 20+) | as today | as today | as today | as today |
+
+### Boss QTE: Plate Rush
+
+- **Trigger:** shield completion (recurs each shield cycle, which naturally spaces QTEs past the 20 s minimum).
+- **Threat and choreography:** plates exit off-screen, then rush the player one at a time, each from a side at least 70 degrees from the last.
+- **Prompts:** 0.9 s window, 8 Prompts, 15% Parry share. No Mash (no grip in the fiction).
+- **Answers:** directions and Dash dodge; Shield blocks, staggers and chips the plate (5% of its HP); Parry dash-shields into it (15%, stagger); Nerve bursts it (35%).
+- **Clean clear:** the shield shatters; 3 s Punish Window on the exposed core (+50% damage, stacks with the 2.5x dash multiplier).
+- **Fail:** the plate lands live (still dodgeable); the shield stays up for its full duration.
+
+### Open for build
+
+- Plate HP, Ring Crush ring speed and damage, Rubble Barrage shard count.
+- Debris Squall frequency per wave and its ramp across waves 1-25.
+- Rockhide roll charge cadence and distance.
+- Exact amber tint strengths.
 
 ## Rustbloom
 
