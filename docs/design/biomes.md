@@ -269,7 +269,7 @@ Waves 30, 40, 50. Skeleton kept: a head trailing armoured segments (armour takes
 
 ## Solar Forge
 
-**Status:** Draft. Waves 51-75, Biome Boss Slagmaw.
+**Status:** Approved, 2026-10-19. Waves 51-75, Biome Boss Slagmaw.
 
 ### Theme and palette
 
@@ -309,7 +309,7 @@ Three layers, far to near:
 
 ### Biome Hazard
 
-**Heat and caves** (always on, existing): the heat meter climbs outside open caves and drains inside; above the melt threshold it ticks damage. Kept as is; tuning notes only. Affects the player only; keeps its HUD meter.
+**Heat and caves** (always on, existing): the heat meter climbs outside open caves and drains inside; above the melt threshold it ticks damage. Kept as is; tuning notes only. Affects the player only; keeps its HUD meter. Stays on during Slagmaw fights: Devour can drag the player out of a cave into the heat.
 
 ### Anomaly variant
 
@@ -318,6 +318,41 @@ Three layers, far to near:
 ### Wave Boss flavour
 
 Mini Wave Bosses at waves 55 and 65. Pool: Ember Titan, Cinder Duke, Beamforge, Lightbound Custodian.
+
+### Biome Boss: Slagmaw
+
+Waves 60, 70, 75. Skeleton kept: a huge slow mass (0.32x speed), now basalt with molten gold seams (was `Palette::SolarForgeAccent` red). Death behaviour by wave: wave 60 dies; wave 70 shatters into 14 tough meteor drifters; wave 75 splits into halves that keep splitting by generation.
+
+**Phases**
+
+1. **Molten:** attacks from the table below; Devour gives the recurring QTE beat.
+2. **Death break:** per wave as above. Wave 75 halves cannot Devour (too small).
+
+**Attacks**
+
+| Attack | Tell | Effect | Counter | Starting numbers |
+| --- | --- | --- | --- | --- |
+| Slag Spray (replaces `Barrage`) | body flares gold 0.5 s | molten spray, Barrage behaviour | strafe through gaps | as `Barrage` |
+| Magma Ram (replaces `ChargeDash`) | as ChargeDash | ChargeDash plus a burning trail | sidestep, avoid the trail | trail lasts 2 s, 1 damage per 0.5 s inside |
+| Meteor Hell (`MeteorHell`, kept) | as today | as today | as today | as today |
+| Meteor Swarm (`MeteorSwarm`, kept) | as today | as today | as today | as today |
+| Seeker Embers (replaces `HomingBarrage`, wave 70+) | as HomingBarrage | homing embers, ember look | outrun, shoot down | as `HomingBarrage` |
+| Devour (new, all waves) | maw glows gold 1 s | inhale cone pulls the player toward the maw for 2 s; reaching the maw starts the Boss QTE | dash across or leave the cone; caves do not protect | pull strength tuned in build |
+
+### Boss QTE: Swallowed
+
+- **Trigger:** Devour pulls the player into the maw (recurs; 20 s minimum gap). Escaping the cone means no QTE.
+- **Choreography:** a **Mash** Prompt to brace against the jaws, then 9 Prompts as Slagmaw chews and whips about, spitting slag gobs from shifting angles.
+- **Prompts:** 10 total (1 Mash + 9), 0.7 s window, 25% Parry share.
+- **Clean clear:** the player bursts out and Slagmaw chokes: 3 s Punish Window (+50%) with the maw exposed as a weak point.
+- **Fail:** the player is spat out and takes one burn hit.
+
+### Open for build
+
+- Devour pull strength and cone width; maw weak-point multiplier.
+- Magma Ram trail damage; Slag Spray density.
+- Vent Crawler jet cadence; heat ramp across waves 51-75.
+- Exact basalt and gold shading of the cave layer.
 
 ## Punctum
 
