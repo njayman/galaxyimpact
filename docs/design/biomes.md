@@ -51,6 +51,16 @@ From [Anomaly variants per Biome](https://github.com/njayman/galaxyimpact/issues
 - An Anomaly Variant's twist stays a property of that object; it never changes a Biome-wide meter or state (that is a Biome Hazard's job).
 - Spawn timing, lifetime and pull strength are identical in every Biome; a twist never makes Anomalies more frequent.
 
+### Wave Bosses and Elite Hazards
+
+From [Wave Boss flavour per Biome](https://github.com/njayman/galaxyimpact/issues/6).
+
+- Each Biome draws its Wave Bosses from a themed pool of 4-5 of the existing 20 Wave Boss types, tinted with the Biome palette. The pool is named in that Biome's section.
+- The moveset stays the shared random draw of 4 from the 9 generic attacks. No Biome-themed Wave Boss attacks: themed attacks belong to Biome Bosses.
+- Wave Bosses never borrow a Biome Boss's silhouette, colour or attacks.
+- Fact: in waves 1-100 only mini Wave Bosses appear (waves 5, 15, 35, 45, 55, 65, 85, 95); every 10th wave is a Biome Boss wave and the swarm trigger is effectively unreachable. Left as is (pacing locked).
+- Elite Hazards (Warlord, Suppressor) stay global in behaviour and take the Biome tint.
+
 ## Biome section template
 
 Every Biome section uses these headings in this order:
@@ -75,6 +85,10 @@ Every Biome section uses these headings in this order:
 
 **Grinder** (black hole): loose rock caught in its pull orbits it as contact-damage shrapnel; shooting the orbit breaks it up. Details may be refined in this Biome's tickets.
 
+### Wave Boss flavour
+
+Mini Wave Bosses at waves 5 and 15. Themed pool of 4-5 Wave Boss types: to be named in this Biome's design ticket.
+
 ## Rustbloom
 
 **Status:** Draft. Waves 26-50, Biome Boss Wreckworm.
@@ -82,6 +96,10 @@ Every Biome section uses these headings in this order:
 ### Anomaly variant
 
 **Blight Gate** (wormhole): each exit leaves a short-lived spore cloud that slows the player, so teleporting has a cost. Details may be refined in this Biome's tickets.
+
+### Wave Boss flavour
+
+Mini Wave Bosses at waves 35 and 45. Themed pool of 4-5 Wave Boss types: to be named in this Biome's design ticket.
 
 ## Solar Forge
 
@@ -91,6 +109,10 @@ Every Biome section uses these headings in this order:
 
 **Flare Gate** (wormhole): each exit fires a brief, telegraphed flame jet along its facing. Details may be refined in this Biome's tickets.
 
+### Wave Boss flavour
+
+Mini Wave Bosses at waves 55 and 65. Themed pool of 4-5 Wave Boss types: to be named in this Biome's design ticket.
+
 ## Punctum
 
 **Status:** Draft. Waves 76-100, Biome Boss Kraken.
@@ -99,6 +121,10 @@ Every Biome section uses these headings in this order:
 
 **Collapse** (black hole): every few seconds its pull flips to an outward push, telegraphed by the dust reversing; builds on the Kraken portal look. Details may be refined in this Biome's tickets.
 
+### Wave Boss flavour
+
+Mini Wave Bosses at waves 85 and 95. Themed pool of 4-5 Wave Boss types: to be named in this Biome's design ticket.
+
 ## Banished realm
 
 **Status:** Draft. Biome Boss Banished.
@@ -106,3 +132,7 @@ Every Biome section uses these headings in this order:
 ### Anomaly variant
 
 None by default (closed void arena); final call in [Banished realm as a fifth Biome](https://github.com/njayman/galaxyimpact/issues/8).
+
+### Wave Boss flavour
+
+Decided in [Banished realm as a fifth Biome](https://github.com/njayman/galaxyimpact/issues/8).
