@@ -42,6 +42,15 @@ From [Shared Boss QTE rules](https://github.com/njayman/galaxyimpact/issues/3).
 
 - **Mash** is used only where a grip or struggle fits the fiction.
 
+### Anomalies
+
+From [Anomaly variants per Biome](https://github.com/njayman/galaxyimpact/issues/5).
+
+- Both Anomalies (black hole, wormhole pair) take the current Biome's palette everywhere.
+- Each Biome adds one behaviour twist to one featured Anomaly: its Anomaly Variant.
+- An Anomaly Variant's twist stays a property of that object; it never changes a Biome-wide meter or state (that is a Biome Hazard's job).
+- Spawn timing, lifetime and pull strength are identical in every Biome; a twist never makes Anomalies more frequent.
+
 ## Biome section template
 
 Every Biome section uses these headings in this order:
@@ -62,18 +71,38 @@ Every Biome section uses these headings in this order:
 
 **Status:** Draft. Waves 1-25, Biome Boss Beltbreaker.
 
+### Anomaly variant
+
+**Grinder** (black hole): loose rock caught in its pull orbits it as contact-damage shrapnel; shooting the orbit breaks it up. Details may be refined in this Biome's tickets.
+
 ## Rustbloom
 
 **Status:** Draft. Waves 26-50, Biome Boss Wreckworm.
+
+### Anomaly variant
+
+**Blight Gate** (wormhole): each exit leaves a short-lived spore cloud that slows the player, so teleporting has a cost. Details may be refined in this Biome's tickets.
 
 ## Solar Forge
 
 **Status:** Draft. Waves 51-75, Biome Boss Slagmaw.
 
+### Anomaly variant
+
+**Flare Gate** (wormhole): each exit fires a brief, telegraphed flame jet along its facing. Details may be refined in this Biome's tickets.
+
 ## Punctum
 
 **Status:** Draft. Waves 76-100, Biome Boss Kraken.
 
+### Anomaly variant
+
+**Collapse** (black hole): every few seconds its pull flips to an outward push, telegraphed by the dust reversing; builds on the Kraken portal look. Details may be refined in this Biome's tickets.
+
 ## Banished realm
 
 **Status:** Draft. Biome Boss Banished.
+
+### Anomaly variant
+
+None by default (closed void arena); final call in [Banished realm as a fifth Biome](https://github.com/njayman/galaxyimpact/issues/8).
