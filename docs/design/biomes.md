@@ -271,6 +271,42 @@ Waves 30, 40, 50. Skeleton kept: a head trailing armoured segments (armour takes
 
 **Status:** Draft. Waves 51-75, Biome Boss Slagmaw.
 
+### Theme and palette
+
+A forge world crusted over a dying star: basalt caves the only shade, molten seams and ash drifting through solar glare.
+
+Today's palette is red on red and its accent collides with the shared danger red; it moves so danger is the only true red here.
+
+| Role       | Hex       | Note                                              |
+| ---------- | --------- | ------------------------------------------------- |
+| Base       | `#3A1C16` | charred basalt (replaces `Palette::SolarForgeHaze` use) |
+| Accent     | `#FFB23A` | molten gold (replaces `Palette::SolarForgeAccent` use); brighter and more saturated than the Belt's amber |
+| Danger     | `#C43A3A` | shared danger red                                 |
+| Background | `#100404` | (`Palette::SolarForgeVoid`)                       |
+
+### Native Enemies
+
+No new enemy. The Vent Crawler rework ends its overlap with Forgeborn and ties it to the heat hazard.
+
+| Name | Status | Role | Look | Behaviour | Counterplay | Starting numbers |
+| --- | --- | --- | --- | --- | --- | --- |
+| `Cinder Wisp` | keep (recolour) | exploder | gold-cored star | chases, explodes on death | kill at range | unchanged (2 damage, radius 50) |
+| `Forgeborn` | keep (look) | heavy chaser | molten golem, basalt with gold seams | chases | kite, dash damage | unchanged |
+| `Solar Turret` | keep (recolour) | turret | basalt with gold lens | fires every 3.5 s | cover, close in | unchanged |
+| `Vent Crawler` | rework | cave flusher | basalt with glowing vents (was danger red) | creeps along cave edges; after a 0.6 s gold glow tell vents a flame jet into the cave | leave the jet line or kill it before it vents | jet 160 units, 2 damage, every ~4 s; other numbers unchanged |
+
+### Global Enemy tint
+
+Ember-orange tint, about 15%.
+
+### Background
+
+Three layers, far to near:
+
+- **Far** (parallax 0.02): a dim, vast stellar corona glaring from one edge.
+- **Mid** (parallax 0.3): drifting ash and heat shimmer.
+- **Near** (world-locked): the existing cave rock and embers from `drawSolarForgeCaveBackground`, recoloured to basalt and gold. Shapes untouched: they define the safe caves.
+
 ### Biome Hazard
 
 **Heat and caves** (always on, existing): the heat meter climbs outside open caves and drains inside; above the melt threshold it ticks damage. Kept as is; tuning notes only. Affects the player only; keeps its HUD meter.
@@ -281,7 +317,7 @@ Waves 30, 40, 50. Skeleton kept: a head trailing armoured segments (armour takes
 
 ### Wave Boss flavour
 
-Mini Wave Bosses at waves 55 and 65. Themed pool of 4-5 Wave Boss types: to be named in this Biome's design ticket.
+Mini Wave Bosses at waves 55 and 65. Pool: Ember Titan, Cinder Duke, Beamforge, Lightbound Custodian.
 
 ## Punctum
 
