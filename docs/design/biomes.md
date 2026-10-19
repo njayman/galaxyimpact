@@ -152,16 +152,34 @@ Mini Wave Bosses at waves 85 and 95. Themed pool of 4-5 Wave Boss types: to be n
 
 ## Banished realm
 
-**Status:** Draft. Biome Boss Banished.
+**Status:** Draft. Finale arena, not a Biome (from [Banished realm as a fifth Biome](https://github.com/njayman/galaxyimpact/issues/8)). Reached through the Kraken's portal after wave 100; Biome Boss Banished; defeating it leads to the ending.
+
+Arena rules kept as is: horizontal wraparound strip, unlimited Nerve, unlimited dash charges. The only enemies are Banished's own summons.
+
+### Theme and palette
+
+Its own palette, not Punctum's (Punctum's look appears only as the entry portal). To be designed in the Banished realm's design ticket.
+
+### Native Enemies
+
+None (finale arena).
+
+### Global Enemy tint
+
+None (finale arena).
+
+### Background
+
+Its own background in place of today's empty black void. To be designed in the Banished realm's design ticket.
 
 ### Biome Hazard
 
-None by default; final call in [Banished realm as a fifth Biome](https://github.com/njayman/galaxyimpact/issues/8).
+None (finale arena).
 
 ### Anomaly variant
 
-None by default (closed void arena); final call in [Banished realm as a fifth Biome](https://github.com/njayman/galaxyimpact/issues/8).
+None (finale arena).
 
 ### Wave Boss flavour
 
-Decided in [Banished realm as a fifth Biome](https://github.com/njayman/galaxyimpact/issues/8).
+None (finale arena).
