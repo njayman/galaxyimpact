@@ -180,7 +180,7 @@ Waves 10, 20, 25 with 4, 6, 8 plates. Skeleton kept: a core ringed by rotating p
 
 ## Rustbloom
 
-**Status:** Draft. Waves 26-50, Biome Boss Wreckworm.
+**Status:** Approved, 2026-10-19. Waves 26-50, Biome Boss Wreckworm.
 
 ### Theme and palette
 
@@ -221,7 +221,7 @@ Rework of `drawRustbloomBackground` into three layers, far to near:
 
 ### Biome Hazard
 
-**Rust Patches** (always on): rust blooms where enemies die and slowly spreads; crossing it deals damage over time; shooting or dashing through burns it away. Affects the player only. Distinct from the Blight Gate (slow only, wormhole exits only).
+**Rust Patches** (always on): rust blooms where enemies die and slowly spreads; crossing it deals damage over time; shooting or dashing through burns it away. Affects the player only. Distinct from the Blight Gate (slow only, wormhole exits only). Stays on during Wreckworm fights; destroyed and shed segments feed Rust Patches like any death.
 
 ### Anomaly variant
 
@@ -230,6 +230,42 @@ Rework of `drawRustbloomBackground` into three layers, far to near:
 ### Wave Boss flavour
 
 Mini Wave Bosses at waves 35 and 45. Pool: The Last Signal, Hollow Idol, Dim Reaver, Static Wraith (dead-fleet and ghost names; Structural Wyrm left out as a Wreckworm echo).
+
+### Biome Boss: Wreckworm
+
+Waves 30, 40, 50. Skeleton kept: a head trailing armoured segments (armour takes 35% damage) that fire volleys every 3-5 s.
+
+**Phases**
+
+1. **Armoured:** full length, attacks from the table below.
+2. **Molt:** at 50% HP (waves 30, 40) or at 66% then 33% (wave 50, in that order; today's code fires them out of order, a separate fix). Sheds two tail segments as asteroids, +15% speed, 1.5 s lull.
+3. **Burrow:** Burrow Charge joins the moveset from wave 40.
+
+**Attacks**
+
+| Attack | Tell | Effect | Counter | Starting numbers |
+| --- | --- | --- | --- | --- |
+| Spore Spit (replaces `Barrage`) | head flares green 0.5 s | green spore spray, Barrage behaviour with Rustbloom look | strafe through gaps | as `Barrage` |
+| Coil Clamp (`CoilClamp`, kept) | body assembles a ring around the player 1.5 s | ring closes over 2.6 s from 260 to 40 radius, 90 degree gap | escape through the gap; caught inside starts the Boss QTE | as today |
+| Dash Rush (`DashRush`, kept) | as today | off-screen passes | sidestep | as today |
+| Cloud Breath (`CloudBreath`, kept) | as today | gas clouds | keep clear | as today |
+| Tail Wrap (`TailWrap`, kept) | as today | circles and chases | outrun, break line | as today |
+| Burrow Charge (`BurrowCharge`, kept, wave 40+) | as today | as today | as today | as today |
+
+### Boss QTE: Constrict
+
+- **Trigger:** Coil Clamp closes with the player still inside (recurs; 20 s minimum gap). Escaping through the gap means no QTE.
+- **Choreography:** the coil tightens; a **Mash** Prompt to pry it open (fill the bar within 1.6 s), then 8 segment strikes, each lunging from a different point on the coil.
+- **Prompts:** 9 total (1 Mash + 8 strikes), strikes at 0.8 s window, 20% Parry share; strikes use directions, Shield, Dash, Parry, Nerve.
+- **Clean clear:** the coil springs open; the head is stunned for the 3 s Punish Window (+50%), and armoured segments take full damage during it.
+- **Fail:** the coil crushes for one hit and releases the player.
+
+### Open for build
+
+- Mash press count for the 1.6 s window.
+- Constrict crush damage.
+- Spore Spit spray density.
+- Rust Patch spread rate and ramp across waves 26-50.
 
 ## Solar Forge
 
