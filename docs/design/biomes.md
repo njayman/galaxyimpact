@@ -353,10 +353,46 @@ Waves 60, 70, 75. Skeleton kept: a huge slow mass (0.32x speed), now basalt with
 - Magma Ram trail damage; Slag Spray density.
 - Vent Crawler jet cadence; heat ramp across waves 51-75.
 - Exact basalt and gold shading of the cave layer.
+- Colour note (from [Punctum: theme, Native Enemies and background](https://github.com/njayman/galaxyimpact/issues/15)): `Meteor Chunk`, Slagmaw's wave-70 drifter, moves from the old red to basalt and molten gold.
 
 ## Punctum
 
 **Status:** Draft. Waves 76-100, Biome Boss Kraken.
+
+### Theme and palette
+
+The region around the Punctum, a pinprick tear in space: a dark storm nebula crackling with lightning, starlight bending toward the point. The last Biome, the most hostile and the strangest.
+
+The old yellow accent clashed with Solar Forge's gold and the Belt's amber; it moves to the lightning's cyan.
+
+| Role       | Hex       | Note                                       |
+| ---------- | --------- | ------------------------------------------ |
+| Base       | `#C896E6` | lavender (`Palette::PunctumHaze`)          |
+| Accent     | `#7FE3FF` | electric cyan (replaces `Palette::PunctumAccent` yellow) |
+| Danger     | `#C43A3A` | shared danger red                          |
+| Background | `#06060A` | (`Palette::PunctumVoid`)                   |
+
+### Native Enemies
+
+No new enemy: the three do not overlap and Global Enemies cover ranged. `Meteor Chunk` is Slagmaw's summon, not a Punctum enemy.
+
+| Name | Status | Role | Look | Behaviour | Counterplay | Starting numbers |
+| --- | --- | --- | --- | --- | --- | --- |
+| `Null Crawler` | keep (recolour) | phasing chaser | lavender ring with cyan phase shimmer | chases, cycles in and out of phase | hit it while solid | unchanged (24 HP, speed 1.3) |
+| `Anomaly Warden` | keep (tell) | area denial | octagon, cyan | stationary; pulses every 4 s; new 0.6 s cyan charge-up ring as the tell | leave the ring before it fires | unchanged (90 HP, 3 damage, radius 90) |
+| `Fused Wreck` | keep (look) | mega-tank | wreckage cluster fused by lightning | slow chase | kite, focus fire | unchanged (260 HP, 4 contact) |
+
+### Global Enemy tint
+
+Lavender tint, about 15%.
+
+### Background
+
+Three layers, far to near:
+
+- **Far** (fixed): the Punctum itself, a tiny blinding point ringed by bent light, always in the same direction.
+- **Mid** (parallax 0.3): a lavender storm nebula lit from inside by each Thunder Strike flash.
+- **Near** (parallax 0.8): faint star streaks bent toward the Punctum.
 
 ### Biome Hazard
 
@@ -368,7 +404,7 @@ Waves 60, 70, 75. Skeleton kept: a huge slow mass (0.32x speed), now basalt with
 
 ### Wave Boss flavour
 
-Mini Wave Bosses at waves 85 and 95. Themed pool of 4-5 Wave Boss types: to be named in this Biome's design ticket.
+Mini Wave Bosses at waves 85 and 95. Pool: Void Herald, Nullpoint Marauder, Stormcaller, Judgment Spire.
 
 ## Banished realm
 
