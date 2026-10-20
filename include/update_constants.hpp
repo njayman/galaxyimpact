@@ -289,7 +289,7 @@ constexpr int32_t debrisSquallRockCount = 48; // fits the broken-rock bitmask
 constexpr int32_t debrisSquallRockScore = 2;
 
 constexpr float rustbloomPodCellSize = 140.0F;
-constexpr float rustbloomPodChance = 0.28F;
+constexpr float rustbloomPodChance = 0.22F;
 
 constexpr float solarForgeMeltThreshold = 10.0F;
 constexpr float solarForgeHeatDecayRate = 2.5F;

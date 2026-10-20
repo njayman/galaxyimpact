@@ -221,11 +221,11 @@ Green-brown tint, about 15%.
 
 ### Background
 
-Rework of `drawRustbloomBackground` into three layers, far to near:
+Rework of `drawRustbloomBackground` into three layers, far to near, kept faint and sparse behind gameplay:
 
-- **Far** (parallax 0.05): huge derelict capital-ship silhouettes furred with bloom.
-- **Mid** (parallax 0.3): the existing hull fragments plus slow spore motes.
-- **Near** (parallax 0.8): the existing pods and tendrils, pulsing.
+- **Far** (parallax 0.05, `drawRustbloomDerelicts`, drawn before the stars like the Belt planets): huge derelict capital ships (about 650-900 px long) on a 1100 px layer grid, about 60% of cells filled, placement varied per run by `backdropSeed`. Each is a faceted hull, every section split along the keel into a lit and a shadowed facet, snapped in two with the stern half knocked askew; plating rotted away ahead of the break bares the interior and a few ribs, with torn chunks adrift in the gap. Superstructure blocks cast short shadows, a stepped bridge sits aft, dead engines at the stern. Bloom furs the outer edges in patches (swaying slightly) and thickly along both cut faces, with a few pods rooted near the break. Drawn about 10% of the way from `RustbloomVoid` to full colour; at this parallax ships only ever slide in and out at the screen edges, never fading.
+- **Mid** (parallax 0.3): the existing hull fragments, thinned and toned toward the void, plus sparse spore motes, each circling slowly in place with a soft halo.
+- **Near** (parallax 0.8): the existing pods and tendrils, slightly sparser and fainter; pods breathe in size and core glow, and each tendril pulses with the blend of its two pods.
 
 ### Biome Hazard
 

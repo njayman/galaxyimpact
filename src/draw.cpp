@@ -1906,7 +1906,285 @@ void drawShatteredBeltBackground(const Game& game)
         }
     }
 }
+namespace
+{
+struct DerelictStation
+{
+    float u;    // along the hull, -0.5 stern to 0.5 bow, in hull lengths
+    float hw;   // half width, in hull lengths
+    float skew; // the cut leans: the top edge sits this far ahead of the bottom
+    bool aft;   // on the stern half, past the break
+};
+} // namespace
 
+// One derelict capital ship: a faceted hull snapped in two, the stern half knocked askew, with a
+// few superstructure blocks and dead engines. Bloom furs its edges in patches, thickest along the
+// break, with a few pods rooted in the plating. `tone` maps a colour and strength to the faint
+// final colour.
+void drawRustbloomDerelict(Vector2 center, float angle, float length, float seed,
+                           const std::function<Color(Color, float)>& tone)
+{
+    constexpr int32_t baseStations = 6;
+    constexpr std::array<float, baseStations> baseU{0.5F, 0.36F, 0.14F, -0.12F, -0.34F, -0.5F};
+    constexpr std::array<float, baseStations> baseHw{0.008F, 0.05F, 0.07F, 0.075F, 0.08F, 0.065F};
+    constexpr float breakGap = 0.035F;
+    constexpr float breakSkew = 0.025F;
+    constexpr float furStep = 7.0F; // px between fur strands along an edge
+
+    const Vector2 along{.x = std::cos(angle), .y = std::sin(angle)};
+    const Vector2 across{.x = -along.y, .y = along.x};
+    const float breakU = -0.05F + 0.15F * hashNoise(seed + 1.0F);
+    const float breakRot = (hashNoise(seed + 2.0F) - 0.5F) * 0.22F;
+    const float widthScale = 0.85F + 0.35F * hashNoise(seed + 3.0F);
+    const auto t = static_cast<float>(GetTime());
+
+    // Local (u, v) to world; the stern half turns about the break and drifts back from it.
+    const auto toWorld = [&](float u, float v, bool aft)
+    {
+        if (aft)
+        {
+            const float du = u - breakU;
+            u = breakU - breakGap + du * std::cos(breakRot) - v * std::sin(breakRot);
+            v = du * std::sin(breakRot) + v * std::cos(breakRot);
+        }
+        return Vector2Add(
+            center, Vector2Add(Vector2Scale(along, u * length), Vector2Scale(across, v * length)));
+    };
+
+    std::array<DerelictStation, baseStations + 2> st{};
+    size_t count = 0;
+    float breakHw = 0;
+    for (size_t i = 0; i < baseStations; i++)
+    {
+        const float hw = baseHw.at(i) * widthScale *
+                         (0.9F + 0.2F * hashNoise(seed + 10.0F + static_cast<float>(i)));
+        if (i > 0 && baseU.at(i - 1) > breakU && baseU.at(i) <= breakU)
+        {
+            const float k = (breakU - baseU.at(i - 1)) / (baseU.at(i) - baseU.at(i - 1));
+            breakHw = std::lerp(st.at(count - 1).hw, hw, k);
+            st.at(count++) =
+                DerelictStation{.u = breakU, .hw = breakHw, .skew = breakSkew, .aft = false};
+            st.at(count++) =
+                DerelictStation{.u = breakU, .hw = breakHw, .skew = breakSkew, .aft = true};
+        }
+        st.at(count++) =
+            DerelictStation{.u = baseU.at(i), .hw = hw, .skew = 0, .aft = baseU.at(i) <= breakU};
+    }
+
+    const Vector2 light = Vector2Normalize(Vector2{.x = -0.6F, .y = -0.8F});
+    const float topLit =
+        Vector2DotProduct(across, light) < 0 ? 1.0F : 0.0F; // which flank faces the light
+    const Color hull = ColorLerp(Palette::StructMid, Palette::RustbloomHaze, 0.55F);
+
+    const auto furEdge = [&](Vector2 a, Vector2 b, Vector2 inside, float density, float key)
+    {
+        const Vector2 d = Vector2Subtract(b, a);
+        const float len = Vector2Length(d);
+        Vector2 n = Vector2Normalize(Vector2{.x = -d.y, .y = d.x});
+        if (Vector2DotProduct(n, Vector2Subtract(Vector2Lerp(a, b, 0.5F), inside)) < 0)
+        {
+            n = Vector2Negate(n);
+        }
+        const auto strands = static_cast<int32_t>(len / furStep);
+        for (int32_t j = 0; j < strands; j++)
+        {
+            const float s = static_cast<float>(j);
+            // Patchy: a slow wave along the edge decides where the bloom has taken hold.
+            const float patch = 0.5F + 0.5F * std::sin(s * 0.23F + key * 3.1F);
+            if (hashNoise(key * 13.7F + s * 1.37F) > density * patch)
+            {
+                continue;
+            }
+            const Vector2 p =
+                Vector2Lerp(a, b, (s + hashNoise(key + s * 2.9F)) / static_cast<float>(strands));
+            const float sway = std::sin(t * 0.7F + s * 0.9F + key) * 0.12F;
+            const Vector2 dir = Vector2Rotate(n, (hashNoise(key * 3.3F + s) - 0.5F) * 0.9F + sway);
+            const float strand =
+                length * (0.006F + 0.022F * patch * hashNoise(key * 7.1F + s * 0.61F));
+            DrawLineEx(p, Vector2Add(p, Vector2Scale(dir, strand)), 1.0F,
+                       tone(Palette::RustbloomAccent, 1.2F + 0.8F * patch));
+        }
+    };
+
+    // Engines first, so the hull overlaps their roots.
+    const DerelictStation& stern = st.at(count - 1);
+    const int32_t engines = 2 + static_cast<int32_t>(hashNoise(seed + 4.0F) * 2.0F);
+    for (int32_t e = 0; e < engines; e++)
+    {
+        const float v =
+            stern.hw * (2.0F * (static_cast<float>(e) + 0.5F) / static_cast<float>(engines) - 1.0F);
+        const float r = stern.hw * 0.7F / static_cast<float>(engines);
+        fillConvexQuad({toWorld(-0.48F, v - r, true), toWorld(-0.48F, v + r, true),
+                        toWorld(-0.53F, v + r * 1.3F, true), toWorld(-0.53F, v - r * 1.3F, true)},
+                       tone(ColorBrightness(hull, -0.6F), 1.0F));
+    }
+
+    // Hull: each section split along the keel into a lit and a shadowed facet, plated in
+    // slightly different tones, with faint seams on every facet edge.
+    for (size_t i = 0; i + 1 < count; i++)
+    {
+        const DerelictStation& a = st.at(i);
+        const DerelictStation& b = st.at(i + 1);
+        if (a.aft != b.aft)
+        {
+            continue;
+        }
+        const float plate = 0.85F + 0.3F * hashNoise(seed + 20.0F + static_cast<float>(i));
+        for (const float side : {1.0F, -1.0F})
+        {
+            const std::array<Vector2, 4> q{toWorld(a.u + a.skew * side, a.hw * side, a.aft),
+                                           toWorld(b.u + b.skew * side, b.hw * side, b.aft),
+                                           toWorld(b.u, 0, b.aft), toWorld(a.u, 0, a.aft)};
+            const bool lit = (side > 0) == (topLit > 0.5F);
+            fillConvexQuad(q, tone(ColorBrightness(hull, lit ? 0.0F : -0.45F), plate));
+            for (size_t k = 0; k < q.size(); k++)
+            {
+                DrawLineEx(q.at(k), q.at((k + 1) % q.size()), 1.0F,
+                           tone(Palette::StructLight, lit ? 0.9F : 0.5F));
+            }
+            const Vector2 inside = toWorld((a.u + b.u) / 2, 0, a.aft);
+            furEdge(q[0], q[1], inside, 0.5F, seed + static_cast<float>(i) * 2.0F + side);
+        }
+    }
+
+    // Superstructure: raised blocks along the keel, each casting a short shadow away from the
+    // light, and a stepped bridge tower toward the stern.
+    const Vector2 castShadow = Vector2Scale(light, -length * 0.008F);
+    const auto drawBlock = [&](float u0, float u1, float w, bool aft, float lift)
+    {
+        const std::array<Vector2, 4> q{toWorld(u0, -w, aft), toWorld(u0, w, aft),
+                                       toWorld(u1, w, aft), toWorld(u1, -w, aft)};
+        std::array<Vector2, 4> shadow = q;
+        for (auto& v : shadow)
+        {
+            v = Vector2Add(v, Vector2Scale(castShadow, lift));
+        }
+        fillConvexQuad(shadow, tone(ColorBrightness(hull, -0.7F), 1.0F));
+        fillConvexQuad(q, tone(ColorBrightness(hull, 0.05F + 0.05F * lift), 1.0F));
+        for (size_t k = 0; k < q.size(); k++)
+        {
+            DrawLineEx(q.at(k), q.at((k + 1) % q.size()), 1.0F, tone(Palette::StructLight, 0.7F));
+        }
+    };
+    constexpr int32_t blocks = 3;
+    for (int32_t k = 0; k < blocks; k++)
+    {
+        const float bs = seed + 30.0F + static_cast<float>(k) * 3.0F;
+        const float u0 = 0.25F - 0.6F * (static_cast<float>(k) + hashNoise(bs) * 0.6F) / blocks;
+        const float u1 = u0 - 0.04F - 0.08F * hashNoise(bs + 1.0F);
+        const bool aft = u0 <= breakU;
+        if (aft != (u1 <= breakU))
+        {
+            continue; // would straddle the break
+        }
+        drawBlock(u0, u1, 0.012F + 0.02F * hashNoise(bs + 2.0F), aft, 1.0F);
+    }
+    drawBlock(-0.3F, -0.42F, 0.032F, true, 1.0F);
+    drawBlock(-0.33F, -0.39F, 0.018F, true, 2.0F);
+
+    // Plating rotted away just ahead of the break, baring the dark interior and a few ribs.
+    constexpr float baredLength = 0.07F;
+    const float baredHw = breakHw * 0.85F;
+    fillConvexQuad({toWorld(breakU + breakSkew * 0.85F, baredHw, false),
+                    toWorld(breakU + baredLength, baredHw, false),
+                    toWorld(breakU + baredLength, -baredHw, false),
+                    toWorld(breakU - breakSkew * 0.85F, -baredHw, false)},
+                   tone(ColorBrightness(hull, -0.8F), 1.0F));
+    constexpr int32_t ribs = 4;
+    for (int32_t k = 0; k < ribs; k++)
+    {
+        const float u = breakU + baredLength *
+                                     (static_cast<float>(k) + 0.4F +
+                                      0.5F * hashNoise(seed + 40.0F + static_cast<float>(k))) /
+                                     (ribs + 1);
+        DrawLineEx(toWorld(u + breakSkew * 0.85F, baredHw, false),
+                   toWorld(u - breakSkew * 0.85F, -baredHw, false), 1.5F, tone(hull, 0.8F));
+    }
+
+    // The break: both cut faces thick with bloom, and a few torn-off chunks adrift in the gap.
+    for (size_t i = 0; i + 1 < count; i++)
+    {
+        const DerelictStation& a = st.at(i);
+        if (a.u != breakU)
+        {
+            continue;
+        }
+        const Vector2 top = toWorld(a.u + a.skew, a.hw, a.aft);
+        const Vector2 bottom = toWorld(a.u - a.skew, -a.hw, a.aft);
+        const Vector2 inside = toWorld(a.aft ? a.u - 0.05F : a.u + 0.05F, 0, a.aft);
+        furEdge(top, bottom, inside, 1.0F, seed + (a.aft ? 50.0F : 60.0F));
+    }
+    constexpr int32_t chunks = 3;
+    for (int32_t k = 0; k < chunks; k++)
+    {
+        const float cs = seed + 70.0F + static_cast<float>(k) * 5.0F;
+        const Vector2 p = toWorld(breakU - breakGap * (0.2F + 0.6F * hashNoise(cs)),
+                                  (hashNoise(cs + 1.0F) - 0.5F) * 0.12F, false);
+        DrawPoly(p, 3 + k % 2, length * (0.006F + 0.008F * hashNoise(cs + 2.0F)),
+                 hashNoise(cs + 3.0F) * 360.0F, tone(hull, 0.9F));
+    }
+
+    // Pods rooted in the plating, clustered toward the break where the rot began.
+    constexpr int32_t pods = 6;
+    for (int32_t k = 0; k < pods; k++)
+    {
+        const float ps = seed + 90.0F + static_cast<float>(k) * 4.0F;
+        const float u = breakU + (hashNoise(ps) - 0.5F) * 0.5F * hashNoise(ps + 1.0F);
+        const bool aft = u <= breakU;
+        const Vector2 p = toWorld(u, (hashNoise(ps + 2.0F) - 0.5F) * 0.1F * widthScale, aft);
+        const float r = length * (0.006F + 0.012F * hashNoise(ps + 3.0F));
+        DrawCircleV(p, r, tone(Palette::RustbloomAccent, 1.1F));
+        DrawCircleV(Vector2Add(p, Vector2Scale(light, -r * 0.3F)), r * 0.55F,
+                    tone(Palette::RustbloomAccent, 0.7F));
+    }
+}
+
+// Rustbloom far layer (parallax 0.05): derelict capital ships in the dark, drawn before the stars
+// like the Belt planets. At this parallax a ship takes much of the arena to cross the screen, so
+// they only ever slide in and out at the edges.
+void drawRustbloomDerelicts(const Game& game)
+{
+    constexpr float parallax = 0.05F;
+    constexpr float cellSize = 1100.0F;
+    constexpr float shipChance = 0.6F;
+    constexpr float visibility = 0.1F; // how far toward full colour the ships are drawn
+
+    const Vector2 player = game.run.player.position;
+    const Vector2 layerCenter = Vector2Scale(player, parallax);
+    const Vector2 shift = Vector2Scale(player, 1.0F - parallax);
+    const float halfW = static_cast<float>(game.resources.screenWidth) / 2 + cellSize;
+    const float halfH = static_cast<float>(game.resources.screenHeight) / 2 + cellSize;
+    const Color voidColor = biomeVoidColor(game);
+    const std::function<Color(Color, float)> tone = [&](Color c, float k)
+    { return ColorLerp(voidColor, c, std::min(1.0F, visibility * k)); };
+
+    for (float cy = std::floor((layerCenter.y - halfH) / cellSize);
+         cy * cellSize < layerCenter.y + halfH; cy++)
+    {
+        for (float cx = std::floor((layerCenter.x - halfW) / cellSize);
+             cx * cellSize < layerCenter.x + halfW; cx++)
+        {
+            const float seed = cx * 7.13F + cy * 3.71F + game.run.backdropSeed;
+            if (hashNoise(seed * 1.7F + 2.0F) > shipChance)
+            {
+                continue;
+            }
+            const Vector2 jitter{.x = (hashNoise(seed + 5.0F) - 0.5F) * cellSize * 0.3F,
+                                 .y = (hashNoise(seed + 6.0F) - 0.5F) * cellSize * 0.3F};
+            const Vector2 center = Vector2Add(
+                shift, Vector2Add(Vector2{.x = cx * cellSize, .y = cy * cellSize}, jitter));
+            // Mostly lying across the screen, headed either way.
+            const float heading =
+                (hashNoise(seed + 7.0F) - 0.5F) * 0.9F +
+                (hashNoise(seed + 8.0F) < 0.5F ? 0.0F : std::numbers::pi_v<float>);
+            const float length = cellSize * (0.6F + 0.2F * hashNoise(seed + 9.0F));
+            drawRustbloomDerelict(center, heading, length, seed, tone);
+        }
+    }
+}
+
+// Rustbloom mid (0.3) and near (0.8) layers. The far derelicts are drawn separately, before the
+// stars.
 void drawRustbloomBackground(const Game& game)
 {
     if (currentBiome(game.run.waveNumber) != Biome::Rustbloom)
@@ -1915,22 +2193,32 @@ void drawRustbloomBackground(const Game& game)
     }
 
     const auto t = static_cast<float>(GetTime());
+    const Vector2 player = game.run.player.position;
+    const Color voidColor = biomeVoidColor(game);
 
+    // Mid (0.3): drifting hull fragments, and spore motes circling slowly in place.
     {
+        constexpr float parallax = 0.3F;
         constexpr float fragmentCellSize = 260.0F;
+        constexpr float fragmentChance = 0.22F;
+        constexpr float fragmentStrength = 0.25F; // toward full colour from the void
+        const Vector2 fragArea = Vector2Scale(player, parallax);
+        const Vector2 shift = Vector2Scale(player, 1.0F - parallax);
         const float halfW = static_cast<float>(game.resources.screenWidth) / 2 + fragmentCellSize;
         const float halfH = static_cast<float>(game.resources.screenHeight) / 2 + fragmentCellSize;
-        const Vector2 fragArea = game.run.player.position;
         const float fragStartX =
             std::floor((fragArea.x - halfW) / fragmentCellSize) * fragmentCellSize;
         const float fragStartY =
             std::floor((fragArea.y - halfH) / fragmentCellSize) * fragmentCellSize;
+        const Color fragColor =
+            ColorLerp(voidColor, ColorLerp(Palette::StructMid, Palette::RustbloomHaze, 0.3F),
+                      fragmentStrength);
         for (float y = fragStartY; y < fragArea.y + halfH; y += fragmentCellSize)
         {
             for (float x = fragStartX; x < fragArea.x + halfW; x += fragmentCellSize)
             {
                 const float presence = hashNoise(x * 0.011F + y * 0.023F + 50.0F);
-                if (presence > 0.35F)
+                if (presence > fragmentChance)
                 {
                     continue;
                 }
@@ -1938,30 +2226,60 @@ void drawRustbloomBackground(const Game& game)
                     (hashNoise(x * 0.031F + y * 0.013F + 61.0F) - 0.5F) * fragmentCellSize * 0.5F;
                 const float jy =
                     (hashNoise(x * 0.013F + y * 0.031F + 67.0F) - 0.5F) * fragmentCellSize * 0.5F;
-                const Vector2 fragCenter{.x = x + fragmentCellSize / 2 + jx,
-                                         .y = y + fragmentCellSize / 2 + jy};
-                const float fragRadius = fragmentCellSize * (0.22F + presence * 0.25F);
+                const Vector2 fragCenter{.x = x + fragmentCellSize / 2 + jx + shift.x,
+                                         .y = y + fragmentCellSize / 2 + jy + shift.y};
+                const float fragRadius = fragmentCellSize * (0.22F + presence * 0.4F);
                 const float rot = hashNoise(presence * 71.0F) * 360.0F;
 
                 const float shapeRoll = hashNoise(presence * 53.0F + 4.0F);
                 const int32_t sides =
                     shapeRoll < 0.2F ? 0 : 3 + static_cast<int32_t>(shapeRoll * 7.5F) % 6;
-                drawPanelShape(fragCenter, fragRadius, sides, rot, Fade(Palette::StructMid, 0.5F),
-                               presence * 90.0F);
+                drawPanelShape(fragCenter, fragRadius, sides, rot, fragColor, presence * 90.0F);
+            }
+        }
+
+        constexpr float moteCellSize = 200.0F;
+        constexpr float moteChance = 0.22F;
+        constexpr float moteOrbit = 26.0F;
+        const float moteStartX = std::floor((fragArea.x - halfW) / moteCellSize) * moteCellSize;
+        const float moteStartY = std::floor((fragArea.y - halfH) / moteCellSize) * moteCellSize;
+        for (float y = moteStartY; y < fragArea.y + halfH; y += moteCellSize)
+        {
+            for (float x = moteStartX; x < fragArea.x + halfW; x += moteCellSize)
+            {
+                const float m = hashNoise(x * 0.019F + y * 0.041F + 131.0F);
+                if (m > moteChance)
+                {
+                    continue;
+                }
+                const float phase = m * 97.0F;
+                const Vector2 pos{.x = x + moteCellSize * hashNoise(phase + 1.0F) +
+                                       std::sin(t * 0.21F + phase) * moteOrbit + shift.x,
+                                  .y = y + moteCellSize * hashNoise(phase + 2.0F) +
+                                       std::cos(t * 0.17F + phase) * moteOrbit + shift.y};
+                const float r = 1.2F + 1.4F * hashNoise(phase + 3.0F);
+                const float glow = 0.8F + 0.2F * std::sin(t * 0.9F + phase);
+                DrawCircleV(pos, r * 3.5F, Fade(Palette::RustbloomAccent, 0.03F * glow));
+                DrawCircleV(pos, r, Fade(Palette::RustbloomAccent, 0.3F * glow));
             }
         }
     }
 
+    // Near (0.8): bloom pods strung together by tendrils, both breathing slowly.
+    constexpr float parallax = 0.8F;
     constexpr float cellSize = rustbloomPodCellSize;
     const float halfW = static_cast<float>(game.resources.screenWidth) / 2 + cellSize;
     const float halfH = static_cast<float>(game.resources.screenHeight) / 2 + cellSize;
-    const Vector2 center = game.run.player.position;
+    const Vector2 center = Vector2Scale(player, parallax);
+    const Vector2 shift = Vector2Scale(player, 1.0F - parallax);
     const float startX = std::floor((center.x - halfW) / cellSize) * cellSize;
     const float startY = std::floor((center.y - halfH) / cellSize) * cellSize;
 
     constexpr float podChance = rustbloomPodChance;
     auto podPresence = [](float px, float py) -> float
     { return hashNoise(px * 0.021F + py * 0.037F); };
+    auto podPulse = [&](float px, float py) -> float
+    { return 0.5F + 0.5F * std::sin(t * 1.5F + px * 0.01F + py * 0.01F); };
 
     for (float y = startY; y < center.y + halfH; y += cellSize)
     {
@@ -1973,28 +2291,35 @@ void drawRustbloomBackground(const Game& game)
             }
             const float jx = (hashNoise(x * 0.05F + y * 0.02F + 3.0F) - 0.5F) * cellSize * 0.5F;
             const float jy = (hashNoise(x * 0.02F + y * 0.05F + 7.0F) - 0.5F) * cellSize * 0.5F;
-            const Vector2 podCenter{.x = x + cellSize / 2 + jx, .y = y + cellSize / 2 + jy};
+            const Vector2 podCenter{.x = x + cellSize / 2 + jx + shift.x,
+                                    .y = y + cellSize / 2 + jy + shift.y};
+            const float pulse = podPulse(x, y);
 
+            // A tendril carries the blend of its two pods' pulses.
             if (podPresence(x + cellSize, y) <= podChance)
             {
-                const Vector2 neighbor{.x = x + cellSize * 1.5F, .y = y + cellSize / 2};
-                DrawLineEx(podCenter, neighbor, 2.5F, Fade(Palette::RustbloomHaze, 0.25F));
+                const Vector2 neighbor{.x = x + cellSize * 1.5F + shift.x,
+                                       .y = y + cellSize / 2 + shift.y};
+                const float flow = (pulse + podPulse(x + cellSize, y)) / 2;
+                DrawLineEx(podCenter, neighbor, 2.5F,
+                           Fade(Palette::RustbloomHaze, 0.12F + 0.1F * flow));
             }
             if (podPresence(x, y + cellSize) <= podChance)
             {
-                const Vector2 neighbor{.x = x + cellSize / 2, .y = y + cellSize * 1.5F};
-                DrawLineEx(podCenter, neighbor, 2.5F, Fade(Palette::RustbloomHaze, 0.25F));
+                const Vector2 neighbor{.x = x + cellSize / 2 + shift.x,
+                                       .y = y + cellSize * 1.5F + shift.y};
+                const float flow = (pulse + podPulse(x, y + cellSize)) / 2;
+                DrawLineEx(podCenter, neighbor, 2.5F,
+                           Fade(Palette::RustbloomHaze, 0.12F + 0.1F * flow));
             }
 
             const float sizeSeed = hashNoise(x * 0.043F + y * 0.017F + 9.0F);
-            const float podRadius = cellSize * (0.14F + sizeSeed * 0.06F);
-            DrawCircleV(podCenter, podRadius, Fade(Palette::RustbloomAccent, 0.3F));
+            const float podRadius = cellSize * (0.14F + sizeSeed * 0.06F) * (0.94F + 0.06F * pulse);
+            DrawCircleV(podCenter, podRadius, Fade(Palette::RustbloomAccent, 0.22F));
             DrawCircleV(
                 Vector2Add(podCenter, Vector2{.x = podRadius * 0.5F, .y = podRadius * 0.3F}),
-                podRadius * 0.6F, Fade(Palette::RustbloomHaze, 0.25F));
-
-            const float pulse = 0.5F + 0.5F * std::sin(t * 1.5F + x * 0.01F + y * 0.01F);
-            DrawCircleV(podCenter, podRadius * 0.3F, Fade(Palette::Heal, 0.3F + 0.3F * pulse));
+                podRadius * 0.6F, Fade(Palette::RustbloomHaze, 0.2F));
+            DrawCircleV(podCenter, podRadius * 0.3F, Fade(Palette::Heal, 0.2F + 0.3F * pulse));
         }
     }
 }
@@ -2314,6 +2639,10 @@ void drawGameplayWorld(const Game& game)
     if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
     {
         drawBeltPlanet(game); // before the stars, so they shine in front of it
+    }
+    else if (currentBiome(game.run.waveNumber) == Biome::Rustbloom)
+    {
+        drawRustbloomDerelicts(game); // likewise
     }
     drawBackgroundStars(game, game.run.player.position);
     drawPunctumLightning(game);
