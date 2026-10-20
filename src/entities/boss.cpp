@@ -2723,6 +2723,11 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             {
                 boss.stateTimer = rubbleBarrageTell; // core flashes amber
             }
+            else if (boss.isWreckwormHead && !boss.krakenSnakeVariant &&
+                     boss.attack == BossAttack::Barrage)
+            {
+                boss.stateTimer = sporeSpitTell; // head flares green
+            }
             else if (boss.isBeltbreaker && boss.attack == BossAttack::GravityWell)
             {
                 boss.stateTimer = ringCrushTell; // plates contract round the core
@@ -2753,7 +2758,10 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 boss.color = Palette::Haze;
                 break;
             case BossAttack::Barrage:
-                boss.color = boss.isBeltbreaker ? Palette::ShatteredBeltAccent : Palette::BossSpread;
+                boss.color = boss.isBeltbreaker ? Palette::ShatteredBeltAccent
+                             : boss.isWreckwormHead && !boss.krakenSnakeVariant
+                                 ? Palette::RustbloomAccent
+                                 : Palette::BossSpread;
                 break;
             case BossAttack::GravityWell:
                 boss.color = boss.isBeltbreaker ? Palette::ShatteredBeltAccent : Palette::StructMid;
@@ -3036,7 +3044,9 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 const Vector2 direction =
                     Vector2Normalize(Vector2Subtract(game.run.player.position, bossCenter));
 
-                const bool isWreckworm = boss.isWreckwormHead || boss.isWreckwormSegment;
+                const bool isSporeSpit = boss.isWreckwormHead && !boss.krakenSnakeVariant;
+                const bool isWreckworm =
+                    !isSporeSpit && (boss.isWreckwormHead || boss.isWreckwormSegment);
                 constexpr std::array<Color, 3> fluidColors{Palette::RustbloomAccent, Palette::Charge,
                                                             Palette::Accent};
                 game.run.bossProjectiles.push_back(BossProjectile{
@@ -3053,6 +3063,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                     .health = 1,
                     .isMeteor = boss.isSlagmaw,
                     .isShard = boss.isBeltbreaker,
+                    .isSpore = isSporeSpit,
                     .isFluid = isWreckworm,
                     .fluidColor = fluidColors.at(static_cast<size_t>(GetRandomValue(0, 2)))});
                 playSFX(game, game.resources.sounds.spreadBurst);

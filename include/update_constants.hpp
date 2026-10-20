@@ -221,6 +221,8 @@ constexpr float wreckwormTailWrapSpinSpeedDeg = 90.0F;
 constexpr float wreckwormTailWrapMoveSpeed = 260.0F;
 constexpr float wreckwormTailWrapCoilSpeedDeg = 160.0F;
 
+// Spore Spit (Wreckworm's Barrage): head flares green, then green spores, Barrage behaviour.
+constexpr float sporeSpitTell = 0.5F;
 constexpr float wreckwormExposedLullDuration = 1.5F;
 constexpr float wreckwormMoltSpeedBoost = 0.15F;
 constexpr float wreckwormArmorDamageMult = 0.35F;

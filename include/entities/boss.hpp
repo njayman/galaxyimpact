@@ -461,6 +461,7 @@ class BossProjectile
 
     bool isMeteor = false;
     bool isShard = false; // Beltbreaker Rubble Barrage stone
+    bool isSpore = false; // Wreckworm Spore Spit spore
 
     bool isFluid = false;
     Color fluidColor = Palette::RustbloomAccent;

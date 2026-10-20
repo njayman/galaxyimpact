@@ -104,6 +104,7 @@ void drawChargeParticles(Vector2 center, float fraction, Color color, float maxR
                          float minRadius);
 void drawComet(const BossProjectile& projectile);
 void drawMeteorProjectile(const BossProjectile& projectile);
+void drawSporeProjectile(const BossProjectile& projectile);
 void drawKrakenHurledEnemy(const BossProjectile& projectile);
 void drawFluidBlob(Vector2 center, float radius, Color color, float seed, Vector2 trailDir);
 void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color color,
@@ -2548,6 +2549,10 @@ void drawGameplayWorld(const Game& game)
         {
             drawMeteorProjectile(p);
         }
+        else if (p.isSpore)
+        {
+            drawSporeProjectile(p);
+        }
         else if (p.isShard)
         {
             const Vector2 tail = Vector2Subtract(p.position, Vector2Scale(Vector2Normalize(p.velocity), p.radius * 3));
@@ -3540,6 +3545,14 @@ void drawBoss(const Game& game, const Boss& boss)
         ufoColor = ColorLerp(ufoColor, WHITE, 0.7F * flicker);
     }
 
+    if (boss.isWreckwormHead && !boss.krakenSnakeVariant && boss.state == BossState::WINDING_UP &&
+        boss.attack == BossAttack::Barrage)
+    {
+        // Spore Spit tell: the head flares pale green.
+        const float flare = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 24.0F);
+        ufoColor = ColorLerp(ufoColor, ColorLerp(Palette::RustbloomAccent, WHITE, 0.5F), flare);
+    }
+
     const float deathElapsed = bossDeathAnimDuration - boss.deathAnimTimer;
     if (boss.deathAnimTimer >= 0 && deathElapsed < bossDeathBlinkDuration)
     {
@@ -3738,6 +3751,15 @@ void drawBoss(const Game& game, const Boss& boss)
         const float progress =
             std::clamp(1 - boss.stateTimer / bossWindupDuration(boss.attack), 0.0F, 1.0F);
         drawChargeParticles(bossCenter, progress, boss.color, 100, 65);
+
+        if (boss.isWreckwormHead && !boss.krakenSnakeVariant && boss.attack == BossAttack::Barrage)
+        {
+            // Spore Spit tell: a pulsing green ring round the flaring head.
+            const float pulse = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 24.0F);
+            const float r = boss.size.x / 2;
+            DrawRing(bossCenter, r * 1.15F, r * (1.25F + 0.1F * pulse), 0, 360, 48,
+                     ColorLerp(Palette::RustbloomAccent, WHITE, 0.2F + 0.3F * pulse));
+        }
 
         if (boss.attack == BossAttack::Beam || boss.attack == BossAttack::WormholeBeam)
         {
@@ -4070,6 +4092,45 @@ void drawMeteorProjectile(const BossProjectile& projectile)
     DrawCircleLines(static_cast<int32_t>(projectile.position.x),
                     static_cast<int32_t>(projectile.position.y), projectile.radius,
                     Fade(ColorLerp(Palette::SolarForgeAccent, WHITE, 0.3F), 0.5F));
+}
+
+void drawSporeProjectile(const BossProjectile& projectile)
+{
+    // Wreckworm Spore Spit: a ribbed hexagonal spore with a ring of spines and a pale nucleus.
+    constexpr int32_t spineCount = 8;
+    constexpr int32_t trailCount = 3;
+    constexpr float spinDegPerSec = 90.0F;
+    const Color accent = Palette::RustbloomAccent;
+    const Color dark = ColorLerp(accent, Palette::Void, 0.55F);
+    const Color pale = ColorLerp(accent, WHITE, 0.5F);
+    const float r = projectile.radius * 1.4F;
+    const float rot = static_cast<float>(GetTime()) * spinDegPerSec;
+
+    const float speed = Vector2Length(projectile.velocity);
+    const Vector2 tailDir =
+        speed > 0 ? Vector2Scale(projectile.velocity, -1 / speed) : Vector2{.x = 0, .y = -1};
+    for (int32_t i = trailCount; i >= 1; i--)
+    {
+        const float frac = static_cast<float>(i) / static_cast<float>(trailCount);
+        const Vector2 puff =
+            Vector2Add(projectile.position, Vector2Scale(tailDir, r * 1.8F * static_cast<float>(i)));
+        DrawPoly(puff, 6, r * (0.8F - frac * 0.4F), rot, Fade(accent, 0.3F * (1 - frac * 0.7F)));
+    }
+
+    for (int32_t i = 0; i < spineCount; i++)
+    {
+        const float angle = (rot + static_cast<float>(i) * (360.0F / spineCount)) * DEG2RAD;
+        const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
+        const float len = i % 2 == 0 ? 1.9F : 1.55F;
+        const Vector2 tip = Vector2Add(projectile.position, Vector2Scale(dir, r * len));
+        DrawLineEx(Vector2Add(projectile.position, Vector2Scale(dir, r * 0.8F)), tip, 1.5F, dark);
+        DrawCircleV(tip, r * 0.18F, pale);
+    }
+
+    DrawPoly(projectile.position, 6, r * 1.2F, rot, dark);
+    DrawPoly(projectile.position, 6, r * 0.95F, rot + 30, accent);
+    DrawPolyLines(projectile.position, 6, r * 0.95F, rot + 30, Fade(pale, 0.7F));
+    DrawPoly(projectile.position, 3, r * 0.45F, -rot, pale);
 }
 
 void drawKrakenHurledEnemy(const BossProjectile& projectile)

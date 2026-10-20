@@ -262,6 +262,8 @@ Waves 30, 40, 50. Skeleton kept: a head trailing armoured segments (armour takes
 | Tail Wrap (`TailWrap`, kept) | as today | circles and chases | outrun, break line | as today |
 | Burrow Charge (`BurrowCharge`, kept, wave 40+) | as today | as today | as today | as today |
 
+As built: Spore Spit keeps the `Barrage` attack slot and branches on the Wreckworm head (not the Kraken's snake summon, which keeps its fluid blobs). The tell is 0.5 s: the head pulses pale green inside a pulsing green ring. It then fires Barrage's aimed stream, but each shot is a spinning hexagonal green spore with eight spines and a short puff trail. Skeleton audit found no drift: armoured segments take 35%, molts at 50% (waves 30, 40) and at 66% then 33% (wave 50) each shed the two rearmost segments as asteroids, add 0.15 to the head's speed multiplier and give a 1.5 s lull, and Burrow Charge joins the moveset from wave 40.
+
 ### Boss QTE: Constrict
 
 - **Trigger:** Coil Clamp closes with the player still inside (recurs; 20 s minimum gap). Escaping through the gap means no QTE.
