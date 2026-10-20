@@ -1578,6 +1578,250 @@ void drawSolarForgeCaveBackground(const Game& game)
 
 // Three parallax layers: an element at layer coordinate L with parallax p is drawn at
 // L + player * (1 - p), so it trails the camera by p.
+// Shattered Belt broken planets. The arena is cut into an equal grid of zones, one planet each.
+// A planet is a jittered low-poly sphere lit per facet; a fracture zone around a break point
+// pushes facets outward and apart (glowing seams on ember planets), the facets nearest the
+// break fly off as shards, and a tilted debris ring along the dust-lane angle wraps it.
+// Everything is drawn opaque and blended toward the void colour, so it reads as distant and
+// faint while still hiding the stars behind it.
+namespace
+{
+struct BeltPlanetFace
+{
+    std::array<Vector3, 4> v;
+    Vector3 normal;
+    float fracture; // 0 intact .. 1 at the break
+    bool shard;
+};
+
+struct BeltPlanet
+{
+    std::vector<BeltPlanetFace> faces;
+    Vector3 breakDir;
+    bool ember;
+};
+
+auto buildBeltPlanet(float seed) -> BeltPlanet
+{
+    constexpr int32_t latBands = 9;
+    constexpr int32_t lonSegments = 16;
+    const auto h = [seed](float k) { return hashNoise(seed * 31.7F + k); };
+
+    // Random orientation so each planet's facet grid sits differently.
+    const Matrix spin = MatrixMultiply(
+        MatrixMultiply(MatrixRotateX((h(1) - 0.5F) * 70.0F * DEG2RAD), MatrixRotateY(h(2) * 360.0F * DEG2RAD)),
+        MatrixRotateZ((h(3) - 0.5F) * 50.0F * DEG2RAD));
+
+    std::array<std::array<Vector3, lonSegments>, latBands + 1> grid{};
+    for (int32_t i = 0; i <= latBands; i++)
+    {
+        const bool pole = i == 0 || i == latBands;
+        for (int32_t j = 0; j < lonSegments; j++)
+        {
+            const float k = static_cast<float>(i * lonSegments + j);
+            const float lat = (-90.0F + 180.0F * (static_cast<float>(i) + (pole ? 0.0F : (h(10 + k) - 0.5F) * 0.5F)) /
+                                            latBands) *
+                              DEG2RAD;
+            const float lon = 360.0F *
+                              (static_cast<float>(j) + 0.5F * static_cast<float>(i % 2) +
+                               (h(500 + k) - 0.5F) * 0.45F) /
+                              lonSegments * DEG2RAD;
+            const float r = 1.0F + (h(900 + k) - 0.5F) * 0.07F;
+            const Vector3 p{.x = std::cos(lat) * std::cos(lon) * r, .y = std::sin(lat) * r,
+                            .z = std::cos(lat) * std::sin(lon) * r};
+            grid.at(i).at(j) = Vector3Transform(p, spin);
+        }
+    }
+
+    // Break point on the visible hemisphere (+z faces the viewer).
+    const float breakAngle = h(4) * 2.0F * std::numbers::pi_v<float>;
+    const float breakZ = 0.35F + h(5) * 0.4F;
+    const float breakXY = std::sqrt(1.0F - breakZ * breakZ);
+    const Vector3 breakDir{.x = std::cos(breakAngle) * breakXY, .y = std::sin(breakAngle) * breakXY, .z = breakZ};
+
+    BeltPlanet planet{.breakDir = breakDir, .ember = h(6) > 0.4F};
+    for (int32_t i = 0; i < latBands; i++)
+    {
+        for (int32_t j = 0; j < lonSegments; j++)
+        {
+            const int32_t jn = (j + 1) % lonSegments;
+            BeltPlanetFace face{.v = {grid.at(i).at(j), grid.at(i).at(jn), grid.at(i + 1).at(jn), grid.at(i + 1).at(j)}};
+            Vector3 c{};
+            for (const auto& v : face.v)
+            {
+                c = Vector3Add(c, v);
+            }
+            c = Vector3Scale(c, 0.25F);
+            face.normal = Vector3Normalize(c);
+            const float facing = Vector3DotProduct(face.normal, breakDir);
+            const float k = static_cast<float>(i * lonSegments + j);
+            face.fracture = std::clamp((facing - 0.45F) / (0.95F - 0.45F), 0.0F, 1.0F);
+            face.shard = facing > 0.8F + h(1300 + k) * 0.14F;
+
+            if (face.shard)
+            {
+                // Flung clear of the body, outward and along the break, shrunk a little.
+                const float fling = 0.12F + h(1700 + k) * 0.55F;
+                const Vector3 pos = Vector3Add(Vector3Scale(face.normal, 1.08F + fling * 0.3F),
+                                               Vector3Scale(breakDir, fling));
+                // Lay the facet's true shape flat toward the viewer, at a random spin, so a shard
+                // never collapses into an edge-on sliver.
+                const Vector3 u = Vector3Normalize(Vector3CrossProduct(face.normal, Vector3{.x = 0, .y = 0, .z = 1}));
+                const Vector3 w = Vector3CrossProduct(face.normal, u);
+                const float scale = 0.55F + h(2100 + k) * 0.35F;
+                const float turn = h(2300 + k) * 2.0F * std::numbers::pi_v<float>;
+                for (auto& v : face.v)
+                {
+                    const Vector3 d = Vector3Subtract(v, c);
+                    const float a = Vector3DotProduct(d, u) * scale;
+                    const float b = Vector3DotProduct(d, w) * scale;
+                    v = Vector3Add(pos, Vector3{.x = a * std::cos(turn) - b * std::sin(turn),
+                                                .y = a * std::sin(turn) + b * std::cos(turn), .z = 0});
+                }
+            }
+            else if (face.fracture > 0)
+            {
+                // Lifted and shrunk toward its own centre, opening seams onto the core.
+                const float f = face.fracture * face.fracture;
+                const Vector3 lifted = Vector3Add(Vector3Scale(c, 1.0F + 0.12F * f), Vector3Scale(breakDir, 0.08F * f));
+                for (auto& v : face.v)
+                {
+                    v = Vector3Add(lifted, Vector3Scale(Vector3Subtract(v, c), 1.0F - 0.22F * f));
+                }
+            }
+            planet.faces.push_back(face);
+        }
+    }
+
+    std::ranges::sort(planet.faces, {},
+                      [](const BeltPlanetFace& f) { return f.v[0].z + f.v[1].z + f.v[2].z + f.v[3].z; });
+    return planet;
+}
+
+void fillConvexQuad(const std::array<Vector2, 4>& p, Color color)
+{
+    // raylib only fills counter-clockwise triangles; pick the order from the winding.
+    const float cross = (p[1].x - p[0].x) * (p[2].y - p[0].y) - (p[1].y - p[0].y) * (p[2].x - p[0].x);
+    if (cross < 0)
+    {
+        DrawTriangle(p[0], p[1], p[2], color);
+        DrawTriangle(p[0], p[2], p[3], color);
+    }
+    else
+    {
+        DrawTriangle(p[0], p[2], p[1], color);
+        DrawTriangle(p[0], p[3], p[2], color);
+    }
+}
+} // namespace
+
+void drawBeltPlanet(const Game& game)
+{
+    constexpr int32_t zonesPerSide = 3;
+    constexpr float drift = 0.05F;      // screen offset per unit of distance from the zone centre
+    constexpr float visibility = 0.22F; // how far toward full colour the planet is drawn
+
+    const Vector2 player = game.run.player.position;
+    const float zoneSize = 2.0F * GameConstants::arenaHalf / zonesPerSide;
+    const auto zoneOf = [&](float v)
+    {
+        return std::clamp(static_cast<int32_t>(std::floor((v + GameConstants::arenaHalf) / zoneSize)), 0,
+                          zonesPerSide - 1);
+    };
+    const int32_t zx = zoneOf(player.x);
+    const int32_t zy = zoneOf(player.y);
+    const Vector2 zoneCenter{.x = -GameConstants::arenaHalf + (static_cast<float>(zx) + 0.5F) * zoneSize,
+                             .y = -GameConstants::arenaHalf + (static_cast<float>(zy) + 0.5F) * zoneSize};
+    const Vector2 rel = Vector2Subtract(zoneCenter, player);
+    // Full strength over most of the zone, fading out across the last quarter toward its edge.
+    const float edge = std::max(std::abs(rel.x), std::abs(rel.y)) / (zoneSize / 2);
+    const float vis = visibility * std::clamp((1.0F - edge) / 0.25F, 0.0F, 1.0F);
+    if (vis <= 0.005F)
+    {
+        return;
+    }
+
+    static int32_t cachedZone = -1;
+    static BeltPlanet planet;
+    if (const int32_t zone = zy * zonesPerSide + zx; zone != cachedZone)
+    {
+        cachedZone = zone;
+        planet = buildBeltPlanet(static_cast<float>(zone) + 1.0F);
+    }
+
+    const Color voidColor = biomeVoidColor(game);
+    const auto tone = [&](Color c, float k) { return ColorLerp(voidColor, c, vis * k); };
+    const Vector2 center = Vector2Add(player, Vector2Scale(rel, drift));
+    const float radius = static_cast<float>(game.resources.screenHeight) * 0.45F;
+    const auto proj = [&](Vector3 v) { return Vector2{.x = center.x + v.x * radius, .y = center.y - v.y * radius}; };
+    const Vector3 light = Vector3Normalize(Vector3{.x = -0.55F, .y = 0.65F, .z = 0.52F});
+    const Color rock = ColorLerp(Palette::Haze, Palette::ShatteredBeltAccent, 0.25F);
+    const Color emberHot{.r = 255, .g = 150, .b = 60, .a = 255};
+    const Color emberDeep{.r = 120, .g = 40, .b = 18, .a = 255};
+
+    // Debris ring: a tilted ellipse along the dust-lane angle, slowly orbiting. The far half
+    // goes behind the body and the near half in front.
+    const float laneRad = beltDustLaneAngleDeg * DEG2RAD;
+    const Vector2 ringMajor{.x = std::cos(laneRad), .y = std::sin(laneRad)};
+    const Vector2 ringMinor{.x = -ringMajor.y, .y = ringMajor.x};
+    const auto t = static_cast<float>(GetTime());
+    const auto drawRing = [&](bool front)
+    {
+        constexpr int32_t debrisCount = 150;
+        for (int32_t i = 0; i < debrisCount; i++)
+        {
+            const float k = static_cast<float>(i);
+            const float dist = radius * (1.35F + 0.4F * hashNoise(k * 1.3F + 3.0F));
+            const float theta = hashNoise(k * 2.7F + 9.0F) * 2.0F * std::numbers::pi_v<float> +
+                                t * 0.012F * (radius * 1.5F / dist);
+            if ((std::sin(theta) > 0) != front)
+            {
+                continue;
+            }
+            const Vector2 pos = Vector2Add(center, Vector2Add(Vector2Scale(ringMajor, std::cos(theta) * dist),
+                                                              Vector2Scale(ringMinor, std::sin(theta) * dist * 0.2F)));
+            const float size = radius * (0.006F + 0.03F * hashNoise(k * 4.1F + 1.0F) * hashNoise(k * 0.7F));
+            DrawPoly(pos, 3 + i % 3, size, hashNoise(k * 5.3F) * 360.0F + t * 4.0F,
+                     tone(rock, 0.55F + 0.45F * hashNoise(k * 6.1F)));
+        }
+    };
+
+    drawRing(false);
+
+    // Core, seen through the seams: molten on ember planets, dark rock otherwise.
+    DrawCircleV(center, radius * 0.97F, tone(planet.ember ? emberDeep : Palette::StructDark, 1.0F));
+    if (planet.ember)
+    {
+        const Vector2 glow = proj(Vector3Scale(planet.breakDir, 0.55F));
+        const Color hot = tone(emberHot, 0.55F);
+        DrawCircleGradient(glow, radius * 0.55F, hot,
+                           Fade(hot, 0.0F));
+    }
+
+    for (const auto& face : planet.faces)
+    {
+        if (!face.shard && face.normal.z < -0.05F)
+        {
+            continue;
+        }
+        const std::array<Vector2, 4> pts{proj(face.v[0]), proj(face.v[1]), proj(face.v[2]), proj(face.v[3])};
+        const float lit = 0.15F + 0.85F * std::max(0.0F, Vector3DotProduct(face.normal, light));
+        // Darken toward the silhouette so the sphere reads round.
+        const float limb = 0.55F + 0.45F * std::clamp(face.normal.z, 0.0F, 1.0F);
+        fillConvexQuad(pts, tone(ColorBrightness(rock, -0.75F + 0.75F * lit * limb), 1.0F));
+
+        const bool seam = planet.ember && face.fracture > 0;
+        const Color edge = seam ? tone(emberHot, 0.6F + 0.9F * face.fracture) : tone(rock, 0.35F + 0.2F * lit);
+        const float width = seam ? 1.0F + 1.5F * face.fracture : 1.0F;
+        for (size_t i = 0; i < pts.size(); i++)
+        {
+            DrawLineEx(pts.at(i), pts.at((i + 1) % pts.size()), width, edge);
+        }
+    }
+
+    drawRing(true);
+}
+
 void drawShatteredBeltBackground(const Game& game)
 {
     if (currentBiome(game.run.waveNumber) != Biome::ShatteredBelt)
@@ -1591,28 +1835,7 @@ void drawShatteredBeltBackground(const Game& game)
     const auto t = static_cast<float>(GetTime());
     const Color amber = Palette::ShatteredBeltAccent;
 
-    // Far (0.05): the split planet husk. The drift is clamped so a
-    // long trek across the arena never pushes it off screen.
-    {
-        constexpr float parallax = 0.05F;
-        const float huskRadius = halfH * 0.35F;
-        const Vector2 anchor{.x = halfW * 0.72F, .y = halfH * 0.1F};
-        const Color silhouette = ColorLerp(Palette::Void, Palette::StructDark, 0.45F);
-        Vector2 offset = Vector2Subtract(anchor, Vector2Scale(player, parallax));
-        offset.x = std::clamp(offset.x, -halfW, halfW);
-        offset.y = std::clamp(offset.y, -halfH, halfH);
-        const Vector2 center = Vector2Add(player, offset);
-
-        // Two halves pulled apart along the split, each with an amber rim on its lit side.
-        const Vector2 split{.x = huskRadius * 0.06F, .y = -huskRadius * 0.04F};
-        DrawCircleSector(Vector2Subtract(center, split), huskRadius, 100, 280, 48, silhouette);
-        DrawCircleSector(Vector2Add(center, split), huskRadius, -80, 100, 48, silhouette);
-        DrawRing(Vector2Subtract(center, split), huskRadius - 3, huskRadius, 150, 240, 32,
-                 Fade(amber, 0.35F));
-        DrawRing(Vector2Add(center, split), huskRadius - 3, huskRadius, -40, 40, 32,
-                 Fade(amber, 0.25F));
-
-    }
+    drawBeltPlanet(game);
 
     // Mid (0.3): faint diagonal amber dust lanes, dashes drifting slowly along the lane.
     {

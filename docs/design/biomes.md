@@ -126,7 +126,7 @@ Light amber dust tint, about 15%.
 
 Three layers, far to near:
 
-- **Far** (parallax 0.05): the planet's split husk, a small dark silhouette with amber rim light, off to the right, clear of the HUD.
+- **Far**: broken planets. The arena is cut into an equal 3x3 grid of zones with one planet each, drawn only while you are in its zone. A planet sits at screen centre when you are at the zone centre, drifts 0.05x your offset, and fades out over the last quarter toward the zone edge so the next one fades in. Each is a big, faint, low-poly faceted sphere, about 90% of screen height across and drawn at about 22% strength, so it reads as distant. A fracture zone around a break point lifts its facets apart onto the core. Some planets have a molten core with glowing ember seams; the rest have a dark core. The facets nearest the break fly off as shards, and a tilted debris ring runs along the dust-lane angle.
 - **Mid** (parallax 0.3): a few faint, irregularly spaced amber dust lanes drifting slowly. Debris Squalls arrive along the lane direction, so the background foreshadows them.
 - No near layer: the real asteroids already fill that role. Kept minimal after playtest feedback (too much on screen, evenly spaced parallel lines).
 
