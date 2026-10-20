@@ -216,7 +216,12 @@ void resetRun(Game& game)
 {
     const ShipDef& ship = currentShip(game);
 
-    game.run.player = Player{.position = Vector2{},
+    // Random start anywhere in the inner arena, so a run doesn't always begin in the same spot.
+    const float spawnAngle = static_cast<float>(GetRandomValue(0, 3599)) / 10.0F * DEG2RAD;
+    const float spawnDist = GameConstants::arenaHalf * 0.7F *
+                            std::sqrt(static_cast<float>(GetRandomValue(0, 1000)) / 1000.0F);
+    game.run.player = Player{.position = Vector2{.x = std::cos(spawnAngle) * spawnDist,
+                                                 .y = std::sin(spawnAngle) * spawnDist},
                              .velocity = Vector2{},
                              .radius = ship.radius,
                              .color = ship.color,
@@ -335,6 +340,7 @@ void resetRun(Game& game)
                                        static_cast<int32_t>(punctumThunderIntervalMax * 10))) /
                                    10.0F;
     game.run.punctumThunderFlashTimer = 0;
+    game.run.backdropSeed = static_cast<float>(GetRandomValue(0, 9999)) * 10.0F;
     game.run.debrisSquallTimer = debrisSquallIntervalStart;
     game.run.debrisSquallPhase = 0;
     game.run.punctumTrapActive = false;

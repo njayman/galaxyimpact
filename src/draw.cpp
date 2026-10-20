@@ -1598,7 +1598,11 @@ struct BeltPlanet
 {
     std::vector<BeltPlanetFace> faces;
     Vector3 breakDir;
-    bool ember;
+    Vector3 light;
+    Color rock;
+    bool live;     // molten core: glows through the seams and slowly pulses
+    Color coreHot; // live cores only
+    float pulsePhase;
 };
 
 auto buildBeltPlanet(float seed) -> BeltPlanet
@@ -1639,7 +1643,19 @@ auto buildBeltPlanet(float seed) -> BeltPlanet
     const float breakXY = std::sqrt(1.0F - breakZ * breakZ);
     const Vector3 breakDir{.x = std::cos(breakAngle) * breakXY, .y = std::sin(breakAngle) * breakXY, .z = breakZ};
 
-    BeltPlanet planet{.breakDir = breakDir, .ember = h(6) > 0.4F};
+    // Rock and live-core colours: varied, but all muted enough to sit in the Belt's palette.
+    constexpr std::array<Color, 6> rocks{Color{.r = 150, .g = 165, .b = 185, .a = 255}, Color{.r = 150, .g = 110, .b = 80, .a = 255},
+                                         Color{.r = 200, .g = 190, .b = 170, .a = 255}, Color{.r = 90, .g = 110, .b = 140, .a = 255},
+                                         Color{.r = 120, .g = 100, .b = 130, .a = 255}, Color{.r = 170, .g = 140, .b = 90, .a = 255}};
+    constexpr std::array<Color, 4> cores{Color{.r = 255, .g = 150, .b = 60, .a = 255}, Color{.r = 235, .g = 70, .b = 45, .a = 255},
+                                         Color{.r = 90, .g = 200, .b = 230, .a = 255}, Color{.r = 190, .g = 110, .b = 255, .a = 255}};
+    const float lightAngle = h(7) * 2.0F * std::numbers::pi_v<float>;
+    BeltPlanet planet{.breakDir = breakDir,
+                      .light = Vector3Normalize(Vector3{.x = std::cos(lightAngle), .y = std::sin(lightAngle), .z = 0.7F}),
+                      .rock = rocks.at(static_cast<size_t>(h(8) * rocks.size()) % rocks.size()),
+                      .live = h(6) > 0.5F,
+                      .coreHot = cores.at(static_cast<size_t>(h(9) * cores.size()) % cores.size()),
+                      .pulsePhase = h(11) * 10.0F};
     for (int32_t i = 0; i < latBands; i++)
     {
         for (int32_t j = 0; j < lonSegments; j++)
@@ -1718,7 +1734,6 @@ void fillConvexQuad(const std::array<Vector2, 4>& p, Color color)
 void drawBeltPlanet(const Game& game)
 {
     constexpr int32_t zonesPerSide = 3;
-    constexpr float drift = 0.05F;      // screen offset per unit of distance from the zone centre
     constexpr float visibility = 0.05F; // how far toward full colour the planet is drawn
 
     const Vector2 player = game.run.player.position;
@@ -1733,38 +1748,50 @@ void drawBeltPlanet(const Game& game)
     const Vector2 zoneCenter{.x = -GameConstants::arenaHalf + (static_cast<float>(zx) + 0.5F) * zoneSize,
                              .y = -GameConstants::arenaHalf + (static_cast<float>(zy) + 0.5F) * zoneSize};
     const Vector2 rel = Vector2Subtract(zoneCenter, player);
-    // Full strength over most of the zone, fading out across the last quarter toward its edge.
+    // The drift is scaled so the planet slides just off screen as you reach the zone edge; it
+    // only fades over the last few percent, to hide the debris ring that trails past the body.
+    const float radius = static_cast<float>(game.resources.screenHeight) * 0.45F;
+    const float screenHalf = static_cast<float>(std::max(game.resources.screenWidth, game.resources.screenHeight)) / 2;
+    const float drift = (screenHalf + radius) / (zoneSize / 2);
     const float edge = std::max(std::abs(rel.x), std::abs(rel.y)) / (zoneSize / 2);
-    const float vis = visibility * std::clamp((1.0F - edge) / 0.25F, 0.0F, 1.0F);
+    const float vis = visibility * std::clamp((1.0F - edge) / 0.06F, 0.0F, 1.0F);
     if (vis <= 0.005F)
     {
         return;
     }
 
-    static int32_t cachedZone = -1;
-    static BeltPlanet planet;
-    if (const int32_t zone = zy * zonesPerSide + zx; zone != cachedZone)
+    // Rebuilt on entering a zone or starting a run, so every run gets a new set of planets.
+    // Only some zones have one; the rest stay open space.
+    constexpr float planetChance = 0.45F;
+    const float seed = static_cast<float>(zy * zonesPerSide + zx) + 1.0F + game.run.backdropSeed;
+    if (hashNoise(seed * 17.3F + 5.0F) > planetChance)
     {
-        cachedZone = zone;
-        planet = buildBeltPlanet(static_cast<float>(zone) + 1.0F);
+        return;
+    }
+    static float cachedSeed = -1;
+    static BeltPlanet planet;
+    if (seed != cachedSeed)
+    {
+        cachedSeed = seed;
+        planet = buildBeltPlanet(seed);
     }
 
     const Color voidColor = biomeVoidColor(game);
     const auto tone = [&](Color c, float k) { return ColorLerp(voidColor, c, vis * k); };
     const Vector2 center = Vector2Add(player, Vector2Scale(rel, drift));
-    const float radius = static_cast<float>(game.resources.screenHeight) * 0.45F;
     const auto proj = [&](Vector3 v) { return Vector2{.x = center.x + v.x * radius, .y = center.y - v.y * radius}; };
-    const Vector3 light = Vector3Normalize(Vector3{.x = -0.55F, .y = 0.65F, .z = 0.52F});
-    const Color rock = ColorLerp(Palette::Haze, Palette::ShatteredBeltAccent, 0.25F);
-    const Color emberHot{.r = 255, .g = 150, .b = 60, .a = 255};
-    const Color emberDeep{.r = 120, .g = 40, .b = 18, .a = 255};
+    const Vector3 light = planet.light;
+    const Color rock = planet.rock;
+    const auto t = static_cast<float>(GetTime());
+    const float pulse = 0.75F + 0.25F * std::sin(t * 1.3F + planet.pulsePhase);
+    const Color emberHot = planet.coreHot;
+    const Color emberDeep = ColorBrightness(planet.coreHot, -0.55F);
 
     // Debris ring: a tilted ellipse along the dust-lane angle, slowly orbiting. The far half
     // goes behind the body and the near half in front.
     const float laneRad = beltDustLaneAngleDeg * DEG2RAD;
     const Vector2 ringMajor{.x = std::cos(laneRad), .y = std::sin(laneRad)};
     const Vector2 ringMinor{.x = -ringMajor.y, .y = ringMajor.x};
-    const auto t = static_cast<float>(GetTime());
     const auto drawRing = [&](bool front)
     {
         constexpr int32_t debrisCount = 150;
@@ -1789,11 +1816,11 @@ void drawBeltPlanet(const Game& game)
     drawRing(false);
 
     // Core, seen through the seams: molten on ember planets, dark rock otherwise.
-    DrawCircleV(center, radius * 0.97F, tone(planet.ember ? emberDeep : Palette::StructDark, 1.0F));
-    if (planet.ember)
+    DrawCircleV(center, radius * 0.97F, tone(planet.live ? emberDeep : Palette::StructDark, 1.0F));
+    if (planet.live)
     {
         const Vector2 glow = proj(Vector3Scale(planet.breakDir, 0.55F));
-        const Color hot = tone(emberHot, 0.55F);
+        const Color hot = tone(emberHot, 0.55F * pulse);
         DrawCircleGradient(glow, radius * 0.55F, hot,
                            Fade(hot, 0.0F));
     }
@@ -1810,8 +1837,8 @@ void drawBeltPlanet(const Game& game)
         const float limb = 0.55F + 0.45F * std::clamp(face.normal.z, 0.0F, 1.0F);
         fillConvexQuad(pts, tone(ColorBrightness(rock, -0.75F + 0.75F * lit * limb), 1.0F));
 
-        const bool seam = planet.ember && face.fracture > 0;
-        const Color edge = seam ? tone(emberHot, 0.6F + 0.9F * face.fracture) : tone(rock, 0.35F + 0.2F * lit);
+        const bool seam = planet.live && face.fracture > 0;
+        const Color edge = seam ? tone(emberHot, (0.6F + 0.9F * face.fracture) * pulse) : tone(rock, 0.35F + 0.2F * lit);
         const float width = seam ? 1.0F + 1.5F * face.fracture : 1.0F;
         for (size_t i = 0; i < pts.size(); i++)
         {

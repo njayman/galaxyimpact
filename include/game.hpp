@@ -231,6 +231,7 @@ struct GameplayState
     float punctumThunderFlashTimer;
     Vector2 punctumThunderBoltOrigin;
     float punctumThunderBoltSeed;
+    float backdropSeed; // per-run variety for biome backdrops
     float debrisSquallTimer;
     int32_t debrisSquallPhase; // 0 idle, 1 edge warning, 2 rocks sweeping
     float debrisSquallPhaseTimer;
