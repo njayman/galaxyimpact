@@ -460,7 +460,14 @@ Arena rules kept as is: horizontal wraparound strip, unlimited Nerve, unlimited 
 
 ### Theme and palette
 
-Its own palette, not Punctum's (Punctum's look appears only as the entry portal). To be designed in the Banished realm's design ticket.
+The prison beyond the tear, where Banished was sealed away. No stars and no light of its own: the only light is Banished's pale eye and the broken seals that once held it. Defeating Banished leads to the ending. Punctum's look appears only as the entry portal and the sealed tear behind.
+
+| Role       | Hex       | Note                                       |
+| ---------- | --------- | ------------------------------------------ |
+| Base       | `#CFC8B8` | ash bone (seals and chains)                |
+| Accent     | `#FFE2AA` | pale eye-gold (`Palette::Crit`, Banished's eye) |
+| Danger     | `#C43A3A` | shared danger red                          |
+| Background | `#0E0A14` | bruise-violet black (replaces the empty `Palette::Void`) |
 
 ### Native Enemies
 
@@ -472,7 +479,11 @@ None (finale arena).
 
 ### Background
 
-Its own background in place of today's empty black void. To be designed in the Banished realm's design ticket.
+Three layers, far to near, each tiling seamlessly along the wraparound strip so the wrap never shows a seam:
+
+- **Far** (fixed): the sealed tear, a lavender and cyan scar; the way in, now closed. On arrival the entry portal visibly collapses into it.
+- **Mid** (parallax 0.3): huge broken seal rings and chain fragments in ash bone, drifting slowly; they glow pale gold whenever Banished's eye opens.
+- **Near** (parallax 0.8): ash motes drifting upward.
 
 ### Biome Hazard
 
