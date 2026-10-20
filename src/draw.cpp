@@ -1835,8 +1835,6 @@ void drawShatteredBeltBackground(const Game& game)
     const auto t = static_cast<float>(GetTime());
     const Color amber = Palette::ShatteredBeltAccent;
 
-    drawBeltPlanet(game);
-
     // Mid (0.3): faint diagonal amber dust lanes, dashes drifting slowly along the lane.
     {
         constexpr float parallax = 0.3F;
@@ -2224,6 +2222,10 @@ void drawKrakenRemains(const Game& game)
 
 void drawGameplayWorld(const Game& game)
 {
+    if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
+    {
+        drawBeltPlanet(game); // before the stars, so they shine in front of it
+    }
     drawBackgroundStars(game, game.run.player.position);
     drawPunctumLightning(game);
     drawShatteredBeltBackground(game);
