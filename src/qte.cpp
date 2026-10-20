@@ -9,10 +9,20 @@
 // has no direct control, the HUD shows only the current prompt and the world
 // crawls at qteSlowMult. The owning boss poses prompts (qtePromptForThreat),
 // polls qteReadInput, plays the ship's reaction with qteStartAction and calls
-// bossQteEnd when its sequence is done or the player fails a prompt.
+// bossQteEnd when its sequence is done or the player fails a prompt. A Mash
+// prompt counts each Nerve press (SPACE / NERVE button) toward qteMashTarget
+// instead, with no wrong answer; the boss fails it when its timer runs out first. bossQteCanStart gates every
+// trigger, including the shared minimum gap between Boss QTEs.
 // -------------------------------------------------------------------------------
 
 auto bossQteActive(const Game& game) -> bool { return game.run.qteBossId >= 0; }
+
+auto bossQteCanStart(const Game& game) -> bool
+{
+    const auto& run = game.run;
+    return !bossQteActive(game) && run.qteCooldown <= 0 && run.player.health > 0 &&
+           !run.player.grabbed && !run.player.launched && run.bossCutscenePhase == 0;
+}
 
 auto bossQteSlowdown(const Game& game) -> float
 {
@@ -42,6 +52,8 @@ void bossQteBegin(Game& game, int32_t bossId)
     game.run.qteActionTimer = 0;
     game.run.qteActionVelocity = Vector2{};
     game.run.qteStickDir = 0;
+    game.run.qteMashCount = 0;
+    game.run.qteMashTarget = 0;
     clearQtePlayerPose(game.run.player);
 }
 
@@ -53,6 +65,7 @@ void bossQteEnd(Game& game)
     game.run.qteTimerMax = 0;
     game.run.qteActionTimer = 0;
     game.run.qteActionVelocity = Vector2{};
+    game.run.qteCooldown = UpdateConstants::qteMinGap;
     clearQtePlayerPose(game.run.player);
 }
 
@@ -89,10 +102,10 @@ auto qteSidestep(Vector2 threatDir) -> Vector2
     return Vector2{.x = -threatDir.y * side, .y = threatDir.x * side};
 }
 
-auto qtePromptForThreat(const Game& game, Vector2 threatDir) -> QtePrompt
+auto qtePromptForThreat(const Game& game, Vector2 threatDir, int32_t parryChance) -> QtePrompt
 {
     const int32_t pick = GetRandomValue(0, 99);
-    int32_t edge = UpdateConstants::qteParryChance;
+    int32_t edge = parryChance;
     if (pick < edge)
     {
         return QtePrompt::Parry;
@@ -141,6 +154,10 @@ auto qteReadInput(Game& game, QtePrompt prompt) -> int32_t
                        (shield && dashDown(game)) || (dash && shieldDown(game));
     const bool directional = up || left || right || down;
 
+    if (prompt == QtePrompt::Mash)
+    {
+        return nerve ? 1 : 0; // other inputs are ignored, never wrong
+    }
     if (prompt == QtePrompt::Parry)
     {
         if (combo)
@@ -216,6 +233,7 @@ void qteStartAction(Game& game, QtePrompt prompt, Vector2 threatDir)
         player.nerve = 0;
         playSFX(game, game.resources.sounds.nerveRelease);
         break;
+    case QtePrompt::Mash:
     case QtePrompt::None:
         break;
     }
@@ -230,11 +248,12 @@ void qteStartAction(Game& game, QtePrompt prompt, Vector2 threatDir)
 // Runs on real (unslowed) time from updateGameplay.
 void updateBossQte(Game& game, float deltaTime)
 {
+    auto& run = game.run;
     if (!bossQteActive(game))
     {
+        run.qteCooldown = std::max(0.0F, run.qteCooldown - deltaTime);
         return;
     }
-    auto& run = game.run;
     if (run.qteTimer > 0)
     {
         run.qteTimer -= deltaTime;
@@ -255,6 +274,11 @@ void updateBossQte(Game& game, float deltaTime)
     if (Boss* core = findBeltbreakerById(game, run.qteBossId); core != nullptr)
     {
         updateBeltbreakerPlateRush(game, *core, deltaTime);
+        return;
+    }
+    if (Boss* head = findWreckwormHeadById(game, run.qteBossId); head != nullptr)
+    {
+        updateWreckwormConstrict(game, *head, deltaTime);
         return;
     }
     // Owner died mid-cutscene.

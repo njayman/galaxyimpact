@@ -285,11 +285,10 @@ As built: Spore Spit keeps the `Barrage` attack slot and branches on the Wreckwo
 - **Prompts:** 9 total (1 Mash + 8 strikes), strikes at 0.8 s window, 20% Parry share; strikes use directions, Shield, Dash, Parry, Nerve.
 - **Clean clear:** the coil springs open; the head is stunned for the 3 s Punish Window (+50%), and armoured segments take full damage during it.
 - **Fail:** the coil crushes for one hit and releases the player.
+- As built: the Mash takes 8 presses in the 1.6 s window (5 a second, leaving room to react); it is mashed on the Nerve input (SPACE, or the NERVE touch button) and other inputs are ignored. The crush is 2 base damage, scaled like other enemy hits (as heavy as a plate dash or Ring Crush). The coil catches the player when its closing ring reaches them outside the gap, then rides with the ship and keeps tightening during the Mash. Strikes come from segments that have not struck yet. Clean or failed, the clamp skips to its release and the segments rejoin the chain; during the Punish Window the head stops moving, starts no attacks, segments hold their volleys, and a ring of pulsing fragments marks the stunned head. The 20 s minimum gap is shared by every Boss QTE, Plate Rush included.
 
 ### Open for build
 
-- Mash press count for the 1.6 s window.
-- Constrict crush damage.
 - Spore Spit spray density.
 - Rust Patch spread rate and ramp across waves 26-50.
 

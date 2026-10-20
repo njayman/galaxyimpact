@@ -43,7 +43,8 @@ enum class QtePrompt : std::uint8_t
     Shield,
     Dash,
     Parry, // shield + dash
-    Nerve
+    Nerve,
+    Mash // nerve, repeatedly, to fill a bar
 };
 
 enum class GameState : std::uint8_t
@@ -218,6 +219,9 @@ struct GameplayState
     Vector2 qteActionVelocity{};
     Vector2 qteThreatDir{}; // incoming threat's travel direction, for the HUD edge marker
     int32_t qteStickDir = 0; // last touch-stick cardinal, for flick edge detection
+    int32_t qteMashCount = 0;  // presses landed on the current Mash prompt
+    int32_t qteMashTarget = 0; // presses that fill the Mash bar
+    float qteCooldown = 0;     // minimum gap before the next Boss QTE may start
     float asteroidSpawnTimer;
     float enemySpawnTimer;
     float solarForgeHeatMeter;

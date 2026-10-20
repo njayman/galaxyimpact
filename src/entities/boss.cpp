@@ -13,6 +13,8 @@
 #include <vector>
 
 void seedWreckwormTrail(Boss& head, Vector2 headCenter, Vector2 trailDir);
+void beginWreckwormConstrict(Game& game, Boss& head);
+auto wreckwormCoilSegmentDeg(const Boss& head, int32_t segmentIndex) -> float;
 
 auto isGenericMovesetAttack(BossAttack attack) -> bool
 {
@@ -1211,6 +1213,11 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
         boss.recoveryTimer -= deltaTime;
     }
 
+    if (boss.isWreckwormHead && boss.wreckwormPunishTimer > 0)
+    {
+        return; // stunned by a clean Constrict
+    }
+
     if (!boss.isWreckwormSegment && !(boss.isBeltbreakerPlate && boss.plateAttached) &&
         boss.health > 0 && boss.state == BossState::IDLE && boss.dazedTimer <= 0 &&
         boss.phaseInvulnTimer <= 0 &&
@@ -1635,9 +1642,7 @@ void updateBeltbreakerCore(Game& game, Boss& core, float deltaTime)
                 UpdateConstants::beltbreakerShieldedDuration(core.plateCount);
             // First biome-boss QTE: the plates suddenly burst away and the
             // plate-rush cutscene (reaction prompts) takes over.
-            if (!bossQteActive(game) && game.run.player.health > 0 &&
-                !game.run.player.grabbed && !game.run.player.launched &&
-                game.run.bossCutscenePhase == 0)
+            if (bossQteCanStart(game))
             {
                 beginBeltbreakerPlateRush(game, core);
             }
@@ -1931,6 +1936,190 @@ void updateBeltbreakerPlateRush(Game& game, Boss& core, float deltaTime)
     {
         endBeltbreakerPlateRush(game, core, true); // every prompt answered
     }
+}
+
+// --- Wreckworm constrict QTE (cutscene) ------------------------------------
+//
+// A closing Coil Clamp that reaches the player outside its gap starts the boss
+// QTE cutscene (qte.cpp). The coil keeps tightening around the ship while a
+// Mash prompt pries it open; then segments rear out from different points on
+// the coil and lunge in, one prompt each. Clean clear: the coil springs open
+// and the head is stunned for the Punish Window. A failed mash or a wrong or
+// late answer: the coil crushes once and lets go.
+// --------------------------------------------------------------------------
+
+auto findWreckwormHeadById(Game& game, int32_t instanceId) -> Boss*
+{
+    for (auto& boss : game.run.bosses)
+    {
+        if (boss.isWreckwormHead && boss.health > 0 && boss.instanceId == instanceId)
+        {
+            return &boss;
+        }
+    }
+    return nullptr;
+}
+
+auto wreckwormCoilSegmentDeg(const Boss& head, int32_t segmentIndex) -> float
+{
+    const float t = head.segmentCount > 1 ? static_cast<float>(segmentIndex) /
+                                                static_cast<float>(head.segmentCount - 1)
+                                          : 0.0F;
+    return head.coilClampGapDeg + wreckwormCoilClampGapDeg / 2.0F +
+           t * (360.0F - wreckwormCoilClampGapDeg);
+}
+
+void beginWreckwormConstrict(Game& game, Boss& head)
+{
+    bossQteBegin(game, head.instanceId);
+    game.run.qtePrompt = QtePrompt::Mash;
+    game.run.qteTimer = UpdateConstants::wreckwormConstrictMashDuration;
+    game.run.qteTimerMax = UpdateConstants::wreckwormConstrictMashDuration;
+    game.run.qteMashTarget = UpdateConstants::wreckwormConstrictMashPresses;
+    game.run.qteThreatDir = Vector2{};
+    head.constrictStrikesLeft = UpdateConstants::wreckwormConstrictStrikes;
+    head.constrictLungeSegment = -1;
+    head.constrictLungeFrac = 0;
+    head.constrictStruckMask = 0;
+    playSFX(game, game.resources.sounds.bossWindUp);
+    triggerShake(game, 8, 0.3F);
+}
+
+// Either way the coil lets go: the clamp skips to its release, segments rejoin the chain.
+void endWreckwormConstrict(Game& game, Boss& head, bool clean)
+{
+    bossQteEnd(game);
+    head.constrictLungeSegment = -1;
+    head.stateTimer = std::min(head.stateTimer, wreckwormCoilClampReleaseDuration);
+    if (clean)
+    {
+        head.wreckwormPunishTimer = UpdateConstants::wreckwormPunishWindow;
+        playSFX(game, game.resources.sounds.critical);
+        triggerShake(game, 10, 0.35F);
+        return;
+    }
+    damagePlayer(game, enemyDamage(game, UpdateConstants::wreckwormConstrictCrushDamage));
+    playSFX(game, game.resources.sounds.nerveFizzle);
+    triggerShake(game, 12, 0.35F);
+}
+
+// A segment from a new point on the coil rears out and lunges at the player. Segments that
+// already struck are skipped while fresh ones remain; never the same one twice in a row.
+void launchWreckwormConstrictStrike(Game& game, Boss& head)
+{
+    std::vector<int32_t> fresh;
+    std::vector<int32_t> choices;
+    for (int32_t i = 0; i < head.segmentCount; i++)
+    {
+        if (i != head.constrictLungeSegment && findWreckwormSegment(game, head.instanceId, i) != nullptr)
+        {
+            choices.push_back(i);
+            if (i >= 64 || (head.constrictStruckMask & (uint64_t{1} << i)) == 0)
+            {
+                fresh.push_back(i);
+            }
+        }
+    }
+    if (!fresh.empty())
+    {
+        choices = std::move(fresh);
+    }
+    if (choices.empty())
+    {
+        endWreckwormConstrict(game, head, true); // no segments left to strike with
+        return;
+    }
+    const int32_t index =
+        choices.at(static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(choices.size()) - 1)));
+    const float deg = wreckwormCoilSegmentDeg(head, index);
+    const Vector2 travelDir{.x = -std::cos(deg * DEG2RAD), .y = -std::sin(deg * DEG2RAD)};
+
+    head.constrictLungeSegment = index;
+    head.constrictLungeFrac = 0;
+    if (index < 64)
+    {
+        head.constrictStruckMask |= uint64_t{1} << index;
+    }
+    head.constrictStrikesLeft--;
+    game.run.qtePrompt =
+        qtePromptForThreat(game, travelDir, UpdateConstants::wreckwormConstrictParryChance);
+    game.run.qteThreatDir = travelDir;
+    game.run.qteTimer = UpdateConstants::wreckwormConstrictStrikeWindow;
+    game.run.qteTimerMax = UpdateConstants::wreckwormConstrictStrikeWindow;
+    playSFX(game, game.resources.sounds.bossWindUp);
+}
+
+void updateWreckwormConstrict(Game& game, Boss& head, float deltaTime)
+{
+    auto& run = game.run;
+    if (head.state != BossState::SHOOTING || head.attack != BossAttack::CoilClamp)
+    {
+        endWreckwormConstrict(game, head, false); // the clamp was cut short
+        return;
+    }
+    // The coil rides with the ship and keeps tightening on real time, short of letting go.
+    head.targetPosition = run.player.position;
+    head.stateTimer = std::max(wreckwormCoilClampReleaseDuration + UpdateConstants::wreckwormConstrictHoldMargin,
+                               head.stateTimer - deltaTime);
+
+    if (run.qtePrompt == QtePrompt::Mash)
+    {
+        if (qteReadInput(game, QtePrompt::Mash) > 0)
+        {
+            run.qteMashCount++;
+            triggerShake(game, 3, 0.08F);
+        }
+        if (run.qteMashCount >= run.qteMashTarget)
+        {
+            run.qtePrompt = QtePrompt::None;
+            run.qteTimer = UpdateConstants::wreckwormConstrictMashBeat;
+            run.qteTimerMax = 0;
+            playSFX(game, game.resources.sounds.critical);
+        }
+        else if (run.qteTimer <= 0)
+        {
+            endWreckwormConstrict(game, head, false);
+        }
+        return;
+    }
+
+    if (run.qtePrompt != QtePrompt::None)
+    {
+        Boss* seg = findWreckwormSegment(game, head.instanceId, head.constrictLungeSegment);
+        head.constrictLungeFrac =
+            1.0F - std::clamp(run.qteTimer / UpdateConstants::wreckwormConstrictStrikeWindow, 0.0F, 1.0F);
+        const int32_t answer = qteReadInput(game, run.qtePrompt);
+        if (seg == nullptr || answer > 0)
+        {
+            // Answered (or the striking segment died): it falls back into the coil.
+            if (seg != nullptr)
+            {
+                qteStartAction(game, run.qtePrompt, run.qteThreatDir);
+                seg->hitFlashTimer = UpdateConstants::hitFlashDuration;
+                playSFX(game, game.resources.sounds.menuMove);
+            }
+            head.constrictLungeFrac = 0; // kept as the last striker, so the next comes from elsewhere
+            run.qtePrompt = QtePrompt::None;
+            run.qteTimer = UpdateConstants::wreckwormConstrictBeat;
+            run.qteTimerMax = 0;
+        }
+        else if (answer < 0 || run.qteTimer <= 0)
+        {
+            endWreckwormConstrict(game, head, false);
+        }
+        return;
+    }
+
+    if (run.qteTimer > 0)
+    {
+        return; // beat between strikes
+    }
+    if (head.constrictStrikesLeft > 0)
+    {
+        launchWreckwormConstrictStrike(game, head);
+        return;
+    }
+    endWreckwormConstrict(game, head, true); // every prompt answered
 }
 
 auto wreckwormDashRushOffDist(const Game& game) -> float
@@ -2494,6 +2683,11 @@ void updateWreckwormSegmentVolley(Game& game, Boss& segment, float deltaTime)
     {
         return;
     }
+    if (const Boss* head = findWreckwormHeadById(game, segment.segmentOwnerId);
+        head != nullptr && head->wreckwormPunishTimer > 0)
+    {
+        return; // the stunned worm holds fire; the volley goes out once the window closes
+    }
     segment.segmentVolleyTimer =
         static_cast<float>(GetRandomValue(
             static_cast<int32_t>(wreckwormSegmentVolleyIntervalMin * 10),
@@ -2609,6 +2803,10 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake, bool pi
     {
         amount = static_cast<int32_t>(static_cast<float>(amount) * UpdateConstants::beltbreakerPunishDamageMult);
     }
+    if (boss.isWreckwormHead && boss.wreckwormPunishTimer > 0)
+    {
+        amount = static_cast<int32_t>(static_cast<float>(amount) * UpdateConstants::wreckwormPunishDamageMult);
+    }
 
     if (boss.isWreckwormHead && boss.state == BossState::SHOOTING &&
         boss.attack == BossAttack::TailWrap && !piercesTailWrap && boss.segmentCount > 0 &&
@@ -2628,10 +2826,15 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake, bool pi
         amount = std::max(1, static_cast<int32_t>(static_cast<float>(amount) * mult));
     }
 
+    // During a Constrict Punish Window the armour takes full damage.
     if (boss.isWreckwormSegment && boss.isArmorSegment)
     {
-        amount = std::max(
-            1, static_cast<int32_t>(static_cast<float>(amount) * wreckwormArmorDamageMult));
+        const Boss* head = findWreckwormHeadById(game, boss.segmentOwnerId);
+        if (head == nullptr || head->wreckwormPunishTimer <= 0)
+        {
+            amount = std::max(
+                1, static_cast<int32_t>(static_cast<float>(amount) * wreckwormArmorDamageMult));
+        }
     }
 
     boss.health -= amount;
@@ -2689,6 +2892,11 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         return;
     }
 
+    if (boss.isWreckwormHead && boss.wreckwormPunishTimer > 0)
+    {
+        boss.wreckwormPunishTimer -= deltaTime; // stunned: starts no attack (IDLE below)
+    }
+
     if (boss.usesDirector && updateBossDirector(game, boss, bossCenter, deltaTime))
     {
         return;
@@ -2712,7 +2920,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
     case BossState::IDLE:
         boss.attackTimer -= deltaTime;
 
-        if (boss.attackTimer <= 0 && boss.health > 0)
+        if (boss.attackTimer <= 0 && boss.health > 0 && boss.wreckwormPunishTimer <= 0)
         {
             boss.attack = boss.moveset.at(static_cast<size_t>(
                 GetRandomValue(0, static_cast<int32_t>(boss.moveset.size()) - 1)));
@@ -3144,8 +3352,25 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             const float radius =
                 wreckwormCoilClampStartRadius +
                 (wreckwormCoilClampEndRadius - wreckwormCoilClampStartRadius) * progress;
-            const float arcDeg = 360.0F - wreckwormCoilClampGapDeg;
             const float releaseStart = wreckwormCoilClampAssembleDuration + wreckwormCoilClampDuration;
+
+            // Closing on a player who did not slip out through the gap starts Constrict.
+            if (!boss.krakenSnakeVariant && elapsed >= wreckwormCoilClampAssembleDuration &&
+                elapsed < releaseStart && bossQteCanStart(game))
+            {
+                const Vector2 fromCenter = Vector2Subtract(game.run.player.position, boss.targetPosition);
+                const float dist = Vector2Length(fromCenter);
+                const float playerDeg = std::atan2(fromCenter.y, fromCenter.x) * RAD2DEG;
+                // Dead centre there is no side to slip out of.
+                const bool inGap = dist > wreckwormCoilClampEndRadius / 2.0F &&
+                                   std::abs(std::remainder(playerDeg - boss.coilClampGapDeg, 360.0F)) <
+                                       wreckwormCoilClampGapDeg / 2.0F;
+                if (dist <= radius && radius - dist <= UpdateConstants::wreckwormConstrictCatchBand &&
+                    !inGap)
+                {
+                    beginWreckwormConstrict(game, boss);
+                }
+            }
 
             for (int32_t i = 0; i < boss.segmentCount; i++)
             {
@@ -3170,15 +3395,22 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 
                 if (shouldBeAssembled)
                 {
-                    const float t = boss.segmentCount > 1
-                                        ? static_cast<float>(i) /
-                                              static_cast<float>(boss.segmentCount - 1)
-                                        : 0.0F;
-                    const float deg =
-                        boss.coilClampGapDeg + wreckwormCoilClampGapDeg / 2.0F + t * arcDeg;
+                    const float deg = wreckwormCoilSegmentDeg(boss, i);
+                    float reach = radius;
+                    if (i == boss.constrictLungeSegment)
+                    {
+                        // Constrict strike: rear out, then lunge onto the player at the timeout.
+                        const float frac = boss.constrictLungeFrac;
+                        const float rear = radius + UpdateConstants::wreckwormConstrictLungeRear;
+                        reach = frac < UpdateConstants::wreckwormConstrictLungeRearFrac
+                                    ? Lerp(radius, rear, frac / UpdateConstants::wreckwormConstrictLungeRearFrac)
+                                    : Lerp(rear, 0.0F,
+                                           (frac - UpdateConstants::wreckwormConstrictLungeRearFrac) /
+                                               (1.0F - UpdateConstants::wreckwormConstrictLungeRearFrac));
+                    }
                     const Vector2 ringCenter = Vector2Add(
-                        boss.targetPosition, Vector2{.x = std::cos(deg * DEG2RAD) * radius,
-                                                     .y = std::sin(deg * DEG2RAD) * radius});
+                        boss.targetPosition, Vector2{.x = std::cos(deg * DEG2RAD) * reach,
+                                                     .y = std::sin(deg * DEG2RAD) * reach});
                     seg->position = Vector2Subtract(
                         ringCenter, Vector2{.x = seg->size.x / 2, .y = seg->size.y / 2});
                 }

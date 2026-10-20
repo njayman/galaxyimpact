@@ -202,6 +202,13 @@ class Boss
     std::vector<float> moltThresholds;
 
     float coilClampGapDeg = 0;
+    // Constrict QTE: strikes still to pose, the striking (or last) segment, -1 none, and how far
+    // along its lunge is.
+    int32_t constrictStrikesLeft = 0;
+    int32_t constrictLungeSegment = -1;
+    float constrictLungeFrac = 0;
+    uint64_t constrictStruckMask = 0; // segments that already struck this Constrict
+    float wreckwormPunishTimer = 0; // Punish Window after a clean Constrict
 
     bool isWreckwormSegment = false;
     int32_t segmentOwnerId = -1;

@@ -44,6 +44,7 @@ constexpr float qteNerveGain = 10.0F; // nerve per answered prompt
 constexpr int32_t qteParryChance = 15;
 constexpr int32_t qteDashChance = 15;
 constexpr int32_t qteShieldChance = 15;
+constexpr float qteMinGap = 20.0F; // shared rule: at least this long between Boss QTEs
 // Beltbreaker plate rush
 constexpr float beltbreakerPlateRushCueDuration = 0.6F;
 constexpr float beltbreakerPlateRushOffscreenMargin = 140.0F;
@@ -60,6 +61,21 @@ constexpr float beltbreakerRushNerveDamageFrac = 0.35F;
 constexpr float beltbreakerRushStagger = 1.0F;
 constexpr float beltbreakerPunishWindow = 3.0F;     // clean clear: exposed core
 constexpr float beltbreakerPunishDamageMult = 1.5F; // stacks with the 2.5x dash bonus
+// Wreckworm constrict
+constexpr float wreckwormConstrictCatchBand = 48.0F; // ring this close outside the player catches them
+constexpr float wreckwormConstrictHoldMargin = 0.05F; // keeps the coil shut while the cutscene runs
+constexpr float wreckwormConstrictMashDuration = 1.6F;
+constexpr int32_t wreckwormConstrictMashPresses = 8; // 5 a second, leaving room to react
+constexpr float wreckwormConstrictMashBeat = 0.6F; // lets a mash settle before the first strike
+constexpr int32_t wreckwormConstrictStrikes = 8;
+constexpr float wreckwormConstrictStrikeWindow = 0.8F; // segment arrives exactly at timeout
+constexpr float wreckwormConstrictBeat = 0.35F;
+constexpr int32_t wreckwormConstrictParryChance = 20;
+constexpr float wreckwormConstrictLungeRear = 120.0F; // a striking segment rears out this far first
+constexpr float wreckwormConstrictLungeRearFrac = 0.4F;
+constexpr int32_t wreckwormConstrictCrushDamage = 2; // as heavy as a plate dash or ring crush
+constexpr float wreckwormPunishWindow = 3.0F; // clean clear: stunned head
+constexpr float wreckwormPunishDamageMult = 1.5F;
 
 constexpr auto beltbreakerShieldedDuration(int32_t plateCount) -> float
 {
@@ -224,13 +240,17 @@ auto bossQteActive(const Game& game) -> bool;
 auto bossQteSlowdown(const Game& game) -> float;
 void bossQteBegin(Game& game, int32_t bossId);
 void bossQteEnd(Game& game);
-auto qtePromptForThreat(const Game& game, Vector2 threatDir) -> QtePrompt;
+auto bossQteCanStart(const Game& game) -> bool;
+auto qtePromptForThreat(const Game& game, Vector2 threatDir,
+                        int32_t parryChance = UpdateConstants::qteParryChance) -> QtePrompt;
 auto qteReadInput(Game& game, QtePrompt prompt) -> int32_t;
 void qteStartAction(Game& game, QtePrompt prompt, Vector2 threatDir);
 void updateBossQte(Game& game, float deltaTime);
 void beginBeltbreakerPlateRush(Game& game, Boss& core);
 void updateBeltbreakerPlateRush(Game& game, Boss& core, float deltaTime);
 void sendRushPlateHome(Boss& plate);
+auto findWreckwormHeadById(Game& game, int32_t instanceId) -> Boss*;
+void updateWreckwormConstrict(Game& game, Boss& head, float deltaTime);
 void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime);
 void updateKrakenLimbs(Game& game, Boss& boss, float deltaTime);
 auto krakenPodPosition(const Boss& boss, int32_t podIndex) -> Vector2;

@@ -4108,9 +4108,10 @@ void drawBoss(const Game& game, const Boss& boss)
                  Palette::Shield);
     }
 
-    if (boss.isBeltbreaker && boss.beltbreakerPunishTimer > 0)
+    if ((boss.isBeltbreaker && boss.beltbreakerPunishTimer > 0) ||
+        (boss.isWreckwormHead && boss.wreckwormPunishTimer > 0))
     {
-        // Punish Window: the shattered shield's fragments ring the open core, pulsing.
+        // Punish Window: pulsing fragments ring the open core (Beltbreaker) or stunned head.
         const float pulse = 0.6F + 0.4F * std::sin(static_cast<float>(GetTime()) * 14.0F);
         const float ringRadius = boss.size.x * 0.62F;
         for (int32_t i = 0; i < 10; i++)
@@ -5250,6 +5251,10 @@ void drawQteButtons(const Game& game, QtePrompt prompt, Vector2 center, float pr
         touch ? drawQteTouchButton(game, "NERVE", center, press, color)
               : drawQteKeycap(game, "SPACE", center, 170.0F, press, color);
         break;
+    case QtePrompt::Mash:
+        touch ? drawQteTouchButton(game, "NERVE", center, press, color)
+              : drawQteKeycap(game, "SPACE", center, 170.0F, press, color);
+        break;
     case QtePrompt::None:
         break;
     }
@@ -5302,6 +5307,24 @@ void drawBossQteHud(const Game& game)
         DrawRectangleRec(Rectangle{.x = center.x - timerWidth / 2 * frac, .y = y,
                                    .width = timerWidth * frac, .height = 6.0F},
                          color);
+    }
+
+    if (prompt == QtePrompt::Mash && game.run.qteMashTarget > 0)
+    {
+        constexpr float mashWidth = 260.0F;
+        constexpr float mashHeight = 16.0F;
+        const float frac = std::clamp(static_cast<float>(game.run.qteMashCount) /
+                                          static_cast<float>(game.run.qteMashTarget),
+                                      0.0F, 1.0F);
+        const Rectangle bar{.x = center.x - mashWidth / 2, .y = center.y + 86.0F, .width = mashWidth,
+                            .height = mashHeight};
+        DrawRectangleRec(bar, Fade(Palette::StructMid, 0.5F));
+        DrawRectangleRec(Rectangle{.x = bar.x, .y = bar.y, .width = mashWidth * frac, .height = mashHeight},
+                         color);
+        DrawRectangleLinesEx(bar, 2.0F, color);
+        const int32_t textWidth = measureText(game, "MASH!", 20);
+        drawText(game, "MASH!", static_cast<int32_t>(center.x) - textWidth / 2,
+                 static_cast<int32_t>(bar.y + mashHeight + 8.0F), 20, color);
     }
 }
 
