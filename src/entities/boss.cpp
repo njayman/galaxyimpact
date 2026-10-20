@@ -8,6 +8,7 @@
 #include <cmath>
 #include <array>
 #include <cstddef>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -67,15 +68,29 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
 
     auto typeIndex =
         static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(bossTypes.size()) - 1));
-    const bool inBelt = currentBiome(game.run.waveNumber) == Biome::ShatteredBelt;
-    if (inBelt)
+    // Wave Bosses fighting in a biome draw only from that biome's pool.
+    constexpr std::array<std::string_view, 5> beltPool{
+        "Shatter Prime", "Fracture Queen", "Ashen Sentinel", "Barrier Colossus", "Warbringer"};
+    constexpr std::array<std::string_view, 4> rustPool{
+        "The Last Signal", "Hollow Idol", "Dim Reaver", "Static Wraith"};
+    constexpr auto isBossType = [](std::string_view n)
+    { return std::ranges::find(bossTypes, n, &BossType::name) != bossTypes.end(); };
+    static_assert(std::ranges::all_of(beltPool, isBossType));
+    static_assert(std::ranges::all_of(rustPool, isBossType));
+    const Biome biome = currentBiome(game.run.waveNumber);
+    std::span<const std::string_view> pool;
+    if (biome == Biome::ShatteredBelt)
     {
-        constexpr std::array<std::string_view, 5> beltPool{
-            "Shatter Prime", "Fracture Queen", "Ashen Sentinel", "Barrier Colossus", "Warbringer"};
-        static_assert(std::ranges::all_of(beltPool, [](std::string_view n)
-                                          { return std::ranges::find(bossTypes, n, &BossType::name) != bossTypes.end(); }));
-        const auto name = beltPool.at(
-            static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(beltPool.size()) - 1)));
+        pool = beltPool;
+    }
+    else if (biome == Biome::Rustbloom)
+    {
+        pool = rustPool;
+    }
+    if (!pool.empty())
+    {
+        const auto name =
+            pool[static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(pool.size()) - 1))];
         typeIndex = static_cast<size_t>(
             std::ranges::find(bossTypes, name, &BossType::name) - bossTypes.begin());
     }
@@ -85,8 +100,15 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
             0, static_cast<int32_t>(DemoConfig::allowedBossTypeIndices.size()) - 1)));
     }
     const auto& type = bossTypes.at(typeIndex);
-    const Color color = inBelt ? ColorLerp(type.color, Palette::ShatteredBeltAccent, beltDustTint)
-                               : type.color;
+    Color color = type.color;
+    if (biome == Biome::ShatteredBelt)
+    {
+        color = ColorLerp(type.color, Palette::ShatteredBeltAccent, beltDustTint);
+    }
+    else if (biome == Biome::Rustbloom)
+    {
+        color = ColorLerp(type.color, Palette::RustbloomAccent, rustbloomTint);
+    }
 
     const auto health =
         static_cast<int32_t>(static_cast<float>(500 + tier * bossHpPerTier) * healthMult *

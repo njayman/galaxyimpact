@@ -2390,9 +2390,15 @@ void drawGameplayWorld(const Game& game)
         drawEnemy(game, e, warlordActive);
     }
 
-    const Color hazardBody = currentBiome(game.run.waveNumber) == Biome::ShatteredBelt
-                                 ? ColorLerp(Palette::StructDark, Palette::ShatteredBeltAccent, beltDustTint)
-                                 : Palette::StructDark;
+    Color hazardBody = Palette::StructDark;
+    if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
+    {
+        hazardBody = ColorLerp(Palette::StructDark, Palette::ShatteredBeltAccent, beltDustTint);
+    }
+    else if (currentBiome(game.run.waveNumber) == Biome::Rustbloom)
+    {
+        hazardBody = ColorLerp(Palette::StructDark, Palette::RustbloomAccent, rustbloomTint);
+    }
     for (const auto& hazard : game.run.eliteHazards)
     {
         drawEliteHazard(hazard, hazardBody);
