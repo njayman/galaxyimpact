@@ -43,6 +43,7 @@ From [Shared Boss QTE rules](https://github.com/njayman/galaxyimpact/issues/3).
   | Wreckworm   | 0.8 s  | 9       | 20%   |
   | Slagmaw     | 0.7 s  | 10      | 25%   |
   | Kraken      | 0.6 s  | 12      | 30%   |
+  | Banished    | 0.5 s  | 14      | 35%   |
 
 - **Mash** is used only where a grip or struggle fits the fiction.
 
@@ -454,9 +455,9 @@ Waves 80, 90, 100 (encounters 1, 2, 3). Skeleton kept; new look: lavender body w
 
 ## Banished realm
 
-**Status:** Draft. Finale arena, not a Biome (from [Banished realm as a fifth Biome](https://github.com/njayman/galaxyimpact/issues/8)). Reached through the Kraken's portal after wave 100; Biome Boss Banished; defeating it leads to the ending.
+**Status:** Approved, 2026-10-20. Finale arena, not a Biome (from [Banished realm as a fifth Biome](https://github.com/njayman/galaxyimpact/issues/8)). Reached through the Kraken's portal after wave 100; Biome Boss Banished; defeating it leads to the ending.
 
-Arena rules kept as is: horizontal wraparound strip, unlimited Nerve, unlimited dash charges. The only enemies are Banished's own summons.
+Arena rules kept as is: horizontal wraparound strip, unlimited Nerve, unlimited dash charges. Banished fights alone: no summons.
 
 ### Theme and palette
 
@@ -496,3 +497,39 @@ None (finale arena).
 ### Wave Boss flavour
 
 None (finale arena).
+
+### Biome Boss: Banished
+
+Skeleton kept. Look: black body with an ash-bone rim and seal-chain marks so it reads against the realm's dark background; staggered tentacles crack ash bone; eye and beam in pale eye-gold. Only eye bursts damage it: weapon fire just flashes.
+
+**Phases**
+
+1. **Tentacles:** 12 tentacles strike from the body (near) or from portals near the player (far), 0.6 s windup, 0.5 s strike; 3x faster while Banished is offscreen. Shielding a strike staggers that tentacle.
+2. **Eye open:** once all 12 are staggered, the eye chases the player for 5 s (Eye Chase); dashing into it or hitting it with Nerve lands an eye burst. Then Doom Gaze fires for 1 s; shield-dashing through it lands a smaller burst. Tentacles then reset. One burst per opening.
+3. **Escalation by cycle:** three eye bursts win (a dash-in or Nerve burst takes 1/3 of its health, a Doom Gaze shield-dash 1/6). Cycle 1 as described; cycle 2 adds more far-portal strikes and Chain Lashes; cycle 3 Doom Gaze sweeps after the player for its 1 s and Bind is more frequent. The background seal rings crack further after each burst.
+4. **Defeat:** Banished flees slightly slower than the player; a shield-dash into it plays the ending (and unlocks infinite mode).
+
+**Attacks**
+
+| Attack | Tell | Effect | Counter | Starting numbers |
+| --- | --- | --- | --- | --- |
+| Seal Spike (jab) | 0.6 s windup | straight tentacle strike | shield to stagger, or dodge | 4 damage |
+| Chain Lash (thrash) | 0.6 s windup | 110° sweep | shield to stagger, or dodge | 7 damage |
+| Bind (grab, near only) | 0.6 s windup | a catch starts the Boss QTE | shield to stagger, or dodge | 15% of near strikes; more in cycle 3 |
+| Eye Chase | eye opens | eye follows the player for 5 s | dash into it or Nerve for a burst | 5 s |
+| Doom Gaze | after Eye Chase | 1 s beam; sweeps in cycle 3 | shield-dash through for a smaller burst | 6 damage per s |
+
+### Boss QTE: Juggled
+
+- **Trigger:** Bind catches the player (recurs; 20 s minimum gap). Inside the gap a catch is a plain grab: a short hold, then the fail outcome, no cutscene. The old live aim-cancel juggle is removed.
+- **Choreography:** a **Mash** Prompt to break the coil, then 13 Prompts across three throws between tentacles, about 4 or 5 per flight.
+- **Prompts:** 14 total (1 Mash + 13), 0.5 s window, 35% Parry share.
+- **Clean clear:** in place of the +50% Punish Window (only eye bursts hurt Banished), the eye snaps open for 3 s: one free burst, skipping a stagger cycle. Tentacles keep their stagger state; a burst counts toward the three.
+- **Fail:** thrown clear, one Chain Lash hit (7 damage).
+
+### Open for build
+
+- Banished's health is set so exactly three bursts win (the current build spawns it at 1 HP, so one burst wins).
+- Cycle 2 and 3 strike-mix weights; Doom Gaze sweep speed.
+- Plain-grab hold length; QTE throw distances and camera.
+- Seal-ring crack stages and the ending's visual beat.
