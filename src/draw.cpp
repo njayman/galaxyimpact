@@ -136,7 +136,6 @@ void drawChargePips(const Game& game, int32_t x, int32_t y);
 void drawOrganicEnemyShape(Vector2 center, float baseRadius, float seed, Color color);
 void drawClusterEnemyShape(Vector2 center, float baseRadius, float seed, Color color);
 void drawMeteorBossShape(Vector2 center, float radius, int32_t seed, Color baseColor);
-auto hashNoise(float seed) -> float;
 void drawSandboxToggleIndicator(const Game& game);
 void drawBossDirectorTells(const Boss& boss, Vector2 center);
 void drawSandboxMenu(const Game& game);
@@ -2113,21 +2112,16 @@ void drawDebrisSquall(const Game& game)
         return;
     }
 
-    constexpr int32_t rockCount = 48;
-    for (int32_t i = 0; i < rockCount; i++)
+    for (int32_t i = 0; i < debrisSquallRockCount; i++)
     {
-        const auto seed = static_cast<float>(i) * 13.7F;
-        const float s = game.run.debrisSquallFront - hashNoise(seed) * debrisSquallStreamLength;
-        if (std::abs(s - playerAlong) > reach)
+        const SquallRock rock = debrisSquallRock(game, i);
+        if (!rock.live)
         {
             continue;
         }
-        const float off = (hashNoise(seed + 1.0F) * 2.0F - 1.0F) * debrisSquallHalfWidth;
-        const float radius = 6.0F + hashNoise(seed + 2.0F) * 10.0F;
-        const Vector2 pos = at(s, off);
-        drawSquallRockFlame(pos, along, across, radius, seed);
-        drawSquallRock(pos, along, radius, hashNoise(seed + 3.0F) * 360.0F + game.run.debrisSquallFront * 0.3F,
-                       seed);
+        drawSquallRockFlame(rock.position, along, across, rock.radius, rock.seed);
+        drawSquallRock(rock.position, along, rock.radius,
+                       hashNoise(rock.seed + 3.0F) * 360.0F + game.run.debrisSquallFront * 0.3F, rock.seed);
     }
 }
 
@@ -2991,12 +2985,6 @@ void drawOrganicEnemyShape(Vector2 center, float baseRadius, float seed, Color c
         const float pulse = 0.5F + 0.5F * std::sin(t * 3.0F + pustuleSeed);
         DrawCircleV(pos, blobRadius * 0.13F, Fade(Palette::Heal, 0.45F + 0.4F * pulse));
     }
-}
-
-auto hashNoise(float seed) -> float
-{
-    const float v = std::sin(seed) * 43758.5453F;
-    return v - std::floor(v);
 }
 
 void drawElementalDebuffEffects(Vector2 pos, float radius, bool burning, bool shocked, bool frozen)

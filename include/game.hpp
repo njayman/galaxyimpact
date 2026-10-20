@@ -239,6 +239,7 @@ struct GameplayState
     float debrisSquallDir; // +1 or -1 along the dust-lane direction
     float debrisSquallFront;
     float debrisSquallEnemyTickTimer;
+    uint64_t debrisSquallBrokenMask; // bit per rock shot this sweep
     float shieldDashShakeCooldownTimer;
     bool punctumTrapActive;
     bool inBanishedRealm;

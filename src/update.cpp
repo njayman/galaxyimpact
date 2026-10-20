@@ -3140,6 +3140,26 @@ void updatePunctumThunder(Game& game, float deltaTime)
     playSFX(game, game.resources.sounds.thunder);
 }
 
+auto debrisSquallRock(const Game& game, int32_t index) -> SquallRock
+{
+    const float angle = beltDustLaneAngleDeg * DEG2RAD;
+    const Vector2 along{.x = std::cos(angle) * game.run.debrisSquallDir,
+                        .y = std::sin(angle) * game.run.debrisSquallDir};
+    const Vector2 across{.x = -along.y, .y = along.x};
+    const float seed = static_cast<float>(index) * 13.7F;
+    const float s = game.run.debrisSquallFront - hashNoise(seed) * debrisSquallStreamLength;
+    const float off = (hashNoise(seed + 1.0F) * 2.0F - 1.0F) * debrisSquallHalfWidth;
+    const float playerAlong =
+        Vector2DotProduct(Vector2Subtract(game.run.player.position, game.run.debrisSquallCenter), along);
+    const bool broken = ((game.run.debrisSquallBrokenMask >> index) & 1U) != 0;
+    return SquallRock{
+        .position = Vector2Add(game.run.debrisSquallCenter,
+                               Vector2Add(Vector2Scale(along, s), Vector2Scale(across, off))),
+        .radius = 6.0F + hashNoise(seed + 2.0F) * 10.0F,
+        .seed = seed,
+        .live = game.run.debrisSquallPhase == 2 && !broken && std::abs(s - playerAlong) <= debrisSquallReach};
+}
+
 void updateDebrisSquall(Game& game, float deltaTime)
 {
     const bool beltbreakerFight = std::ranges::any_of(
@@ -3191,6 +3211,7 @@ void updateDebrisSquall(Game& game, float deltaTime)
                 Vector2DotProduct(Vector2Subtract(game.run.player.position, game.run.debrisSquallCenter), along) -
                 debrisSquallReach;
             game.run.debrisSquallEnemyTickTimer = 0;
+            game.run.debrisSquallBrokenMask = 0;
             triggerShake(game, 3, 0.4F);
         }
         return;
@@ -3205,17 +3226,56 @@ void updateDebrisSquall(Game& game, float deltaTime)
         return;
     }
 
+    // Each rock hits what it touches; shooting one pops it, clearing that piece of the band.
     const auto inRocks = [&](Vector2 pos, float radius)
     {
-        const Vector2 rel = Vector2Subtract(pos, game.run.debrisSquallCenter);
-        const float s = Vector2DotProduct(rel, along);
-        return std::abs(Vector2DotProduct(rel, across)) < debrisSquallHalfWidth + radius &&
-               s < game.run.debrisSquallFront &&
-               s > game.run.debrisSquallFront - debrisSquallStreamLength;
+        for (int32_t i = 0; i < debrisSquallRockCount; i++)
+        {
+            const SquallRock rock = debrisSquallRock(game, i);
+            if (rock.live && CheckCollisionCircles(pos, radius, rock.position, rock.radius))
+            {
+                return true;
+            }
+        }
+        return false;
     };
 
+    for (auto& bullet : game.run.bullets)
+    {
+        if (!bullet.active)
+        {
+            continue;
+        }
+        for (int32_t i = 0; i < debrisSquallRockCount; i++)
+        {
+            const SquallRock rock = debrisSquallRock(game, i);
+            if (!rock.live || !CheckCollisionCircles(bullet.position, bullet.radius, rock.position, rock.radius))
+            {
+                continue;
+            }
+            game.run.debrisSquallBrokenMask |= uint64_t{1} << i;
+            spawnKillExplosion(game, rock.position, Palette::StructLight, 8, 0.8F);
+            spawnKillExplosion(game, rock.position, Palette::ElementBurn, 6, 1.2F);
+            playSFX(game, game.resources.sounds.rockBreak);
+            triggerShake(game, 1.5F, 0.08F);
+            game.run.score += debrisSquallRockScore;
+            if (bullet.streak <= 0 && !bullet.phasing)
+            {
+                if (bullet.pierceRemaining > 0)
+                {
+                    bullet.pierceRemaining--;
+                }
+                else
+                {
+                    bullet.active = false;
+                    break;
+                }
+            }
+        }
+    }
+
     if (game.run.player.health > 0 && game.run.player.immunityTimer <= 0 &&
-        inRocks(game.run.player.position, 0))
+        inRocks(game.run.player.position, game.run.player.radius))
     {
         damagePlayer(game, enemyDamage(game, debrisSquallPlayerDamage));
     }

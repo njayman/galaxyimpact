@@ -5,6 +5,7 @@
 #include "entities/item.hpp"
 #include "game.hpp"
 #include "raylib.h"
+#include <cmath>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -249,6 +250,21 @@ void updateGasHazards(Game& game, float deltaTime);
 void updateSolarForgeHeat(Game& game, float deltaTime);
 void updatePunctumThunder(Game& game, float deltaTime);
 void updateDebrisSquall(Game& game, float deltaTime);
+struct SquallRock
+{
+    Vector2 position;
+    float radius;
+    float seed;
+    bool live; // sweeping, on screen and not shot
+};
+auto debrisSquallRock(const Game& game, int32_t index) -> SquallRock;
+// Cheap deterministic 0..1 noise; the Debris Squall uses it in both update and draw so every
+// rock sits in the same place for collisions as on screen.
+inline auto hashNoise(float seed) -> float
+{
+    const float v = std::sin(seed) * 43758.5453F;
+    return v - std::floor(v);
+}
 auto findWreckwormSegment(Game& game, int32_t headId, int32_t segmentIndex) -> Boss*;
 void triggerWreckwormMolt(Game& game, Boss& head);
 void updatePickups(Game& game, float deltaTime);

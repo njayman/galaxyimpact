@@ -281,6 +281,8 @@ constexpr float debrisSquallReach = 1000.0F; // sweep starts and ends this far f
 constexpr int32_t debrisSquallPlayerDamage = 1;
 constexpr int32_t debrisSquallEnemyDamage = 12;
 constexpr float debrisSquallEnemyTickInterval = 0.25F;
+constexpr int32_t debrisSquallRockCount = 48; // fits the broken-rock bitmask
+constexpr int32_t debrisSquallRockScore = 2;
 
 constexpr float rustbloomPodCellSize = 140.0F;
 constexpr float rustbloomPodChance = 0.28F;
