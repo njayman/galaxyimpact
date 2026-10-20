@@ -247,6 +247,10 @@ constexpr float caveNoiseScaleCoarse = 380.0F;
 constexpr float caveNoiseScaleFine = 60.0F;
 constexpr float caveTunnelHalfWidth = 0.17F;
 
+// Shattered Belt dust lanes: the background draws them along this angle and Debris Squalls
+// sweep along it, so the backdrop foreshadows where a squall comes from.
+constexpr float beltDustLaneAngleDeg = 33.0F;
+
 constexpr float rustbloomPodCellSize = 140.0F;
 constexpr float rustbloomPodChance = 0.28F;
 
