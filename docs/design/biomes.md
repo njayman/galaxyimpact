@@ -126,9 +126,9 @@ Light amber dust tint, about 15%.
 
 Three layers, far to near:
 
-- **Far** (parallax 0.05): the planet's huge split husk with a broken ring arc, dark silhouette with amber rim light.
-- **Mid** (parallax 0.3): faint diagonal amber dust lanes drifting slowly. Debris Squalls arrive along the lane direction, so the background foreshadows them.
-- **Near** (parallax 0.8): small drifting rock specks.
+- **Far** (parallax 0.05): the planet's split husk, a small dark silhouette with amber rim light, off to the right, clear of the HUD.
+- **Mid** (parallax 0.3): a few faint, irregularly spaced amber dust lanes drifting slowly. Debris Squalls arrive along the lane direction, so the background foreshadows them.
+- No near layer: the real asteroids already fill that role. Kept minimal after playtest feedback (too much on screen, evenly spaced parallel lines).
 
 Described in words only; looks the build finds open can become a prototype ticket.
 

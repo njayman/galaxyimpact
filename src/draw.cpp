@@ -1591,12 +1591,12 @@ void drawShatteredBeltBackground(const Game& game)
     const auto t = static_cast<float>(GetTime());
     const Color amber = Palette::ShatteredBeltAccent;
 
-    // Far (0.05): the split planet husk with a broken ring arc. The drift is clamped so a
+    // Far (0.05): the split planet husk. The drift is clamped so a
     // long trek across the arena never pushes it off screen.
     {
         constexpr float parallax = 0.05F;
-        const float huskRadius = halfH * 0.6F;
-        const Vector2 anchor{.x = -halfW * 0.7F, .y = -halfH * 0.7F};
+        const float huskRadius = halfH * 0.35F;
+        const Vector2 anchor{.x = halfW * 0.72F, .y = halfH * 0.1F};
         const Color silhouette = ColorLerp(Palette::Void, Palette::StructDark, 0.45F);
         Vector2 offset = Vector2Subtract(anchor, Vector2Scale(player, parallax));
         offset.x = std::clamp(offset.x, -halfW, halfW);
@@ -1612,29 +1612,12 @@ void drawShatteredBeltBackground(const Game& game)
         DrawRing(Vector2Add(center, split), huskRadius - 3, huskRadius, -40, 40, 32,
                  Fade(amber, 0.25F));
 
-        // Broken ring: arc segments with gaps, tilted like a ring seen edge-on.
-        constexpr int32_t arcPieces = 14;
-        for (int32_t i = 0; i < arcPieces; i++)
-        {
-            if (hashNoise(static_cast<float>(i) * 7.3F + 2.0F) < 0.3F)
-            {
-                continue;
-            }
-            const float a0 = static_cast<float>(i) / arcPieces * 2.0F * std::numbers::pi_v<float>;
-            const float a1 = a0 + 2.0F * std::numbers::pi_v<float> / arcPieces * 0.7F;
-            const auto ringPoint = [&](float a)
-            {
-                return Vector2Add(center, Vector2{.x = std::cos(a) * huskRadius * 1.7F,
-                                                  .y = std::sin(a) * huskRadius * 0.35F});
-            };
-            DrawLineEx(ringPoint(a0), ringPoint(a1), 3.0F, Fade(Palette::StructMid, 0.35F));
-        }
     }
 
     // Mid (0.3): faint diagonal amber dust lanes, dashes drifting slowly along the lane.
     {
         constexpr float parallax = 0.3F;
-        constexpr float laneSpacing = 260.0F;
+        constexpr float laneSpacing = 700.0F;
         constexpr float dashLength = 240.0F;
         constexpr float driftSpeed = 18.0F;
         const float angle = beltDustLaneAngleDeg * DEG2RAD;
@@ -1648,46 +1631,26 @@ void drawShatteredBeltBackground(const Game& game)
         const float drift = std::fmod(t * driftSpeed, dashLength);
         for (float k = std::floor((acrossCenter - reach) / laneSpacing); k * laneSpacing < acrossCenter + reach; k++)
         {
+            // Irregular: about half the lanes are absent and the rest sit anywhere in their band.
             const float laneSeed = hashNoise(k * 3.1F + 11.0F);
-            const float laneAcross = k * laneSpacing + (laneSeed - 0.5F) * laneSpacing * 0.5F;
-            const float width = 2.0F + laneSeed * 6.0F;
+            if (hashNoise(k * 8.3F + 4.0F) < 0.5F)
+            {
+                continue;
+            }
+            const float laneAcross = k * laneSpacing + (laneSeed - 0.5F) * laneSpacing * 0.9F;
+            const float width = 1.5F + laneSeed * 2.0F;
             for (float d = std::floor((alongCenter - reach) / dashLength); d * dashLength < alongCenter + reach; d++)
             {
                 const float density = hashNoise(k * 5.7F + d * 1.9F + 23.0F);
-                if (density < 0.2F)
+                if (density < 0.55F)
                 {
                     continue;
                 }
                 const float start = d * dashLength + drift;
                 const Vector2 a = Vector2Add(
                     shift, Vector2Add(Vector2Scale(across, laneAcross), Vector2Scale(along, start)));
-                const Vector2 b = Vector2Add(a, Vector2Scale(along, dashLength * 0.95F));
-                DrawLineEx(a, b, width, Fade(amber, 0.05F + 0.08F * density));
-            }
-        }
-    }
-
-    // Near (0.8): small drifting rock specks.
-    {
-        constexpr float parallax = 0.8F;
-        constexpr float cellSize = 90.0F;
-        const Vector2 layerCenter = Vector2Scale(player, parallax);
-        const Vector2 shift = Vector2Scale(player, 1.0F - parallax);
-        for (float y = std::floor((layerCenter.y - halfH - cellSize) / cellSize) * cellSize;
-             y < layerCenter.y + halfH + cellSize; y += cellSize)
-        {
-            for (float x = std::floor((layerCenter.x - halfW - cellSize) / cellSize) * cellSize;
-                 x < layerCenter.x + halfW + cellSize; x += cellSize)
-            {
-                const float presence = hashNoise(x * 0.017F + y * 0.029F + 91.0F);
-                if (presence > 0.3F)
-                {
-                    continue;
-                }
-                const Vector2 pos{.x = x + hashNoise(x * 0.07F + y * 0.03F) * cellSize,
-                                  .y = y + hashNoise(x * 0.03F + y * 0.07F + 5.0F) * cellSize};
-                DrawPoly(Vector2Add(shift, pos), 3, 1.5F + presence * 6.0F, presence * 900.0F,
-                         Fade(Palette::StructLight, 0.35F));
+                const Vector2 b = Vector2Add(a, Vector2Scale(along, dashLength * (0.3F + 0.65F * density)));
+                DrawLineEx(a, b, width, Fade(amber, 0.03F + 0.05F * density));
             }
         }
     }
