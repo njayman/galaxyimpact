@@ -436,6 +436,43 @@ void updateEnemies(Game& game, float deltaTime)
             {
             case EnemyPattern::Chase:
             {
+                // Roll charge: stateTimer counts down the chase gap, then the tell, then (while
+                // charging) the distance left to roll.
+                if (kind.rollCharge)
+                {
+                    if (enemy.charging)
+                    {
+                        const Vector2 step = Vector2Scale(enemy.velocity, deltaTime * frameScale);
+                        enemy.position = Vector2Add(enemy.position, step);
+                        enemy.stateTimer -= Vector2Length(step);
+                        if (enemy.stateTimer <= 0)
+                        {
+                            enemy.charging = false;
+                            enemy.stateTimer = rockhideRollInterval;
+                        }
+                        break;
+                    }
+                    enemy.stateTimer -= deltaTime;
+                    if (enemy.telegraphing)
+                    {
+                        if (enemy.stateTimer <= 0)
+                        {
+                            enemy.telegraphing = false;
+                            enemy.charging = true;
+                            enemy.stateTimer = rockhideRollDistance;
+                        }
+                        break;
+                    }
+                    if (enemy.stateTimer <= 0)
+                    {
+                        enemy.telegraphing = true;
+                        enemy.stateTimer = rockhideRollTell;
+                        enemy.velocity = Vector2Scale(
+                            Vector2Normalize(Vector2Subtract(game.run.player.position, enemy.position)),
+                            kind.speed * speedMod * rockhideRollSpeedMult);
+                        break;
+                    }
+                }
                 const Vector2 dir = Vector2Subtract(game.run.player.position, enemy.position);
                 if (Vector2Length(dir) > 0)
                 {

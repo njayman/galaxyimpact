@@ -167,6 +167,7 @@ struct EnemyKind
     int pulseDamage = 0;
     float pulseRadius = 0;
     bool burnImmune = false;
+    bool rollCharge = false; // Chase plus a telegraphed straight roll (Rockhide)
 };
 
 constexpr int enemyKindSwarmling = 1;
@@ -378,7 +379,8 @@ constexpr std::array<EnemyKind, 35> enemyKinds{
               .shape = EnemyShape::Hexagon,
               .minWave = 1,
               .biomeExclusive = true,
-              .biome = Biome::ShatteredBelt},
+              .biome = Biome::ShatteredBelt,
+              .rollCharge = true},
     EnemyKind{.name = "Rock Debris",
               .radius = 14,
               .health = 6,

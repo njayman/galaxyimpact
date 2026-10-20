@@ -2625,6 +2625,17 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
         DrawLineEx(enemy.position, lineEnd, 3, Fade(Palette::Crit, blink));
     }
 
+    const bool rollTell = kind.rollCharge && enemy.telegraphing;
+    const float rollGlow = rollTell ? 1.0F - enemy.stateTimer / rockhideRollTell : 0.0F;
+    if (rollTell)
+    {
+        // The roll line shows where to sidestep; the cracks glow on top of the body below.
+        const Vector2 lineEnd =
+            Vector2Add(enemy.position, Vector2Scale(Vector2Normalize(enemy.velocity),
+                                                    rockhideRollDistance));
+        DrawLineEx(enemy.position, lineEnd, 3, Fade(Palette::ShatteredBeltAccent, 0.6F * rollGlow));
+    }
+
     if (kind.pulseInsteadOfSpawn && enemy.stateTimer < 0.6F)
     {
         const float warn = 1.0F - enemy.stateTimer / 0.6F;
@@ -2658,6 +2669,17 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     }
     drawElementalDebuffEffects(enemy.position, kind.radius, enemy.burnDps > 0, enemy.debuffStatic,
                                enemy.debuffFreeze);
+    if (rollTell)
+    {
+        const Color amber = Fade(Palette::ShatteredBeltAccent, 0.4F + 0.6F * rollGlow);
+        for (int32_t k = 0; k < 3; k++)
+        {
+            const float angle = enemy.organicSeed + static_cast<float>(k) * 2.1F;
+            const Vector2 tip{.x = std::cos(angle) * kind.radius * 0.9F,
+                              .y = std::sin(angle) * kind.radius * 0.9F};
+            DrawLineEx(enemy.position, Vector2Add(enemy.position, tip), 3, amber);
+        }
+    }
 
     constexpr float enemyHealthMult = 1.2F;
     auto maxHealth = static_cast<int32_t>(static_cast<float>(kind.health) * enemyHealthMult *
