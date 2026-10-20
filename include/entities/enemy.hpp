@@ -428,7 +428,7 @@ constexpr std::array<EnemyKind, 35> enemyKinds{
               .contactDamage = 1,
               .score = 10,
               .pattern = EnemyPattern::Orbit,
-              .color = Palette::Shield,
+              .color = Palette::ShatteredBeltAccent,
               .shape = EnemyShape::Ring,
               .minWave = 3,
               .biomeExclusive = true,

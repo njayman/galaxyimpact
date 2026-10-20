@@ -29,6 +29,8 @@ constexpr Color ElementBurn{.r = 230, .g = 120, .b = 40, .a = 255};
 
 constexpr Color Heal{.r = 110, .g = 200, .b = 120, .a = 255};
 
+constexpr Color ShatteredBeltAccent{.r = 217, .g = 165, .b = 91, .a = 255}; // amber dust
+
 constexpr Color RustbloomVoid{.r = 16, .g = 14, .b = 10, .a = 255};
 constexpr Color RustbloomHaze{.r = 150, .g = 120, .b = 80, .a = 255};
 constexpr Color RustbloomAccent{.r = 140, .g = 165, .b = 70, .a = 255};

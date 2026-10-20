@@ -2576,6 +2576,12 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
 {
     const auto& kind = enemyKinds.at(static_cast<size_t>(enemy.kind));
     Color color = kind.color;
+    // Global Enemies pick up a light dust tint from the biome they fight in.
+    if (!kind.biomeExclusive && currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
+    {
+        constexpr float beltDustTint = 0.15F;
+        color = ColorLerp(color, Palette::ShatteredBeltAccent, beltDustTint);
+    }
     if (enemy.fadeAlpha < 1.0F)
     {
         color = Fade(color, enemy.fadeAlpha);
