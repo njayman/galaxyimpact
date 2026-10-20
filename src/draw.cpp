@@ -3623,6 +3623,18 @@ void drawBoss(const Game& game, const Boss& boss)
                  Palette::Shield);
     }
 
+    if (boss.isBeltbreaker && boss.beltbreakerPunishTimer > 0)
+    {
+        // Punish Window: the shattered shield's fragments ring the open core, pulsing.
+        const float pulse = 0.6F + 0.4F * std::sin(static_cast<float>(GetTime()) * 14.0F);
+        const float ringRadius = boss.size.x * 0.62F;
+        for (int32_t i = 0; i < 10; i++)
+        {
+            const float a = static_cast<float>(i) * 36.0F + static_cast<float>(GetTime()) * 40.0F;
+            DrawRing(bossCenter, ringRadius - 3, ringRadius + 3, a, a + 22.0F, 6, Fade(Palette::Crit, pulse));
+        }
+    }
+
     if (boss.isBeltbreaker && boss.beltbreakerShielded)
     {
 

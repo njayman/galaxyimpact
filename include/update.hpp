@@ -58,6 +58,8 @@ constexpr float beltbreakerRushShieldDamageFrac = 0.05F;
 constexpr float beltbreakerRushParryDamageFrac = 0.15F;
 constexpr float beltbreakerRushNerveDamageFrac = 0.35F;
 constexpr float beltbreakerRushStagger = 1.0F;
+constexpr float beltbreakerPunishWindow = 3.0F;     // clean clear: exposed core
+constexpr float beltbreakerPunishDamageMult = 1.5F; // stacks with the 2.5x dash bonus
 
 constexpr auto beltbreakerShieldedDuration(int32_t plateCount) -> float
 {

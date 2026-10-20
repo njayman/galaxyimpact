@@ -177,6 +177,7 @@ As built: both replacements keep the `Barrage` and `GravityWell` attack slots an
 - **Answers:** directions and Dash dodge; Shield blocks, staggers and chips the plate (5% of its HP); Parry dash-shields into it (15%, stagger); Nerve bursts it (35%).
 - **Clean clear:** the shield shatters; 3 s Punish Window on the exposed core (+50% damage, stacks with the 2.5x dash multiplier).
 - **Fail:** the plate lands live (still dodgeable); the shield stays up for its full duration.
+- As built: during the Punish Window the plates stay parked off screen and fly home when it ends. On a fail, the other plates go back to harassing until the shield's return lead time. A ring of pulsing gold shield fragments marks the open core.
 
 ### Open for build
 

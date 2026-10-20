@@ -1567,6 +1567,8 @@ void updateRingCrush(Game& game, Boss& core)
     }
 }
 
+auto isRushPlateOf(const Boss& plate, const Boss& core) -> bool;
+
 void updateBeltbreakerCore(Game& game, Boss& core, float deltaTime)
 {
     if (!core.isBeltbreaker || core.health <= 0)
@@ -1575,6 +1577,21 @@ void updateBeltbreakerCore(Game& game, Boss& core, float deltaTime)
     }
 
     updateRingCrush(game, core);
+
+    if (core.beltbreakerPunishTimer > 0)
+    {
+        core.beltbreakerPunishTimer -= deltaTime;
+        if (core.beltbreakerPunishTimer <= 0)
+        {
+            for (auto& plate : game.run.bosses)
+            {
+                if (isRushPlateOf(plate, core) && plate.plateRushPhase == 2)
+                {
+                    sendRushPlateHome(plate);
+                }
+            }
+        }
+    }
 
     core.plateAngleDeg =
         std::fmod(core.plateAngleDeg + core.plateRotationSpeed * deltaTime, 360.0F);
@@ -1717,14 +1734,29 @@ void beginBeltbreakerPlateRush(Game& game, Boss& core)
     triggerShake(game, 8, 0.3F);
 }
 
-void endBeltbreakerPlateRush(Game& game, const Boss& core)
+// Clean clear: the shield shatters into the Punish Window; the plates stay parked off screen
+// until it ends (updateBeltbreakerCore sends them home). Fail: the shield stays up its full
+// duration while the plates go back to harassing.
+void endBeltbreakerPlateRush(Game& game, Boss& core, bool clean)
 {
     bossQteEnd(game);
+    if (clean)
+    {
+        core.beltbreakerShielded = false;
+        core.shieldGenProgress = 0;
+        core.beltbreakerPunishTimer = UpdateConstants::beltbreakerPunishWindow;
+        playSFX(game, game.resources.sounds.critical);
+        triggerShake(game, 10, 0.35F);
+        return;
+    }
     for (auto& plate : game.run.bosses)
     {
         if (isRushPlateOf(plate, core) && plate.plateRushPhase != 0 && plate.plateRushPhase != 4)
         {
-            sendRushPlateHome(plate);
+            plate.plateRushPhase = 0;
+            plate.state = BossState::IDLE;
+            plate.chargeVelocity = Vector2{};
+            sendPlateOnExcursion(plate, std::max(0.1F, core.beltbreakerShieldTimer - beltbreakerReturnLeadTime));
         }
     }
 }
@@ -1851,7 +1883,7 @@ void updateBeltbreakerPlateRush(Game& game, Boss& core, float deltaTime)
         else if (answer < 0 || game.run.qteTimer <= 0)
         {
             // Wrong or late: the cutscene breaks and this plate hits for real.
-            endBeltbreakerPlateRush(game, core);
+            endBeltbreakerPlateRush(game, core, false);
             incoming->plateRushPhase = 4;
             incoming->plateRushDelay = 0;
             incoming->dashHitPlayer = false;
@@ -1875,7 +1907,7 @@ void updateBeltbreakerPlateRush(Game& game, Boss& core, float deltaTime)
     }
     if (!anyInFlight)
     {
-        endBeltbreakerPlateRush(game, core);
+        endBeltbreakerPlateRush(game, core, true); // every prompt answered
     }
 }
 
@@ -2550,6 +2582,10 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake, bool pi
     {
         boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
         return;
+    }
+    if (boss.isBeltbreaker && boss.beltbreakerPunishTimer > 0)
+    {
+        amount = static_cast<int32_t>(static_cast<float>(amount) * UpdateConstants::beltbreakerPunishDamageMult);
     }
 
     if (boss.isWreckwormHead && boss.state == BossState::SHOOTING &&

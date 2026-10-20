@@ -306,6 +306,7 @@ class Boss
     float readTellTimer = 0;
 
     int32_t plateRushAttacksLeft = 0;
+    float beltbreakerPunishTimer = 0; // Punish Window after a clean Plate Rush
     float plateRushLastAngle = 0;
 
     // StrafeRun: the run line (start, direction, which side of the player) and the P2 decoy.
