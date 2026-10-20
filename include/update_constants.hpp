@@ -159,6 +159,16 @@ constexpr float bossMeleeStompTriggerDuration = 2.5F;
 constexpr int32_t baseProjectileHealth = 3;
 
 constexpr float beltbreakerRotationSpeed = 18.0F;
+// Rubble Barrage (Beltbreaker's Barrage): amber tell, stone shards, Barrage behaviour.
+constexpr float rubbleBarrageTell = 0.5F;
+// Ring Crush (Beltbreaker's GravityWell): plates contract, then fling out as a ring and return.
+constexpr float ringCrushTell = 0.8F;
+constexpr float ringCrushTightMult = 0.7F;    // plate ring radius during the tell
+constexpr float ringCrushSpeed = 6.0F;        // per frame at 60 fps
+constexpr float ringCrushMaxRadius = 600.0F;
+constexpr float ringCrushHugMargin = 50.0F;   // ring is harmless until this far past the hull
+constexpr float ringCrushArcFrac = 0.8F;      // share of each plate's slot its arc covers
+constexpr int32_t ringCrushDamage = 2;
 
 constexpr float beltbreakerShieldGenRate = 1.0F / 8.0F;
 constexpr float beltbreakerReturnLeadTime = 2.0F;

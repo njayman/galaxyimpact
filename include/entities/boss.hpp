@@ -164,6 +164,7 @@ class Boss
     bool isBeltbreaker = false;
     int32_t plateCount = 0;
     float plateAngleDeg = 0;
+    float plateRadiusMult = 1.0F; // Ring Crush contracts and flings the plate ring
     float plateRotationSpeed = 0;
     bool beltbreakerShielded = false;
     float beltbreakerShieldTimer = 0;
@@ -458,6 +459,7 @@ class BossProjectile
     bool huntingNewTarget = false;
 
     bool isMeteor = false;
+    bool isShard = false; // Beltbreaker Rubble Barrage stone
 
     bool isFluid = false;
     Color fluidColor = Palette::RustbloomAccent;

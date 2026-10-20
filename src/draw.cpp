@@ -2254,6 +2254,12 @@ void drawGameplayWorld(const Game& game)
         {
             drawMeteorProjectile(p);
         }
+        else if (p.isShard)
+        {
+            const Vector2 tail = Vector2Subtract(p.position, Vector2Scale(Vector2Normalize(p.velocity), p.radius * 3));
+            DrawLineEx(tail, p.position, p.radius, Fade(Palette::ShatteredBeltAccent, 0.4F));
+            DrawPoly(p.position, 5, p.radius * 1.3F, p.position.x + p.position.y, Palette::StructLight);
+        }
         else if (p.homing)
         {
             drawComet(p);
@@ -3466,7 +3472,25 @@ void drawBoss(const Game& game, const Boss& boss)
                         radius * 0.8F, Fade(Palette::Accent, (1 - progress) * 0.7F));
     }
 
-    if (boss.state == BossState::SHOOTING && boss.attack == BossAttack::GravityWell)
+    if (boss.isBeltbreaker && boss.state == BossState::SHOOTING && boss.attack == BossAttack::GravityWell)
+    {
+        // Ring Crush: an amber arc behind each attached plate; missing plates leave gaps.
+        const float radius = boss.size.x * 0.75F * boss.plateRadiusMult;
+        const float slotWidth = 360.0F / static_cast<float>(boss.plateCount);
+        for (const auto& plate : game.run.bosses)
+        {
+            if (plate.isBeltbreakerPlate && plate.plateOwnerId == boss.instanceId && plate.plateAttached &&
+                plate.health > 0)
+            {
+                const float mid = boss.plateAngleDeg + static_cast<float>(plate.plateSlotIndex) * slotWidth;
+                const float half = slotWidth * ringCrushArcFrac / 2;
+                DrawRing(bossCenter, radius - 6, radius + 6, mid - half, mid + half, 24,
+                         Fade(Palette::ShatteredBeltAccent, 0.7F));
+            }
+        }
+    }
+
+    if (!boss.isBeltbreaker && boss.state == BossState::SHOOTING && boss.attack == BossAttack::GravityWell)
     {
         DrawCircleLinesV(bossCenter, 60, Fade(Palette::StructMid, 0.5F));
         DrawLineEx(game.run.player.position, bossCenter, 2, Fade(Palette::StructLight, 0.4F));

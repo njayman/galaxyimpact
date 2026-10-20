@@ -167,6 +167,8 @@ Waves 10, 20, 25 with 4, 6, 8 plates. Skeleton kept: a core ringed by rotating p
 | Plate Hurl (`PlateHurl`, kept) | plate glows amber 0.6 s | one plate flies straight at the player, then returns | sidestep | as today |
 | Overload Beam (`Beam`, kept, wave 20+) | as today | as today | as today | as today |
 
+As built: both replacements keep the `Barrage` and `GravityWell` attack slots and branch on the Beltbreaker core. Rubble Barrage keeps Barrage's aimed stream (no fan) with stone-shard projectiles. Ring Crush: plates pull in to 0.7x their orbit during the tell, then fly out to 600 units at speed 6 and come back. Each attached plate carries an amber arc covering 80% of its slot, so a missing or detached plate leaves a gap. The ring does no damage within 50 units of the hull, so hugging the core is safe.
+
 ### Boss QTE: Plate Rush
 
 - **Trigger:** shield completion (recurs each shield cycle, which naturally spaces QTEs past the 20 s minimum).

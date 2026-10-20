@@ -1423,7 +1423,7 @@ auto beltbreakerPlateSlotPosition(const Boss& core, int32_t slotIndex) -> Vector
 {
     const float slotWidth = 360.0F / static_cast<float>(core.plateCount);
     const float deg = core.plateAngleDeg + static_cast<float>(slotIndex) * slotWidth;
-    const float radius = core.size.x * 0.75F;
+    const float radius = core.size.x * 0.75F * core.plateRadiusMult;
     return Vector2Add(beltbreakerCoreCenter(core), Vector2{.x = std::cos(deg * DEG2RAD) * radius,
                                                            .y = std::sin(deg * DEG2RAD) * radius});
 }
@@ -1500,12 +1500,81 @@ void sendPlateOnExcursion(Boss& plate, float durationSeconds)
     plate.plateExcursionTimer = durationSeconds;
 }
 
+auto ringCrushDuration(const Boss& core) -> float
+{
+    const float baseRadius = core.size.x * 0.75F;
+    const float speed = ringCrushSpeed * frameScale;
+    return (ringCrushMaxRadius - baseRadius * ringCrushTightMult) / speed +
+           (ringCrushMaxRadius - baseRadius) / speed;
+}
+
+// Ring Crush: the tell pulls the plate ring tight, then it flies out to the max radius and comes
+// back. While flying out, each attached plate's arc hurts; a missing plate leaves a gap.
+void updateRingCrush(Game& game, Boss& core)
+{
+    const float baseRadius = core.size.x * 0.75F;
+    const float tightRadius = baseRadius * ringCrushTightMult;
+    core.plateRadiusMult = 1.0F;
+    if (core.attack != BossAttack::GravityWell)
+    {
+        return;
+    }
+    if (core.state == BossState::WINDING_UP)
+    {
+        const float progress = std::clamp(1.0F - core.stateTimer / ringCrushTell, 0.0F, 1.0F);
+        core.plateRadiusMult = Lerp(1.0F, ringCrushTightMult, progress);
+        return;
+    }
+    if (core.state != BossState::SHOOTING)
+    {
+        return;
+    }
+
+    const float speed = ringCrushSpeed * frameScale;
+    const float elapsed = ringCrushDuration(core) - core.stateTimer;
+    const float outTime = (ringCrushMaxRadius - tightRadius) / speed;
+    const bool flyingOut = elapsed < outTime;
+    const float radius = flyingOut ? tightRadius + speed * elapsed
+                                   : std::max(baseRadius, ringCrushMaxRadius - speed * (elapsed - outTime));
+    core.plateRadiusMult = radius / baseRadius;
+
+    if (!flyingOut || radius < core.size.x / 2 + ringCrushHugMargin || game.run.player.health <= 0 ||
+        game.run.player.immunityTimer > 0)
+    {
+        return;
+    }
+    const Vector2 toPlayer = Vector2Subtract(game.run.player.position, beltbreakerCoreCenter(core));
+    if (std::abs(Vector2Length(toPlayer) - radius) > 22.0F + game.run.player.radius)
+    {
+        return;
+    }
+    const float playerDeg = std::atan2(toPlayer.y, toPlayer.x) * RAD2DEG;
+    const float slotWidth = 360.0F / static_cast<float>(core.plateCount);
+    for (const auto& plate : game.run.bosses)
+    {
+        if (!plate.isBeltbreakerPlate || plate.plateOwnerId != core.instanceId || !plate.plateAttached ||
+            plate.health <= 0)
+        {
+            continue;
+        }
+        const float plateDeg = core.plateAngleDeg + static_cast<float>(plate.plateSlotIndex) * slotWidth;
+        const float diff = std::abs(std::remainder(playerDeg - plateDeg, 360.0F));
+        if (diff < slotWidth * ringCrushArcFrac / 2)
+        {
+            damagePlayer(game, enemyDamage(game, ringCrushDamage));
+            return;
+        }
+    }
+}
+
 void updateBeltbreakerCore(Game& game, Boss& core, float deltaTime)
 {
     if (!core.isBeltbreaker || core.health <= 0)
     {
         return;
     }
+
+    updateRingCrush(game, core);
 
     core.plateAngleDeg =
         std::fmod(core.plateAngleDeg + core.plateRotationSpeed * deltaTime, 360.0F);
@@ -2592,6 +2661,14 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             boss.state = BossState::WINDING_UP;
             boss.stateTimer = bossWindupDuration(boss.attack) * rateMult;
             boss.beamShieldLatched = false;
+            if (boss.isBeltbreaker && boss.attack == BossAttack::Barrage)
+            {
+                boss.stateTimer = rubbleBarrageTell; // core flashes amber
+            }
+            else if (boss.isBeltbreaker && boss.attack == BossAttack::GravityWell)
+            {
+                boss.stateTimer = ringCrushTell; // plates contract round the core
+            }
 
             switch (boss.attack)
             {
@@ -2618,10 +2695,10 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 boss.color = Palette::Haze;
                 break;
             case BossAttack::Barrage:
-                boss.color = Palette::BossSpread;
+                boss.color = boss.isBeltbreaker ? Palette::ShatteredBeltAccent : Palette::BossSpread;
                 break;
             case BossAttack::GravityWell:
-                boss.color = Palette::StructMid;
+                boss.color = boss.isBeltbreaker ? Palette::ShatteredBeltAccent : Palette::StructMid;
                 break;
             case BossAttack::HomingBarrage:
                 boss.color = Palette::BossHoming;
@@ -2917,6 +2994,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                                attackScale)),
                     .health = 1,
                     .isMeteor = boss.isSlagmaw,
+                    .isShard = boss.isBeltbreaker,
                     .isFluid = isWreckworm,
                     .fluidColor = fluidColors.at(static_cast<size_t>(GetRandomValue(0, 2)))});
                 playSFX(game, game.resources.sounds.spreadBurst);
@@ -2944,7 +3022,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             }
         }
 
-        if (boss.attack == BossAttack::GravityWell)
+        if (boss.attack == BossAttack::GravityWell && !boss.isBeltbreaker)
         {
             const Vector2 toBoss = Vector2Subtract(bossCenter, game.run.player.position);
             if (Vector2Length(toBoss) > 0)
@@ -2956,13 +3034,6 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                                                       Vector2Scale(pull, deltaTime * frameScale));
             }
 
-            if (boss.isBeltbreaker)
-            {
-                boss.plateAngleDeg =
-                    std::fmod(boss.plateAngleDeg +
-                                  beltbreakerRotationSpeed * gravityWellFanSpinMult * deltaTime,
-                              360.0F);
-            }
         }
 
         if (boss.attack == BossAttack::PlateHurl)
@@ -3251,10 +3322,10 @@ void forceBossAttack(Game& game, Boss& boss, BossAttack attack)
         boss.color = Palette::Haze;
         break;
     case BossAttack::Barrage:
-        boss.color = Palette::BossSpread;
+        boss.color = boss.isBeltbreaker ? Palette::ShatteredBeltAccent : Palette::BossSpread;
         break;
     case BossAttack::GravityWell:
-        boss.color = Palette::StructMid;
+        boss.color = boss.isBeltbreaker ? Palette::ShatteredBeltAccent : Palette::StructMid;
         break;
     case BossAttack::HomingBarrage:
         boss.color = Palette::BossHoming;
@@ -3387,7 +3458,7 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         playSFX(game, game.resources.sounds.spreadBurst);
         break;
     case BossAttack::GravityWell:
-        boss.stateTimer = gravityWellDuration;
+        boss.stateTimer = boss.isBeltbreaker ? ringCrushDuration(boss) : gravityWellDuration;
         playSFX(game, game.resources.sounds.bossWindUp);
         break;
     case BossAttack::HomingBarrage:
