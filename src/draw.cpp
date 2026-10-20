@@ -2200,7 +2200,7 @@ void drawRustbloomBackground(const Game& game)
     {
         constexpr float parallax = 0.3F;
         constexpr float fragmentCellSize = 260.0F;
-        constexpr float fragmentChance = 0.22F;
+        constexpr float fragmentChance = 0.12F;
         constexpr float fragmentStrength = 0.25F; // toward full colour from the void
         const Vector2 fragArea = Vector2Scale(player, parallax);
         const Vector2 shift = Vector2Scale(player, 1.0F - parallax);
