@@ -65,6 +65,7 @@ void sandboxClearBoard(Game& game)
     game.run.mines.clear();
     game.run.bosses.clear();
     game.run.bossDeathShockwaves.clear();
+    game.run.rustPatches.clear();
 }
 
 void sandboxFullHeal(Game& game)

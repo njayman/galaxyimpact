@@ -1112,6 +1112,7 @@ void updateGameplay(Game& game, float deltaTime)
     updateSolarForgeHeat(game, deltaTime);
     updatePunctumThunder(game, deltaTime);
     updateDebrisSquall(game, deltaTime);
+    updateRustPatches(game, deltaTime);
     updateFluidHazardContact(game);
     updateTacticTracker(game, deltaTime);
     updateGasHazards(game, deltaTime);
@@ -1161,6 +1162,10 @@ void updateGameplay(Game& game, float deltaTime)
             game.run.score += 100;
             spawnKillExplosion(game, bossCenter, boss.baseColor, 14, 1.2F);
             playSFX(game, game.resources.sounds.explosion);
+            if (boss.isWreckwormSegment)
+            {
+                bloomRustPatch(game, bossCenter, true);
+            }
             continue;
         }
 
@@ -3295,6 +3300,172 @@ void updateDebrisSquall(Game& game, float deltaTime)
             damageEnemy(game, i, debrisSquallEnemyDamage);
         }
     }
+}
+
+namespace
+{
+auto rustPatchRamp(const Game& game) -> float
+{
+    return std::clamp(static_cast<float>(game.run.waveNumber - 26) / 24.0F, 0.0F, 1.0F);
+}
+
+void addRustPatch(Game& game, Vector2 position)
+{
+    if (game.run.rustPatches.size() >= static_cast<size_t>(rustPatchMaxCount))
+    {
+        return;
+    }
+    game.run.rustPatches.push_back(
+        RustPatch{.position = position,
+                  .radius = rustPatchStartRadius,
+                  .age = 0,
+                  .budTimer = std::lerp(rustPatchBudIntervalStart, rustPatchBudIntervalEnd,
+                                        rustPatchRamp(game)),
+                  .seed = static_cast<float>(GetRandomValue(0, 9999)) * 0.37F,
+                  .active = true});
+}
+
+void burnRustPatch(Game& game, RustPatch& patch)
+{
+    patch.active = false;
+    spawnKillExplosion(game, patch.position, Palette::ElementBurn, 10, 1.0F);
+    spawnKillExplosion(game, patch.position, Palette::RustbloomAccent, 6, 0.7F);
+}
+} // namespace
+
+void bloomRustPatch(Game& game, Vector2 position, bool guaranteed)
+{
+    if (currentBiome(game.run.waveNumber) != Biome::Rustbloom)
+    {
+        return;
+    }
+    const float ramp = rustPatchRamp(game);
+    const auto chance =
+        static_cast<int32_t>(std::lerp(static_cast<float>(rustPatchBloomChanceStart),
+                                       static_cast<float>(rustPatchBloomChanceEnd), ramp));
+    if (!guaranteed && GetRandomValue(0, 99) >= chance)
+    {
+        return;
+    }
+    // Dying on top of rust feeds that patch instead of starting a new one.
+    const float maxRadius = std::lerp(rustPatchMaxRadiusStart, rustPatchMaxRadiusEnd, ramp);
+    for (auto& patch : game.run.rustPatches)
+    {
+        if (patch.active && Vector2Distance(patch.position, position) < patch.radius)
+        {
+            patch.radius = std::min(maxRadius, patch.radius + rustPatchFeedGrowth);
+            return;
+        }
+    }
+    addRustPatch(game, position);
+}
+
+void updateRustPatches(Game& game, float deltaTime)
+{
+    if (currentBiome(game.run.waveNumber) != Biome::Rustbloom)
+    {
+        game.run.rustPatches.clear();
+        return;
+    }
+    if (bossQteActive(game) || game.run.rustPatches.empty())
+    {
+        return;
+    }
+
+    const float ramp = rustPatchRamp(game);
+    const float maxRadius = std::lerp(rustPatchMaxRadiusStart, rustPatchMaxRadiusEnd, ramp);
+    const float spreadRate = std::lerp(rustPatchSpreadRateStart, rustPatchSpreadRateEnd, ramp);
+    const float budInterval = std::lerp(rustPatchBudIntervalStart, rustPatchBudIntervalEnd, ramp);
+    const size_t patchCount = game.run.rustPatches.size(); // buds join after this loop
+    for (size_t i = 0; i < patchCount; i++)
+    {
+        auto& patch = game.run.rustPatches.at(i);
+        if (Vector2Distance(patch.position, game.run.player.position) > entityDespawnRadius)
+        {
+            patch.active = false;
+            continue;
+        }
+        patch.age += deltaTime;
+        if (patch.radius < maxRadius)
+        {
+            patch.radius = std::min(maxRadius, patch.radius + spreadRate * deltaTime);
+            continue;
+        }
+        patch.budTimer -= deltaTime;
+        if (patch.budTimer <= 0)
+        {
+            patch.budTimer = budInterval;
+            const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+            const Vector2 budPos = Vector2Add(
+                patch.position, Vector2Scale(Vector2{.x = std::cos(angle), .y = std::sin(angle)},
+                                             patch.radius + rustPatchStartRadius * 0.5F));
+            addRustPatch(game, budPos); // may reallocate: patch is not touched after this
+        }
+    }
+
+    // Bullets flying over a patch scorch it down until it burns away. Bullets pass through, and a
+    // patch the player stands in is out of reach of their own fire: step out or dash through it.
+    for (auto& patch : game.run.rustPatches)
+    {
+        if (!patch.active ||
+            CheckCollisionCircles(game.run.player.position, game.run.player.radius * 0.5F,
+                                  patch.position, patch.radius))
+        {
+            continue;
+        }
+        for (const auto& bullet : game.run.bullets)
+        {
+            if (!bullet.active || !CheckCollisionCircles(bullet.position, bullet.radius,
+                                                         patch.position, patch.radius))
+            {
+                continue;
+            }
+            patch.radius -= rustPatchBulletBurnRate * deltaTime;
+            if (patch.radius < rustPatchMinRadius)
+            {
+                burnRustPatch(game, patch);
+                break;
+            }
+            if (GetRandomValue(0, 3) == 0)
+            {
+                spawnKillExplosion(game, bullet.position, Palette::ElementBurn, 2, 0.5F);
+            }
+        }
+    }
+
+    // Dashing through rust burns it away; standing in a ripe patch ticks damage.
+    bool inRust = false;
+    for (auto& patch : game.run.rustPatches)
+    {
+        if (!patch.active ||
+            !CheckCollisionCircles(game.run.player.position, game.run.player.radius * 0.5F,
+                                   patch.position, patch.radius))
+        {
+            continue;
+        }
+        if (game.run.player.dashing)
+        {
+            burnRustPatch(game, patch);
+            continue;
+        }
+        inRust = inRust || patch.age >= rustPatchRipenTime;
+    }
+
+    if (!inRust)
+    {
+        game.run.rustPatchTickTimer = rustPatchEntryGrace;
+    }
+    else if (game.run.player.health > 0 && game.run.player.immunityTimer <= 0)
+    {
+        game.run.rustPatchTickTimer -= deltaTime;
+        if (game.run.rustPatchTickTimer <= 0)
+        {
+            game.run.rustPatchTickTimer = rustPatchTickInterval;
+            damagePlayer(game, enemyDamage(game, rustPatchPlayerDamage));
+        }
+    }
+
+    std::erase_if(game.run.rustPatches, [](const RustPatch& p) { return !p.active; });
 }
 
 void updateFluidHazardContact(Game& game)

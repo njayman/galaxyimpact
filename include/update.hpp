@@ -252,6 +252,9 @@ void updateGasHazards(Game& game, float deltaTime);
 void updateSolarForgeHeat(Game& game, float deltaTime);
 void updatePunctumThunder(Game& game, float deltaTime);
 void updateDebrisSquall(Game& game, float deltaTime);
+void updateRustPatches(Game& game, float deltaTime);
+// An enemy or Wreckworm segment died here: blooms or feeds a Rust Patch in Rustbloom.
+void bloomRustPatch(Game& game, Vector2 position, bool guaranteed);
 struct SquallRock
 {
     Vector2 position;

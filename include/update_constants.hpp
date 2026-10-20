@@ -288,6 +288,25 @@ constexpr float debrisSquallEnemyTickInterval = 0.25F;
 constexpr int32_t debrisSquallRockCount = 48; // fits the broken-rock bitmask
 constexpr int32_t debrisSquallRockScore = 2;
 
+// Rust Patches: Start/End values ramp linearly from wave 26 to wave 50.
+constexpr float rustPatchRipenTime = 1.0F; // a new patch is a harmless outline this long (its tell)
+constexpr float rustPatchStartRadius = 20.0F;
+constexpr float rustPatchMinRadius = 10.0F; // burned below this, the patch is gone
+constexpr float rustPatchMaxRadiusStart = 46.0F;
+constexpr float rustPatchMaxRadiusEnd = 62.0F;
+constexpr float rustPatchSpreadRateStart = 2.0F; // radius growth, px per second
+constexpr float rustPatchSpreadRateEnd = 3.5F;
+constexpr float rustPatchBudIntervalStart = 10.0F; // a full-grown patch buds a neighbour this often
+constexpr float rustPatchBudIntervalEnd = 6.0F;
+constexpr int32_t rustPatchBloomChanceStart = 35; // percent of enemy deaths that bloom
+constexpr int32_t rustPatchBloomChanceEnd = 60;
+constexpr int32_t rustPatchMaxCount = 32;
+constexpr float rustPatchFeedGrowth = 8.0F; // a death inside a patch grows it instead of a new one
+constexpr int32_t rustPatchPlayerDamage = 1;
+constexpr float rustPatchTickInterval = 1.0F;
+constexpr float rustPatchEntryGrace = 0.35F;      // first tick this long after stepping in
+constexpr float rustPatchBulletBurnRate = 160.0F; // radius px/s burned per bullet over a patch
+
 constexpr float rustbloomPodCellSize = 140.0F;
 constexpr float rustbloomPodChance = 0.11F;
 

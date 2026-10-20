@@ -148,6 +148,17 @@ struct GameResources
     Bestiary bestiary;
 };
 
+// Rustbloom's Biome Hazard: a ground patch that blooms where something died and slowly spreads.
+struct RustPatch
+{
+    Vector2 position;
+    float radius;
+    float age;      // harmless outline until rustPatchRipenTime
+    float budTimer; // counts down while full grown, then buds a neighbour
+    float seed;
+    bool active;
+};
+
 struct GameplayState
 {
     Player player;
@@ -240,6 +251,8 @@ struct GameplayState
     float debrisSquallFront;
     float debrisSquallEnemyTickTimer;
     uint64_t debrisSquallBrokenMask; // bit per rock shot this sweep
+    std::vector<RustPatch> rustPatches;
+    float rustPatchTickTimer;
     float shieldDashShakeCooldownTimer;
     bool punctumTrapActive;
     bool inBanishedRealm;

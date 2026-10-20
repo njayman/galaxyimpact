@@ -231,6 +231,20 @@ Rework of `drawRustbloomBackground` into three layers, far to near, kept faint a
 
 **Rust Patches** (always on): rust blooms where enemies die and slowly spreads; crossing it deals damage over time; shooting or dashing through burns it away. Affects the player only. Distinct from the Blight Gate (slow only, wormhole exits only). Stays on during Wreckworm fights; destroyed and shed segments feed Rust Patches like any death.
 
+Starting numbers (`rustPatch*` in `include/update_constants.hpp`; Start/End ramp linearly from wave 26 to wave 50):
+
+| Value | Start | End | Note |
+| --- | --- | --- | --- |
+| Bloom chance per enemy death | 35% | 60% | Wreckworm segments always bloom; a death inside a patch grows it by 8 px instead |
+| Spread rate (radius growth) | 2 px/s | 3.5 px/s | from 20 px at bloom |
+| Max radius | 46 px | 62 px | |
+| Bud interval at max radius | 10 s | 6 s | buds a new patch at its edge |
+| Patch cap | 32 | 32 | patches beyond 1400 px from the player wither |
+
+- **Tell:** a new patch is a dashed, pulsing outline for 1 s and harmless until it ripens; the rim turns danger red while the player stands in it.
+- **Damage:** 1 base damage (scaled by `enemyDamage`) 0.35 s after stepping in, then every 1 s; player only.
+- **Counter:** bullets passing over a patch burn 160 px/s of radius each and pass through; a patch the player stands in cannot be shot down from inside. Dashing through any patch burns it away at once.
+
 ### Anomaly variant
 
 **Blight Gate** (wormhole): each exit leaves a short-lived spore cloud that slows the player, so teleporting has a cost. Details may be refined in this Biome's tickets.

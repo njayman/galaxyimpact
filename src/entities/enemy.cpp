@@ -290,6 +290,7 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
     game.run.enemies.at(index).active = false;
     tryComboRefund(game);
     recordEnemyKilled(game, game.run.enemies.at(index).kind);
+    bloomRustPatch(game, game.run.enemies.at(index).position, false);
 
     if (game.run.enemies.at(index).kind == enemyKindHiveNode)
     {

@@ -89,6 +89,7 @@ void drawHighScores(const Game& game, int32_t x, int32_t y, const std::vector<in
 void drawGameplayWorld(const Game& game);
 void drawPunctumLightning(const Game& game);
 void drawDebrisSquall(const Game& game);
+void drawRustPatches(const Game& game);
 void drawShipHull(ShipClass shipClass, Vector2 p, float r, float angle, Color shipColor);
 void drawShip(const Game& game);
 void drawEngineFlame(Vector2 p, float r, float angle);
@@ -2453,6 +2454,61 @@ void drawDebrisSquall(const Game& game)
     }
 }
 
+void drawRustPatches(const Game& game)
+{
+    constexpr int32_t sides = 14;
+    const auto t = static_cast<float>(GetTime());
+    for (const auto& patch : game.run.rustPatches)
+    {
+        const float ripe = std::clamp(patch.age / rustPatchRipenTime, 0.0F, 1.0F);
+        const bool playerIn = ripe >= 1.0F && CheckCollisionCircles(game.run.player.position,
+                                                                    game.run.player.radius * 0.5F,
+                                                                    patch.position, patch.radius);
+        // Ragged rim: each vertex keeps its own hashed reach and breathes slowly.
+        std::array<Vector2, sides> rim{};
+        for (int32_t i = 0; i < sides; i++)
+        {
+            const float a = static_cast<float>(i) / sides * 2.0F * PI + patch.seed;
+            const float reach = 0.78F + 0.22F * hashNoise(patch.seed + static_cast<float>(i)) +
+                                0.04F * std::sin(t * 0.8F + static_cast<float>(i) * 1.7F);
+            rim.at(static_cast<size_t>(i)) =
+                Vector2Add(patch.position, Vector2{.x = std::cos(a) * patch.radius * reach,
+                                                   .y = std::sin(a) * patch.radius * reach});
+        }
+        for (int32_t i = 0; i < sides; i++)
+        {
+            const Vector2 a = rim.at(static_cast<size_t>(i));
+            const Vector2 b = rim.at(static_cast<size_t>((i + 1) % sides));
+            DrawTriangle(patch.position, b, a, Fade(Palette::RustbloomHaze, 0.3F * ripe));
+            DrawTriangle(patch.position, Vector2Lerp(patch.position, b, 0.55F),
+                         Vector2Lerp(patch.position, a, 0.55F),
+                         Fade(Palette::RustbloomHaze, 0.22F * ripe));
+            // Ripening: a dashed, pulsing rim is the tell; once ripe the rim is solid.
+            if (ripe < 1.0F && i % 2 == 1)
+            {
+                continue;
+            }
+            const Color rimColor = playerIn ? Palette::Accent : Palette::RustbloomAccent;
+            const float rimAlpha =
+                ripe < 1.0F ? 0.35F + 0.35F * (0.5F + 0.5F * std::sin(t * 14.0F)) : 0.7F;
+            DrawLineEx(a, b, 1.5F, Fade(rimColor, rimAlpha));
+        }
+        // Spore specks scattered inside, flickering out of phase.
+        for (int32_t i = 0; i < 5; i++)
+        {
+            const float s = patch.seed + 40.0F + static_cast<float>(i) * 3.1F;
+            const float a = hashNoise(s) * 2.0F * PI;
+            const float d = hashNoise(s + 1.0F) * patch.radius * 0.6F;
+            const Vector2 p =
+                Vector2Add(patch.position, Vector2{.x = std::cos(a) * d, .y = std::sin(a) * d});
+            const float flicker = 0.5F + 0.5F * std::sin(t * 2.5F + s);
+            DrawRectangleV(Vector2Subtract(p, Vector2{.x = 1.5F, .y = 1.5F}),
+                           Vector2{.x = 3, .y = 3},
+                           Fade(Palette::RustbloomAccent, (0.3F + 0.4F * flicker) * ripe));
+        }
+    }
+}
+
 void drawPunctumLightning(const Game& game)
 {
     if (game.run.punctumThunderFlashTimer <= 0)
@@ -2667,6 +2723,8 @@ void drawGameplayWorld(const Game& game)
     {
         DrawCircleV(c.position, c.radius, c.color);
     }
+
+    drawRustPatches(game);
 
     if (game.run.blackhole.active)
     {
