@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <format>
 #include <functional>
+#include <limits>
 #include <numbers>
 #include <optional>
 #include <string>
@@ -2011,26 +2012,31 @@ void drawDebrisSquall(const Game& game)
     const auto at = [&](float s, float off)
     { return Vector2Add(center, Vector2Add(Vector2Scale(along, s), Vector2Scale(across, off))); };
     const Color amber = Palette::ShatteredBeltAccent;
+    // The band runs past both screen edges wherever the player goes: it is drawn around the
+    // player's own position along it, so moving along the band never reveals an end.
+    const float playerAlong = Vector2DotProduct(Vector2Subtract(game.run.player.position, center), along);
+    const float reach = debrisSquallReach;
 
     if (game.run.debrisSquallPhase == 1)
     {
         const auto t = static_cast<float>(GetTime());
         const float pulse = 0.5F + 0.5F * std::sin(t * 18.0F);
-        const float reach = debrisSquallReach;
-        DrawTriangle(at(-reach, -debrisSquallHalfWidth), at(reach, debrisSquallHalfWidth),
-                     at(reach, -debrisSquallHalfWidth), Fade(amber, 0.06F + 0.05F * pulse));
-        DrawTriangle(at(-reach, -debrisSquallHalfWidth), at(-reach, debrisSquallHalfWidth),
-                     at(reach, debrisSquallHalfWidth), Fade(amber, 0.06F + 0.05F * pulse));
-        DrawLineEx(at(-reach, -debrisSquallHalfWidth), at(reach, -debrisSquallHalfWidth), 2.0F,
+        const float s0 = playerAlong - reach;
+        const float s1 = playerAlong + reach;
+        DrawTriangle(at(s0, -debrisSquallHalfWidth), at(s1, debrisSquallHalfWidth),
+                     at(s1, -debrisSquallHalfWidth), Fade(amber, 0.06F + 0.05F * pulse));
+        DrawTriangle(at(s0, -debrisSquallHalfWidth), at(s0, debrisSquallHalfWidth),
+                     at(s1, debrisSquallHalfWidth), Fade(amber, 0.06F + 0.05F * pulse));
+        DrawLineEx(at(s0, -debrisSquallHalfWidth), at(s1, -debrisSquallHalfWidth), 2.0F,
                    Fade(Palette::Accent, 0.4F + 0.4F * pulse));
-        DrawLineEx(at(-reach, debrisSquallHalfWidth), at(reach, debrisSquallHalfWidth), 2.0F,
+        DrawLineEx(at(s0, debrisSquallHalfWidth), at(s1, debrisSquallHalfWidth), 2.0F,
                    Fade(Palette::Accent, 0.4F + 0.4F * pulse));
 
         // Edge warning: chevrons where the band enters the screen, pointing along the sweep.
         const auto halfW = static_cast<float>(game.resources.screenWidth) / 2 - 40;
         const auto halfH = static_cast<float>(game.resources.screenHeight) / 2 - 40;
         const Vector2 rel = Vector2Subtract(center, game.run.player.position);
-        float exitT = reach;
+        float exitT = std::numeric_limits<float>::max();
         if (along.x != 0)
         {
             exitT = std::min(exitT, (along.x > 0 ? rel.x + halfW : rel.x - halfW) / along.x);
@@ -2053,7 +2059,7 @@ void drawDebrisSquall(const Game& game)
     {
         const auto seed = static_cast<float>(i) * 13.7F;
         const float s = game.run.debrisSquallFront - hashNoise(seed) * debrisSquallStreamLength;
-        if (std::abs(s) > debrisSquallReach)
+        if (std::abs(s - playerAlong) > reach)
         {
             continue;
         }

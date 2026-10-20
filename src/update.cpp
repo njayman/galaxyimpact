@@ -3186,7 +3186,10 @@ void updateDebrisSquall(Game& game, float deltaTime)
         if (game.run.debrisSquallPhaseTimer <= 0)
         {
             game.run.debrisSquallPhase = 2;
-            game.run.debrisSquallFront = -debrisSquallReach;
+            // Rocks enter just off screen from wherever the player now is along the band.
+            game.run.debrisSquallFront =
+                Vector2DotProduct(Vector2Subtract(game.run.player.position, game.run.debrisSquallCenter), along) -
+                debrisSquallReach;
             game.run.debrisSquallEnemyTickTimer = 0;
             triggerShake(game, 3, 0.4F);
         }
@@ -3194,7 +3197,9 @@ void updateDebrisSquall(Game& game, float deltaTime)
     }
 
     game.run.debrisSquallFront += debrisSquallSpeed * deltaTime;
-    if (game.run.debrisSquallFront - debrisSquallStreamLength > debrisSquallReach)
+    if (game.run.debrisSquallFront - debrisSquallStreamLength >
+        Vector2DotProduct(Vector2Subtract(game.run.player.position, game.run.debrisSquallCenter), along) +
+            debrisSquallReach)
     {
         game.run.debrisSquallPhase = 0;
         return;
