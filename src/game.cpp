@@ -335,6 +335,8 @@ void resetRun(Game& game)
                                        static_cast<int32_t>(punctumThunderIntervalMax * 10))) /
                                    10.0F;
     game.run.punctumThunderFlashTimer = 0;
+    game.run.debrisSquallTimer = debrisSquallIntervalStart;
+    game.run.debrisSquallPhase = 0;
     game.run.punctumTrapActive = false;
     game.run.inBanishedRealm = false;
     game.run.bossCutscenePhase = 0;

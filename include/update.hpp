@@ -248,6 +248,7 @@ void updateFluidHazardContact(Game& game);
 void updateGasHazards(Game& game, float deltaTime);
 void updateSolarForgeHeat(Game& game, float deltaTime);
 void updatePunctumThunder(Game& game, float deltaTime);
+void updateDebrisSquall(Game& game, float deltaTime);
 auto findWreckwormSegment(Game& game, int32_t headId, int32_t segmentIndex) -> Boss*;
 void triggerWreckwormMolt(Game& game, Boss& head);
 void updatePickups(Game& game, float deltaTime);

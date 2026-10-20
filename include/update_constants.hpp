@@ -251,6 +251,19 @@ constexpr float caveTunnelHalfWidth = 0.17F;
 // sweep along it, so the backdrop foreshadows where a squall comes from.
 constexpr float beltDustLaneAngleDeg = 33.0F;
 
+// Debris Squall: the interval ramps linearly from Start at wave 1 to End at wave 25.
+constexpr float debrisSquallIntervalStart = 18.0F;
+constexpr float debrisSquallIntervalEnd = 10.0F;
+constexpr float debrisSquallWarnTime = 1.2F;
+constexpr float debrisSquallHalfWidth = 90.0F;
+constexpr float debrisSquallMaxOffset = 60.0F; // band centre offset from the player at warn time
+constexpr float debrisSquallSpeed = 1500.0F;
+constexpr float debrisSquallStreamLength = 700.0F;
+constexpr float debrisSquallReach = 1000.0F; // sweep starts and ends this far from the band centre
+constexpr int32_t debrisSquallPlayerDamage = 1;
+constexpr int32_t debrisSquallEnemyDamage = 12;
+constexpr float debrisSquallEnemyTickInterval = 0.25F;
+
 constexpr float rustbloomPodCellSize = 140.0F;
 constexpr float rustbloomPodChance = 0.28F;
 

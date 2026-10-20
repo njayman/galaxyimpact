@@ -87,6 +87,7 @@ void drawMenu(const Game& game, const std::string& heading, const std::vector<st
 void drawHighScores(const Game& game, int32_t x, int32_t y, const std::vector<int32_t>& scores);
 void drawGameplayWorld(const Game& game);
 void drawPunctumLightning(const Game& game);
+void drawDebrisSquall(const Game& game);
 void drawShipHull(ShipClass shipClass, Vector2 p, float r, float angle, Color shipColor);
 void drawShip(const Game& game);
 void drawEngineFlame(Vector2 p, float r, float angle);
@@ -1784,6 +1785,76 @@ void drawRustbloomBackground(const Game& game)
     }
 }
 
+void drawDebrisSquall(const Game& game)
+{
+    if (game.run.debrisSquallPhase == 0)
+    {
+        return;
+    }
+
+    const float angle = beltDustLaneAngleDeg * DEG2RAD;
+    const Vector2 along{.x = std::cos(angle) * game.run.debrisSquallDir,
+                        .y = std::sin(angle) * game.run.debrisSquallDir};
+    const Vector2 across{.x = -along.y, .y = along.x};
+    const Vector2 center = game.run.debrisSquallCenter;
+    const auto at = [&](float s, float off)
+    { return Vector2Add(center, Vector2Add(Vector2Scale(along, s), Vector2Scale(across, off))); };
+    const Color amber = Palette::ShatteredBeltAccent;
+
+    if (game.run.debrisSquallPhase == 1)
+    {
+        const auto t = static_cast<float>(GetTime());
+        const float pulse = 0.5F + 0.5F * std::sin(t * 18.0F);
+        const float reach = debrisSquallReach;
+        DrawTriangle(at(-reach, -debrisSquallHalfWidth), at(reach, debrisSquallHalfWidth),
+                     at(reach, -debrisSquallHalfWidth), Fade(amber, 0.06F + 0.05F * pulse));
+        DrawTriangle(at(-reach, -debrisSquallHalfWidth), at(-reach, debrisSquallHalfWidth),
+                     at(reach, debrisSquallHalfWidth), Fade(amber, 0.06F + 0.05F * pulse));
+        DrawLineEx(at(-reach, -debrisSquallHalfWidth), at(reach, -debrisSquallHalfWidth), 2.0F,
+                   Fade(Palette::Accent, 0.4F + 0.4F * pulse));
+        DrawLineEx(at(-reach, debrisSquallHalfWidth), at(reach, debrisSquallHalfWidth), 2.0F,
+                   Fade(Palette::Accent, 0.4F + 0.4F * pulse));
+
+        // Edge warning: chevrons where the band enters the screen, pointing along the sweep.
+        const auto halfW = static_cast<float>(game.resources.screenWidth) / 2 - 40;
+        const auto halfH = static_cast<float>(game.resources.screenHeight) / 2 - 40;
+        const Vector2 rel = Vector2Subtract(center, game.run.player.position);
+        float exitT = reach;
+        if (along.x != 0)
+        {
+            exitT = std::min(exitT, (along.x > 0 ? rel.x + halfW : rel.x - halfW) / along.x);
+        }
+        if (along.y != 0)
+        {
+            exitT = std::min(exitT, (along.y > 0 ? rel.y + halfH : rel.y - halfH) / along.y);
+        }
+        for (int32_t i = 0; i < 3; i++)
+        {
+            const float s = -exitT + static_cast<float>(i) * 28.0F;
+            DrawTriangle(at(s + 22, 0), at(s, -22), at(s, 22),
+                         Fade(Palette::Accent, (0.5F + 0.5F * pulse) * (1.0F - 0.25F * static_cast<float>(i))));
+        }
+        return;
+    }
+
+    constexpr int32_t rockCount = 48;
+    for (int32_t i = 0; i < rockCount; i++)
+    {
+        const auto seed = static_cast<float>(i) * 13.7F;
+        const float s = game.run.debrisSquallFront - hashNoise(seed) * debrisSquallStreamLength;
+        if (std::abs(s) > debrisSquallReach)
+        {
+            continue;
+        }
+        const float off = (hashNoise(seed + 1.0F) * 2.0F - 1.0F) * debrisSquallHalfWidth;
+        const float radius = 6.0F + hashNoise(seed + 2.0F) * 10.0F;
+        const Vector2 pos = at(s, off);
+        DrawLineEx(pos, at(s - radius * 5, off), radius * 0.6F, Fade(amber, 0.3F));
+        DrawPoly(pos, 5, radius, hashNoise(seed + 3.0F) * 360.0F + game.run.debrisSquallFront,
+                 Palette::StructMid);
+    }
+}
+
 void drawPunctumLightning(const Game& game)
 {
     if (game.run.punctumThunderFlashTimer <= 0)
@@ -2060,6 +2131,8 @@ void drawGameplayWorld(const Game& game)
     {
         drawBoss(game, boss);
     }
+
+    drawDebrisSquall(game);
 
     for (const auto& m : game.run.mines)
     {

@@ -1111,6 +1111,7 @@ void updateGameplay(Game& game, float deltaTime)
     updateAsteroids(game, deltaTime);
     updateSolarForgeHeat(game, deltaTime);
     updatePunctumThunder(game, deltaTime);
+    updateDebrisSquall(game, deltaTime);
     updateFluidHazardContact(game);
     updateTacticTracker(game, deltaTime);
     updateGasHazards(game, deltaTime);
@@ -3137,6 +3138,98 @@ void updatePunctumThunder(Game& game, float deltaTime)
     game.run.punctumThunderBoltSeed = static_cast<float>(GetRandomValue(0, 10000));
     triggerShake(game, 6, 0.3F);
     playSFX(game, game.resources.sounds.thunder);
+}
+
+void updateDebrisSquall(Game& game, float deltaTime)
+{
+    const bool beltbreakerFight = std::ranges::any_of(
+        game.run.bosses, [](const Boss& boss) { return boss.isBeltbreaker || boss.isBeltbreakerPlate; });
+    if (currentBiome(game.run.waveNumber) != Biome::ShatteredBelt || beltbreakerFight)
+    {
+        game.run.debrisSquallPhase = 0;
+        return;
+    }
+    if (bossQteActive(game))
+    {
+        return;
+    }
+
+    const float angle = beltDustLaneAngleDeg * DEG2RAD;
+    const Vector2 along{.x = std::cos(angle) * game.run.debrisSquallDir,
+                        .y = std::sin(angle) * game.run.debrisSquallDir};
+    const Vector2 across{.x = -along.y, .y = along.x};
+
+    if (game.run.debrisSquallPhase == 0)
+    {
+        game.run.debrisSquallTimer -= deltaTime;
+        if (game.run.debrisSquallTimer > 0)
+        {
+            return;
+        }
+        const float ramp =
+            std::clamp(static_cast<float>(game.run.waveNumber - 1) / 24.0F, 0.0F, 1.0F);
+        game.run.debrisSquallTimer =
+            std::lerp(debrisSquallIntervalStart, debrisSquallIntervalEnd, ramp);
+        game.run.debrisSquallPhase = 1;
+        game.run.debrisSquallPhaseTimer = debrisSquallWarnTime;
+        game.run.debrisSquallDir = GetRandomValue(0, 1) == 0 ? 1.0F : -1.0F;
+        const auto offset = static_cast<float>(GetRandomValue(-static_cast<int32_t>(debrisSquallMaxOffset),
+                                                               static_cast<int32_t>(debrisSquallMaxOffset)));
+        game.run.debrisSquallCenter =
+            Vector2Add(game.run.player.position, Vector2Scale(across, offset));
+        return;
+    }
+
+    if (game.run.debrisSquallPhase == 1)
+    {
+        game.run.debrisSquallPhaseTimer -= deltaTime;
+        if (game.run.debrisSquallPhaseTimer <= 0)
+        {
+            game.run.debrisSquallPhase = 2;
+            game.run.debrisSquallFront = -debrisSquallReach;
+            game.run.debrisSquallEnemyTickTimer = 0;
+            triggerShake(game, 3, 0.4F);
+        }
+        return;
+    }
+
+    game.run.debrisSquallFront += debrisSquallSpeed * deltaTime;
+    if (game.run.debrisSquallFront - debrisSquallStreamLength > debrisSquallReach)
+    {
+        game.run.debrisSquallPhase = 0;
+        return;
+    }
+
+    const auto inRocks = [&](Vector2 pos, float radius)
+    {
+        const Vector2 rel = Vector2Subtract(pos, game.run.debrisSquallCenter);
+        const float s = Vector2DotProduct(rel, along);
+        return std::abs(Vector2DotProduct(rel, across)) < debrisSquallHalfWidth + radius &&
+               s < game.run.debrisSquallFront &&
+               s > game.run.debrisSquallFront - debrisSquallStreamLength;
+    };
+
+    if (game.run.player.health > 0 && game.run.player.immunityTimer <= 0 &&
+        inRocks(game.run.player.position, 0))
+    {
+        damagePlayer(game, enemyDamage(game, debrisSquallPlayerDamage));
+    }
+
+    game.run.debrisSquallEnemyTickTimer -= deltaTime;
+    if (game.run.debrisSquallEnemyTickTimer > 0)
+    {
+        return;
+    }
+    game.run.debrisSquallEnemyTickTimer = debrisSquallEnemyTickInterval;
+    for (size_t i = 0; i < game.run.enemies.size(); i++)
+    {
+        const auto& enemy = game.run.enemies.at(i);
+        if (enemy.active && enemy.health > 0 &&
+            inRocks(enemy.position, enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
+        {
+            damageEnemy(game, i, debrisSquallEnemyDamage);
+        }
+    }
 }
 
 void updateFluidHazardContact(Game& game)

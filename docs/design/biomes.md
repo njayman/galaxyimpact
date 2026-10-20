@@ -136,6 +136,8 @@ Described in words only; looks the build finds open can become a prototype ticke
 
 **Debris Squall** (event): a few times per wave an edge warning shows, then a band of fast rocks sweeps across the field in one direction; move out of the band. Damages enemies too, so they can be lured in. Switched off during Beltbreaker fights.
 
+Starting numbers: one squall every 18 s at wave 1, ramping linearly to every 10 s at wave 25; 1.2 s warning (band outline plus chevrons at the screen edge it enters from); band 180 units wide, centred within 60 units of the player, sweeping along the dust-lane angle at 1500 units/s; 1 wave-scaled damage to the player per pass, 12 damage every 0.25 s to enemies in the rocks.
+
 ### Anomaly variant
 
 **Grinder** (black hole): loose rock caught in its pull orbits it as contact-damage shrapnel; shooting the orbit breaks it up. Details may be refined in this Biome's tickets.
