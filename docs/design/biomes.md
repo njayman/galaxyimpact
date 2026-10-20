@@ -357,7 +357,7 @@ Waves 60, 70, 75. Skeleton kept: a huge slow mass (0.32x speed), now basalt with
 
 ## Punctum
 
-**Status:** Draft. Waves 76-100, Biome Boss Kraken.
+**Status:** Approved, 2026-10-20. Waves 76-100, Biome Boss Kraken.
 
 ### Theme and palette
 
@@ -405,6 +405,52 @@ Three layers, far to near:
 ### Wave Boss flavour
 
 Mini Wave Bosses at waves 85 and 95. Pool: Void Herald, Nullpoint Marauder, Stormcaller, Judgment Spire.
+
+### Biome Boss: Kraken
+
+Waves 80, 90, 100 (encounters 1, 2, 3). Skeleton kept; new look: lavender body with cyan lightning veins, staggered tentacles crackle cyan.
+
+**Phases**
+
+1. **Storm:** attacks from the table below. Tentacles (1 / 2 / 4 active by encounter) emerge from portals near the player and swipe; shielding a swipe staggers that tentacle; staggering every active tentacle exposes the core for 8 s, once per fight. Snatch gives the recurring QTE beat.
+2. **Limbs (wave 90+):** pods pull enemies out of portals and hurl them.
+3. **Summons by encounter:** wave 80, 8 enemies every 9 s; wave 90, 3 tough enemies plus an Elite Hazard every 12 s; wave 100, one Storm Serpent after 4 s.
+4. **Exit:** at 0 HP on waves 80 and 90 the Kraken dives into a small tear portal (was: swims off-screen). Wave 100 plays the outro below.
+
+**Attacks**
+
+| Attack | Tell | Effect | Counter | Starting numbers |
+| --- | --- | --- | --- | --- |
+| Static Burst (replaces `Barrage`) | as Barrage | cyan bolt spray, Barrage behaviour | strafe through gaps | as `Barrage` |
+| Arc Lance (replaces `Beam`) | as Beam | forked lightning beam, Beam behaviour | step out of the line | as `Beam` |
+| Riptide (replaces `GravityWell`) | as GravityWell | pull toward a small tear, GravityWell behaviour | thrust away | as `GravityWell` |
+| Ball Lightning (replaces `HomingBarrage`, wave 90+) | as HomingBarrage | homing lightning orbs | outrun, shoot down | as `HomingBarrage` |
+| Tentacle swipe (kept) | portal opens, 0.4 s emerge | 140° swipe | shield to stagger | 2 damage |
+| Limb hurl (kept, wave 90+) | as today | thrown enemy | dodge | 3 damage |
+| Snatch (new, all encounters) | cyan ring opens under the player 1 s | a tentacle grabs the player from the portal; a catch starts the Boss QTE | leave the ring | uses an idle, unstaggered tentacle slot |
+
+**Snatch rules:** never during core exposure, the outro, or a Storm Serpent Coil Clamp hold; a fully staggered Kraken cannot Snatch. Inside the 20 s QTE gap a catch is a plain grab: a short hold, then the fail outcome, no cutscene.
+
+**Storm Serpent** (wave 100 summon, was the off-palette red snake): lavender segments with cyan crackle; behaviour unchanged. Its Coil Clamp is a plain grab and never starts a Boss QTE (those belong to Biome Bosses only).
+
+**Thunder Strike** stays on during the fight, unchanged, and still hits summons. Paused in the Boss QTE; suppressed during the outro.
+
+**Outro (wave 100):** kept beat for beat in cyan and lavender: the Kraken approaches, opens the portal ("Follow me, if you dare."), and the trap pulls the player into the Banished realm.
+
+### Boss QTE: Dragged Under
+
+- **Trigger:** Snatch catches the player (recurs; 20 s minimum gap). Leaving the ring means no QTE.
+- **Choreography:** a **Mash** Prompt to break the grip, then 11 Prompts as the Kraken drags the player portal to portal through the tear while other tentacles lash in; thunder flashes are visual only.
+- **Prompts:** 12 total (1 Mash + 11), 0.6 s window, 30% Parry share.
+- **Clean clear:** the player severs the gripping tentacle: 3 s Punish Window (+50%) with the core exposed as a weak point. Does not use up the once-per-fight 8 s core exposure.
+- **Fail:** flung out of a portal at a random nearby spot; one tentacle hit (2 damage).
+
+### Open for build
+
+- Snatch ring radius, cadence and the plain-grab hold length; core weak-point multiplier.
+- Static Burst density; Arc Lance fork count; Riptide pull strength.
+- Tear-portal dive timing at waves 80 and 90.
+- Storm Serpent exact shading.
 
 ## Banished realm
 
