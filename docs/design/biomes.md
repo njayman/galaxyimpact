@@ -249,7 +249,7 @@ Starting numbers (`rustPatch*` in `include/update_constants.hpp`; Start/End ramp
 
 **Blight Gate** (wormhole): each exit leaves a short-lived spore cloud that slows the player, so teleporting has a cost. Details may be refined in this Biome's tickets.
 
-As built: every time the player comes out of a wormhole mouth, that mouth leaves an anchored spore cloud (radius 70, 4 s; a second exit through the same mouth refreshes it instead of stacking). While inside, the player moves at half speed (the shared slow), and the slow lingers 0.3 s after leaving. Spore clouds deal no damage and are cleared by a shield dash like other gas clouds. Only the player's exits leave spores; enemies and bullets pass through freely. Both Anomalies take the Rustbloom palette: lichen-green and rust dust in the black hole and lichen-green wormhole rims. Wormhole timing, lifetime and behaviour are unchanged.
+As built: every time the player comes out of a wormhole mouth, that mouth leaves an anchored spore cloud (radius 70, 4 s; a second exit through the same mouth refreshes it instead of stacking). While inside, the player moves at half speed (the shared slow), and the slow lingers 0.3 s after leaving. Spore clouds deal no damage and, unlike other gas clouds, cannot be cleared by a shield dash (that would cancel the toll). Only the player's exits leave spores; enemies and bullets pass through freely. Both Anomalies take the Rustbloom palette: lichen-green and rust dust in the black hole and lichen-green wormhole rims. Wormhole timing, lifetime and behaviour are unchanged.
 
 ### Wave Boss flavour
 

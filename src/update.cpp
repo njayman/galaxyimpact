@@ -3353,7 +3353,14 @@ void bloomRustPatch(Game& game, Vector2 position, bool guaranteed)
     {
         if (patch.active && Vector2Distance(patch.position, position) < patch.radius)
         {
-            patch.radius = std::min(maxRadius, patch.radius + rustPatchFeedGrowth);
+            // Never jump the edge onto a player standing outside: that would skip the tell.
+            float grown = std::min(maxRadius, patch.radius + rustPatchFeedGrowth);
+            const float playerDist = Vector2Distance(patch.position, game.run.player.position);
+            if (playerDist >= patch.radius)
+            {
+                grown = std::min(grown, std::max(patch.radius, playerDist - game.run.player.radius));
+            }
+            patch.radius = grown;
             return;
         }
     }
@@ -3528,7 +3535,7 @@ void updateGasHazards(Game& game, float deltaTime)
             continue;
         }
 
-        if (shieldDashing)
+        if (shieldDashing && !cloud.spores) // a Blight Gate cloud can't be dashed away: it is the toll
         {
             cloud.active = false;
             triggerShake(game, 4, 0.15F);

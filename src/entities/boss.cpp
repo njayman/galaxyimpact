@@ -2801,11 +2801,11 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake, bool pi
     }
     if (boss.isBeltbreaker && boss.beltbreakerPunishTimer > 0)
     {
-        amount = static_cast<int32_t>(static_cast<float>(amount) * UpdateConstants::beltbreakerPunishDamageMult);
+        amount = static_cast<int32_t>(std::ceil(static_cast<float>(amount) * UpdateConstants::beltbreakerPunishDamageMult));
     }
     if (boss.isWreckwormHead && boss.wreckwormPunishTimer > 0)
     {
-        amount = static_cast<int32_t>(static_cast<float>(amount) * UpdateConstants::wreckwormPunishDamageMult);
+        amount = static_cast<int32_t>(std::ceil(static_cast<float>(amount) * UpdateConstants::wreckwormPunishDamageMult));
     }
 
     if (boss.isWreckwormHead && boss.state == BossState::SHOOTING &&
