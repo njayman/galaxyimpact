@@ -125,7 +125,6 @@ constexpr float bgmDuckStrength = 0.5F;
 
 constexpr int miniBossWaveInterval = 5;
 constexpr int megaBossWaveInterval = 10;
-constexpr int finalBossWaveInterval = 100;
 constexpr int bossSwarmInterval = 50;
 constexpr float miniBossHealthMult = 0.5F;
 constexpr float miniBossSizeMult = 0.7F;
@@ -468,8 +467,10 @@ constexpr float banishedGrabAttackChance = 0.15F;
 
 constexpr float banishedEyeChargeDuration = 5.0F;
 constexpr float banishedEyeCooldownAfterFire = 3.0F;
-constexpr int32_t banishedEyeBurstDamageDivisor = 6;
-constexpr int32_t banishedEyeShieldDashDamageDivisor = 12;
+// Three dash-in or Nerve bursts win; a Doom Gaze shield-dash burst is worth half of one.
+constexpr int32_t banishedHealth = 6;
+constexpr int32_t banishedEyeBurstDamageDivisor = 3;
+constexpr int32_t banishedEyeShieldDashDamageDivisor = 6;
 
 constexpr float banishedFleeSpeed = 2.4F;
 constexpr float banishedEyeFireDuration = 1.0F;

@@ -3232,12 +3232,7 @@ void updateWaveSpawner(Game& game, float deltaTime)
             game.run.waveTimer = GameConstants::waveDuration;
             recordWaveReached(game, game.run.waveNumber);
 
-            if (game.run.waveNumber % finalBossWaveInterval == 0 &&
-                currentBiome(game.run.waveNumber) != Biome::Punctum)
-            {
-                spawnFinalBossWave(game);
-            }
-            else if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt &&
+            if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt &&
                      (game.run.waveNumber == 10 || game.run.waveNumber == 20 ||
                       game.run.waveNumber == 25))
             {

@@ -202,7 +202,6 @@ void damageEliteHazard(Game& game, size_t index, int32_t amount, bool applyShake
 auto enemyDamage(const Game& game, int32_t base) -> int32_t;
 void spawnEnemy(Game& game);
 void spawnBossWave(Game& game, float healthMult, float sizeMult, bool isMega);
-void spawnFinalBossWave(Game& game);
 auto sampleBossMoveset(int count) -> std::vector<BossAttack>;
 auto spawnRingPosition(const Game& game) -> Vector2;
 void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter);
@@ -329,8 +328,7 @@ void spawnKillExplosion(Game& game, Vector2 position, Color color, int32_t parti
 void detonateMine(Game& game, size_t index);
 auto isOutsideCameraView(const Game& game, Vector2 pos, float margin) -> bool;
 void spawnRockCluster(Game& game, Vector2 center);
-void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega, bool isSwarm,
-                       bool isFinal = false);
+void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega, bool isSwarm);
 auto beltbreakerCoreCenter(const Boss& core) -> Vector2;
 auto countContributingPlates(Game& game, const Boss& core) -> int32_t;
 void detachBeltbreakerPlates(Game& game, const Boss& core);

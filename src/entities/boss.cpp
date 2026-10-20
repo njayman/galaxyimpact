@@ -53,8 +53,7 @@ auto sampleBossMoveset(int count) -> std::vector<BossAttack>
     return pool;
 }
 
-void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega, bool isSwarm,
-                       bool isFinal)
+void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega, bool isSwarm)
 {
     const int32_t tier = game.run.waveNumber / megaBossWaveInterval;
 
@@ -71,18 +70,13 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
         typeIndex = DemoConfig::allowedBossTypeIndices.at(static_cast<size_t>(GetRandomValue(
             0, static_cast<int32_t>(DemoConfig::allowedBossTypeIndices.size()) - 1)));
     }
-    if (isFinal)
-    {
-        typeIndex = bossTypes.size() - 1;
-    }
     const auto& type = bossTypes.at(typeIndex);
 
-    const float finalBossMult = isFinal ? 3.0F : 1.0F;
     const auto health =
         static_cast<int32_t>(static_cast<float>(500 + tier * bossHpPerTier) * healthMult *
-                             type.healthMult * finalBossMult * enemyHealthMult *
+                             type.healthMult * enemyHealthMult *
                              enemyHealthScale(game));
-    const float size = 100.0F * sizeMult * type.sizeMult * (isFinal ? 1.3F : 1.0F);
+    const float size = 100.0F * sizeMult * type.sizeMult;
 
     auto moveset = sampleBossMoveset(bossMoveCount);
     const BossAttack firstAttack = moveset.front();
@@ -112,7 +106,6 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
              .hitFlashTimer = 0,
              .shape = type.shape,
              .typeIndex = static_cast<int32_t>(typeIndex),
-             .isFinalBoss = isFinal,
              // ponytail: demo builds keep the plain loop; the director needs ChargeDash, which
              // the demo's attack allowlist excludes.
              .usesDirector = !DemoConfig::isDemoBuild,
@@ -128,13 +121,6 @@ void spawnBossWave(Game& game, float healthMult, float sizeMult, bool isMega)
     {
         spawnBossInstance(game, healthMult, sizeMult, isMega, isSwarm);
     }
-    playSFX(game, game.resources.sounds.bossWindUp);
-}
-
-void spawnFinalBossWave(Game& game)
-{
-    game.run.bossSpawnCount++;
-    spawnBossInstance(game, megaBossHealthMult, megaBossSizeMult, true, false, true);
     playSFX(game, game.resources.sounds.bossWindUp);
 }
 
@@ -246,7 +232,7 @@ void spawnWreckworm(Game& game, int32_t wave)
     {
         segmentCount = static_cast<int32_t>(10 * 3);
         burrowChargeUnlocked = true;
-        moltThresholds = {0.66F, 0.33F};
+        moltThresholds = {0.33F, 0.66F}; // popped from the back: 66% fires first
     }
     else if (wave >= 40)
     {
@@ -631,8 +617,8 @@ void spawnBanished(Game& game)
               .size = Vector2{.x = banishedSize, .y = banishedSize},
               .color = Palette::Void,
               .baseColor = Palette::Void,
-              .health = 1,
-              .maxHealth = 1,
+              .health = banishedHealth,
+              .maxHealth = banishedHealth,
               .state = BossState::IDLE,
               .attack = BossAttack::Barrage,
               .moveset = {},

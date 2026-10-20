@@ -239,7 +239,7 @@ Waves 30, 40, 50. Skeleton kept: a head trailing armoured segments (armour takes
 **Phases**
 
 1. **Armoured:** full length, attacks from the table below.
-2. **Molt:** at 50% HP (waves 30, 40) or at 66% then 33% (wave 50, in that order; today's code fires them out of order, a separate fix). Sheds two tail segments as asteroids, +15% speed, 1.5 s lull.
+2. **Molt:** at 50% HP (waves 30, 40) or at 66% then 33% (wave 50, in that order). Sheds two tail segments as asteroids, +15% speed, 1.5 s lull.
 3. **Burrow:** Burrow Charge joins the moveset from wave 40.
 
 **Attacks**
@@ -529,7 +529,6 @@ Skeleton kept. Look: black body with an ash-bone rim and seal-chain marks so it 
 
 ### Open for build
 
-- Banished's health is set so exactly three bursts win (the current build spawns it at 1 HP, so one burst wins).
 - Cycle 2 and 3 strike-mix weights; Doom Gaze sweep speed.
 - Plain-grab hold length; QTE throw distances and camera.
 - Seal-ring crack stages and the ending's visual beat.
