@@ -6,7 +6,9 @@
 #include "update_constants.hpp"
 #include <algorithm>
 #include <cmath>
+#include <array>
 #include <cstddef>
+#include <string_view>
 #include <vector>
 
 void seedWreckwormTrail(Boss& head, Vector2 headCenter, Vector2 trailDir);
@@ -65,12 +67,26 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
 
     auto typeIndex =
         static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(bossTypes.size()) - 1));
+    const bool inBelt = currentBiome(game.run.waveNumber) == Biome::ShatteredBelt;
+    if (inBelt)
+    {
+        constexpr std::array<std::string_view, 5> beltPool{
+            "Shatter Prime", "Fracture Queen", "Ashen Sentinel", "Barrier Colossus", "Warbringer"};
+        static_assert(std::ranges::all_of(beltPool, [](std::string_view n)
+                                          { return std::ranges::find(bossTypes, n, &BossType::name) != bossTypes.end(); }));
+        const auto name = beltPool.at(
+            static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(beltPool.size()) - 1)));
+        typeIndex = static_cast<size_t>(
+            std::ranges::find(bossTypes, name, &BossType::name) - bossTypes.begin());
+    }
     if constexpr (DemoConfig::isDemoBuild)
     {
         typeIndex = DemoConfig::allowedBossTypeIndices.at(static_cast<size_t>(GetRandomValue(
             0, static_cast<int32_t>(DemoConfig::allowedBossTypeIndices.size()) - 1)));
     }
     const auto& type = bossTypes.at(typeIndex);
+    const Color color = inBelt ? ColorLerp(type.color, Palette::ShatteredBeltAccent, beltDustTint)
+                               : type.color;
 
     const auto health =
         static_cast<int32_t>(static_cast<float>(500 + tier * bossHpPerTier) * healthMult *
@@ -84,8 +100,8 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
     game.run.bosses.push_back(
         Boss{.position = spawnPos,
              .size = Vector2{.x = size, .y = size},
-             .color = type.color,
-             .baseColor = type.color,
+             .color = color,
+             .baseColor = color,
              .health = health,
              .maxHealth = health,
              .state = BossState::IDLE,

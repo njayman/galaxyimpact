@@ -256,6 +256,8 @@ constexpr float caveTunnelHalfWidth = 0.17F;
 // Shattered Belt dust lanes: the background draws them along this angle and Debris Squalls
 // sweep along it, so the backdrop foreshadows where a squall comes from.
 constexpr float beltDustLaneAngleDeg = 33.0F;
+// Amber tint on Global Enemies, Wave Bosses and Elite Hazards fighting in the Belt.
+constexpr float beltDustTint = 0.15F;
 
 // Debris Squall: the interval ramps linearly from Start at wave 1 to End at wave 25.
 constexpr float debrisSquallIntervalStart = 18.0F;

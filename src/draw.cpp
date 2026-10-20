@@ -92,7 +92,7 @@ void drawShipHull(ShipClass shipClass, Vector2 p, float r, float angle, Color sh
 void drawShip(const Game& game);
 void drawEngineFlame(Vector2 p, float r, float angle);
 void drawEnemy(const Game& game, const Enemy& enemy, bool buffed);
-void drawEliteHazard(const EliteHazard& hazard);
+void drawEliteHazard(const EliteHazard& hazard, Color body);
 void drawBoss(const Game& game, const Boss& boss);
 void drawOrbitBlades(const Game& game);
 void drawOrbitBladeProjectiles(const Game& game);
@@ -2116,9 +2116,12 @@ void drawGameplayWorld(const Game& game)
         drawEnemy(game, e, warlordActive);
     }
 
+    const Color hazardBody = currentBiome(game.run.waveNumber) == Biome::ShatteredBelt
+                                 ? ColorLerp(Palette::StructDark, Palette::ShatteredBeltAccent, beltDustTint)
+                                 : Palette::StructDark;
     for (const auto& hazard : game.run.eliteHazards)
     {
-        drawEliteHazard(hazard);
+        drawEliteHazard(hazard, hazardBody);
     }
 
     for (const auto& p : game.run.pickups)
@@ -2773,7 +2776,6 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     // Global Enemies pick up a light dust tint from the biome they fight in.
     if (!kind.biomeExclusive && currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
     {
-        constexpr float beltDustTint = 0.15F;
         color = ColorLerp(color, Palette::ShatteredBeltAccent, beltDustTint);
     }
     if (enemy.fadeAlpha < 1.0F)
@@ -2895,7 +2897,7 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     }
 }
 
-void drawEliteHazard(const EliteHazard& hazard)
+void drawEliteHazard(const EliteHazard& hazard, Color body)
 {
     const Color auraColor =
         hazard.role == EliteHazardRole::Warlord ? Palette::Accent : Palette::Shield;
@@ -2913,7 +2915,7 @@ void drawEliteHazard(const EliteHazard& hazard)
         DrawLineEx(hazard.position, tip, 3, Fade(auraColor, 0.7F));
     }
 
-    DrawCircleV(hazard.position, EliteHazardConstants::radius, Palette::StructDark);
+    DrawCircleV(hazard.position, EliteHazardConstants::radius, body);
     DrawCircleLines(static_cast<int32_t>(hazard.position.x),
                     static_cast<int32_t>(hazard.position.y), EliteHazardConstants::radius,
                     auraColor);
