@@ -7,6 +7,7 @@ set(GALAXYIMPACT_SOURCES
     src/democonfig.cpp
     src/draw.cpp
     src/entities/boss.cpp
+    src/entities/boss_director.cpp
     src/entities/enemy.cpp
     src/entities/player.cpp
     src/entities/space.cpp
@@ -16,6 +17,7 @@ set(GALAXYIMPACT_SOURCES
     src/main.cpp
     src/menu.cpp
     src/platform.cpp
+    src/qte.cpp
     src/raygui_impl.cpp
     src/sandbox.cpp
     src/settings.cpp

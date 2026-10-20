@@ -167,6 +167,56 @@ void sandboxForceAttackNearestBoss(Game& game)
     forceBossAttack(game, *nearest, static_cast<BossAttack>(game.sandboxBossAttackIndex));
 }
 
+auto sandboxNearestDirectorBoss(Game& game) -> Boss*
+{
+    Boss* nearest = nullptr;
+    float bestDist = 0;
+    for (auto& boss : game.run.bosses)
+    {
+        const float dist = Vector2Distance(game.run.player.position, boss.position);
+        if (boss.usesDirector && boss.health > 0 && (nearest == nullptr || dist < bestDist))
+        {
+            bestDist = dist;
+            nearest = &boss;
+        }
+    }
+    return nearest;
+}
+
+void sandboxForcePatternNearestBoss(Game& game)
+{
+    if (Boss* boss = sandboxNearestDirectorBoss(game); boss != nullptr)
+    {
+        forceBossPattern(game, *boss, static_cast<BossPattern>(game.sandboxBossPatternIndex));
+    }
+}
+
+// Drops the nearest director boss to just above its next phase threshold (50%, then 20%), then
+// back to full, so phase events can be tested without grinding HP.
+void sandboxBossNextPhase(Game& game)
+{
+    Boss* boss = sandboxNearestDirectorBoss(game);
+    if (boss == nullptr)
+    {
+        return;
+    }
+    const float frac = static_cast<float>(boss->health) / static_cast<float>(boss->maxHealth);
+    float target = 1.0F;
+    if (frac > 0.52F)
+    {
+        target = 0.52F;
+    }
+    else if (frac > 0.22F)
+    {
+        target = 0.22F;
+    }
+    else
+    {
+        boss->phase = 0;
+    }
+    boss->health = std::max(1, static_cast<int32_t>(static_cast<float>(boss->maxHealth) * target));
+}
+
 void sandboxCycleWave(Game& game, int32_t dir)
 {
     game.run.waveNumber = std::max(1, game.run.waveNumber + dir);
@@ -180,7 +230,7 @@ void sandboxDropSelectedPickup(Game& game)
 
 namespace SandboxMenuLayout
 {
-constexpr int32_t stepperCount = 6; // keep in sync with sandboxMenuSteppers()
+constexpr int32_t stepperCount = 7; // keep in sync with sandboxMenuSteppers()
 constexpr int32_t stepperRowWidth = 480;
 constexpr int32_t stepperRowHeight = 40;
 constexpr int32_t stepperRowGap = 10;
@@ -225,6 +275,14 @@ auto sandboxMenuButtons() -> const std::vector<SandboxMenuButton>&
          sandboxSpawnSignatureBoss},
         {[](const Game&) { return std::string("Force Boss Attack"); },
          sandboxForceAttackNearestBoss},
+        {[](const Game&) { return std::string("Force Boss Pattern"); },
+         sandboxForcePatternNearestBoss},
+        {[](const Game&) { return std::string("Boss HP: Next Phase"); }, sandboxBossNextPhase},
+        {[](const Game& game)
+         { return std::format("Boss Can't Die: {}", game.sandboxBossNoDeath ? "ON" : "OFF"); },
+         [](Game& game) { game.sandboxBossNoDeath = !game.sandboxBossNoDeath; }},
+        {[](const Game&) { return std::string("Reset Tactics"); },
+         [](Game& game) { game.run.tactics = TacticTracker{}; }},
         {[](const Game&) { return std::string("Drop Selected Pickup"); },
          sandboxDropSelectedPickup},
         {[](const Game&) { return std::string("Clear Board"); }, sandboxClearBoard},
@@ -292,6 +350,19 @@ auto sandboxMenuSteppers() -> const std::vector<SandboxMenuStepper>&
          },
          [](Game& game)
          { game.sandboxBossAttackIndex = (game.sandboxBossAttackIndex + 1) % bossAttackCount; }},
+        {"Boss Pattern",
+         [](const Game& game)
+         {
+             return std::string(
+                 bossPatternNames.at(static_cast<size_t>(game.sandboxBossPatternIndex)));
+         },
+         [](Game& game)
+         {
+             game.sandboxBossPatternIndex =
+                 (game.sandboxBossPatternIndex - 1 + bossPatternCount) % bossPatternCount;
+         },
+         [](Game& game)
+         { game.sandboxBossPatternIndex = (game.sandboxBossPatternIndex + 1) % bossPatternCount; }},
         {"Wave",
          [](const Game& game)
          {
@@ -604,6 +675,8 @@ void enterSandbox(Game& game)
     game.run.blackhole.active = false;
     game.sandboxDeathEnabled = false;
     game.sandboxBossAttackIndex = 0;
+    game.sandboxBossPatternIndex = 0;
+    game.sandboxBossNoDeath = false;
     game.sandboxPickupIndex = 0;
     game.sandboxNaturalSpawnEnabled = false;
     game.sandboxKillBoxArmed = false;
@@ -851,4 +924,89 @@ auto sandboxPickupName(int32_t index) -> std::string_view
 auto sandboxPickupPreview(int32_t index) -> PickupCatalogEntry
 {
     return sandboxPickupOption(index);
+}
+
+namespace
+{
+// --autoplay bot: cycles one habit at a time so the M12 director's counters are visible.
+constexpr std::array<const char*, 5> botHabits{"Kite", "Circle", "Camp", "Dash spam", "Turtle"};
+constexpr float botHabitDuration = 12.0F;
+constexpr float botRunDuration = 120.0F;
+
+auto botHabit(const Game& game) -> size_t
+{
+    return static_cast<size_t>(game.autoplayTime / botHabitDuration) % botHabits.size();
+}
+} // namespace
+
+auto autoplayHabitName(const Game& game) -> const char* { return botHabits.at(botHabit(game)); }
+
+// Drives the touch-control inputs, so every player system reads it like a real player.
+// Returns true when the run is over and the game should exit.
+auto updateAutoplayBot(Game& game, float deltaTime) -> bool
+{
+    game.autoplayTime += deltaTime;
+    if (game.autoplayTime > botRunDuration)
+    {
+        return true;
+    }
+    if (game.state != GameState::GAMEPLAY)
+    {
+        game.state = GameState::GAMEPLAY; // skip level-up screens etc.
+    }
+
+    const Boss* boss = nullptr;
+    for (const auto& b : game.run.bosses)
+    {
+        if (b.usesDirector && b.health > 0)
+        {
+            boss = &b;
+        }
+    }
+    if (boss == nullptr)
+    {
+        spawnBoss(game);
+        return false;
+    }
+
+    auto& touch = game.touch;
+    touch.visible = true;
+    touch.leftDash = TouchButton{};
+    touch.leftShield = TouchButton{};
+
+    const Vector2 center = Vector2Add(boss->position, Vector2Scale(boss->size, 0.5F));
+    const Vector2 toBoss = Vector2Subtract(center, game.run.player.position);
+    const float dist = Vector2Length(toBoss);
+    const Vector2 dir = dist > 1 ? Vector2Scale(toBoss, 1 / dist) : Vector2{.x = 1, .y = 0};
+    const Vector2 tangent{.x = -dir.y, .y = dir.x};
+    touch.aimDir = dir;
+
+    const auto orbit = [&](float keep)
+    { return Vector2Normalize(Vector2Add(tangent, Vector2Scale(dir, (dist - keep) / keep))); };
+
+    Vector2 move{};
+    const float t = game.autoplayTime;
+    switch (botHabit(game))
+    {
+    case 0: // kite: back off to long range, drift sideways
+        move = dist < 900 ? Vector2Normalize(Vector2Add(Vector2Scale(dir, -1), Vector2Scale(tangent, 0.4F)))
+                          : tangent;
+        break;
+    case 1: // circle one direction at mid range
+        move = orbit(420);
+        break;
+    case 2: // camp: sit still
+        break;
+    case 3: // dash spam while circling
+        move = orbit(420);
+        touch.leftDash.pressed = std::fmod(t, 0.8F) < deltaTime;
+        touch.leftDash.down = touch.leftDash.pressed;
+        break;
+    default: // turtle: hold shield, stand still
+        touch.leftShield.down = true;
+        touch.leftShield.pressed = std::fmod(t, botHabitDuration) < deltaTime;
+        break;
+    }
+    touch.moveStick.axis = move;
+    return false;
 }

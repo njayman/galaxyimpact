@@ -33,6 +33,19 @@ constexpr int defaultWindowHeight = 1080;
 
 }
 
+enum class QtePrompt : std::uint8_t
+{
+    None,
+    Up,
+    Left,
+    Right,
+    Down,
+    Shield,
+    Dash,
+    Parry, // shield + dash
+    Nerve
+};
+
 enum class GameState : std::uint8_t
 {
     TITLE,
@@ -160,6 +173,7 @@ struct GameplayState
     float damageMeterHoldTimer;
     std::vector<BossDeathShockwave> bossDeathShockwaves;
     std::vector<GasHazard> gasHazards;
+    TacticTracker tactics;
     BlackHole blackhole;
     std::vector<BlackHoleDustParticle> blackHoleDust;
     Wormhole wormhole;
@@ -177,6 +191,22 @@ struct GameplayState
     std::vector<Turret> turrets;
     std::vector<ChainLightningBolt> chainLightningBolts;
     std::vector<ChainLightningBolt> sniperShots;
+    int32_t sniperEventPhase = 0; // 0 idle, 1 dodge tell, 2 live line, 3 counter window
+    float sniperEventTimer = 0;
+    float sniperEventCooldown = 0;
+    int32_t sniperEventEnemyId = -1;
+    Vector2 sniperEventStart{};
+    Vector2 sniperEventEnd{};
+    Vector2 sniperEventPlayerStart{};
+    // Boss QTE cutscene (see qte.cpp): while qteBossId >= 0 the player only answers prompts.
+    int32_t qteBossId = -1;
+    QtePrompt qtePrompt = QtePrompt::None;
+    float qteTimer = 0;    // time left on the current prompt / beat
+    float qteTimerMax = 0; // full length of the current prompt, for the HUD timer
+    float qteActionTimer = 0;
+    Vector2 qteActionVelocity{};
+    Vector2 qteThreatDir{}; // incoming threat's travel direction, for the HUD edge marker
+    int32_t qteStickDir = 0; // last touch-stick cardinal, for flick edge detection
     float asteroidSpawnTimer;
     float enemySpawnTimer;
     float solarForgeHeatMeter;
@@ -226,9 +256,13 @@ struct Game
     int menuIndex;
     GameState settingsReturnState;
     bool sandbox;
+    bool autoplay = false; // --autoplay: a bot plays the sandbox (see updateAutoplayBot)
+    float autoplayTime = 0;
     int sandboxKindIndex;
     bool sandboxDeathEnabled;
     int sandboxBossAttackIndex;
+    int sandboxBossPatternIndex;
+    bool sandboxBossNoDeath;
     int sandboxPickupIndex;
     bool sandboxNaturalSpawnEnabled;
     bool sandboxKillBoxArmed;

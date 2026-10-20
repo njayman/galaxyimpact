@@ -68,6 +68,59 @@ constexpr std::array<std::string_view, bossAttackCount> bossAttackNames{
     "PlateHurl",     "BurrowCharge",   "CoilClamp",  "MeteorHell",   "MeteorSwarm",
     "DashRush",      "CloudBreath",    "TailWrap"};
 
+// M12 adaptive director (generic bosses only): the boss mixes these at runtime, weighted toward
+// whatever counters the player's current habit. See src/entities/boss_director.cpp.
+enum class BossPattern : std::uint8_t
+{
+    HoverShoot,
+    DashChain,
+    Ambush,
+    Pressure,
+    Zone,
+    Feint,
+
+    StrafeRun, // Saucer "Hunter" signature
+    BladeToss, // SpikedRing "Grinder" signature
+    BladeCage, // SpikedRing "Grinder", phase 2+
+
+    Count
+};
+
+constexpr int bossPatternCount = static_cast<int>(BossPattern::Count);
+
+constexpr std::array<std::string_view, bossPatternCount> bossPatternNames{
+    "HoverShoot", "DashChain", "Ambush", "Pressure", "Zone", "Feint", "StrafeRun",
+    "BladeToss",  "BladeCage"};
+
+enum class Tactic : std::uint8_t
+{
+    Kite,
+    Circle,
+    Camp,
+    DashSpam,
+    Turtle,
+
+    Count
+};
+
+constexpr int tacticCount = static_cast<int>(Tactic::Count);
+
+constexpr std::array<std::string_view, tacticCount> tacticNames{"Kite", "Circle", "Camp",
+                                                                "DashSpam", "Turtle"};
+
+// Rolling score (0..1, ~8s window) of what the player keeps doing against the nearest director
+// boss. Shared by all bosses, since they all face the same player.
+struct TacticTracker
+{
+    std::array<float, tacticCount> score{};
+    float angularEma = 0;
+    float prevAngle = 0;
+    Vector2 prevPosition{};
+    Vector2 playerVelocity{};
+    bool prevDashing = false;
+    bool primed = false;
+};
+
 class Boss
 {
   public:
@@ -126,6 +179,11 @@ class Boss
     int32_t plateSlotIndex = 0;
     bool plateAttached = true;
     bool plateReturning = false;
+    // Plate rush: 0 normal, 1 bursting out, 2 parked off-screen, 3 incoming (prompted),
+    // 4 missed - live dash, 5 answered - flying back off-screen.
+    int32_t plateRushPhase = 0;
+    float plateRushDelay = 0;
+    Vector2 plateRushPromptDirection{}; // plate's travel direction while incoming
 
     float plateExcursionTimer = 0;
 
@@ -173,6 +231,8 @@ class Boss
     std::array<bool, krakenLimbSlots> tentacleStaggered{};
     std::array<float, krakenLimbSlots> tentacleStaggerTimer{0, 0, 0, 0};
     std::array<Vector2, krakenLimbSlots> tentacleStaggerPos{};
+    float krakenCoreExposedTimer = 0;
+    bool krakenCoreExposureUsed = false;
 
     std::array<int32_t, krakenLimbSlots> limbPod{-1, -1, -1, -1};
     std::array<int32_t, krakenLimbSlots> limbPhase{0, 0, 0, 0};
@@ -231,6 +291,32 @@ class Boss
     Vector2 banishedEyePos{};
 
     bool banishedDefeated = false;
+
+    bool usesDirector = false;
+    BossPattern pattern = BossPattern::HoverShoot;
+    float patternTimer = 0;
+    int32_t patternStep = 0;
+    bool patternLead = false;
+    bool awaitingAttack = false;
+    bool chainConnected = false;
+    float dazedTimer = 0;
+    int32_t phase = 0;
+    float phaseInvulnTimer = 0;
+    float readTellTimer = 0;
+
+    int32_t plateRushAttacksLeft = 0;
+    float plateRushLastAngle = 0;
+
+    // StrafeRun: the run line (start, direction, which side of the player) and the P2 decoy.
+    Vector2 runStart{};
+    Vector2 runDir{};
+    Vector2 runSide{};
+    Vector2 runEnd{};
+    Vector2 runMirrorShift{}; // decoy line = run line + this
+    float runTravel = 0;
+    int32_t runsLeft = 0;
+    bool decoyActive = false;
+    Vector2 decoyCenter{};
 };
 
 struct BossType
@@ -348,6 +434,17 @@ constexpr std::array<BossType, 20> bossTypes{
 class BossProjectile
 {
   public:
+    float life = 0; // > 0: expires after this many seconds; 0: lives until out of range
+    Vector2 accel{}; // added to velocity each second (boomerang blades)
+    bool isBlade = false;
+    // Cage blades orbit a fixed center, tightening, then fling outward when orbitTime runs out.
+    Vector2 orbitCenter{};
+    float orbitRadius = 0;
+    float orbitAngle = 0;
+    float orbitSpin = 0;
+    float orbitShrink = 0;
+    float orbitTime = 0;
+    float orbitFling = 0;
     Vector2 position;
     Vector2 velocity;
     float radius;
@@ -388,4 +485,5 @@ class GasHazard
     float life = 0;
     bool active = true;
     bool isFire = false;
+    bool anchored = false; // director Zone walls hold position instead of drifting at the player
 };

@@ -958,6 +958,9 @@ void updateGameplay(Game& game, float deltaTime)
         return;
     }
 
+    updateBossQte(game, deltaTime);
+    deltaTime *= bossQteSlowdown(game);
+
     game.run.runTime += deltaTime;
 
     if (game.sandbox)
@@ -1087,11 +1090,8 @@ void updateGameplay(Game& game, float deltaTime)
         {
             boss.parryStunTimer -= deltaTime;
         }
-        else
-        {
-            updateBossMovement(game, deltaTime, boss, bossCenter);
-            updateBoss(game, deltaTime, boss, bossCenter);
-        }
+        updateBossMovement(game, deltaTime, boss, bossCenter);
+        updateBoss(game, deltaTime, boss, bossCenter);
         updateBeltbreakerCore(game, boss, deltaTime);
         updateWreckwormChain(game, boss, deltaTime);
         updateWreckwormSegmentVolley(game, boss, deltaTime);
@@ -1112,6 +1112,7 @@ void updateGameplay(Game& game, float deltaTime)
     updateSolarForgeHeat(game, deltaTime);
     updatePunctumThunder(game, deltaTime);
     updateFluidHazardContact(game);
+    updateTacticTracker(game, deltaTime);
     updateGasHazards(game, deltaTime);
     updateOrganicMerges(game, deltaTime);
     updateEnemies(game, deltaTime);
@@ -2125,7 +2126,6 @@ void updateWeapons(Game& game, float deltaTime)
         }
         case WeaponType::Sniper:
         {
-
             if (const auto target = farthestEnemy(game, game.run.player.position);
                 target.has_value())
             {
@@ -2690,6 +2690,10 @@ void updateNerveSpiralProjectiles(Game& game, float deltaTime)
                 {
                     continue;
                 }
+                if (boss.isKraken && boss.krakenCoreExposedTimer <= 0)
+                {
+                    continue;
+                }
                 const Rectangle bossRect{.x = boss.position.x,
                                          .y = boss.position.y,
                                          .width = boss.size.x,
@@ -3182,7 +3186,7 @@ void updateGasHazards(Game& game, float deltaTime)
         }
 
         const Vector2 toPlayer = Vector2Subtract(game.run.player.position, cloud.position);
-        if (Vector2Length(toPlayer) > 1)
+        if (!cloud.anchored && Vector2Length(toPlayer) > 1)
         {
             cloud.position = Vector2Add(
                 cloud.position,
@@ -3861,6 +3865,26 @@ auto bulletTouchesCircle(const Bullet& bullet, Vector2 center, float radius) -> 
     return false;
 }
 
+auto bulletTouchesLine(const Bullet& bullet, Vector2 from, Vector2 to, float halfWidth) -> bool
+{
+    if (bullet.streak <= 0)
+    {
+        return CheckCollisionCircleLine(bullet.position, bullet.radius + halfWidth, from, to);
+    }
+    const LaserShape shape = laserShape(bullet);
+    for (int k = 0; k + 1 < shape.count; k++)
+    {
+        if (CheckCollisionLines(shape.points.at(static_cast<size_t>(k)),
+                                shape.points.at(static_cast<size_t>(k) + 1), from, to, nullptr) ||
+            CheckCollisionCircleLine(shape.points.at(static_cast<size_t>(k)), bullet.halfWidth + halfWidth,
+                                     from, to))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 auto bulletTouchesRect(const Bullet& bullet, Rectangle rect) -> bool
 {
     if (bullet.streak <= 0)
@@ -3902,6 +3926,34 @@ void updateBullets(Game& game, float deltaTime)
             Vector2Add(bullet.position, Vector2Scale(bullet.velocity, deltaTime * frameScale));
         bullet.traveled += Vector2Length(bullet.velocity) * deltaTime * frameScale;
         applyWormholeTransit(game, bullet.position, bullet.velocity, bullet.radius);
+
+        if (game.run.sniperEventPhase == 3 &&
+            bulletTouchesLine(bullet, game.run.sniperEventStart, game.run.sniperEventEnd,
+                              sniperLineWidth / 2.0F))
+        {
+            bullet.active = false;
+            game.run.sniperEventPhase = 0;
+            game.run.sniperEventCooldown = 1.2F;
+            if (game.run.sniperEventEnemyId >= 0)
+            {
+                for (auto& sniper : game.run.enemies)
+                {
+                    if (sniper.active && sniper.id ==
+                                             static_cast<uint32_t>(game.run.sniperEventEnemyId))
+                    {
+                        sniper.sniperPhase = 0;
+                        sniper.sniperLineHitPlayer = false;
+                        sniper.stateTimer = enemyKinds.at(static_cast<size_t>(sniper.kind)).fireInterval;
+                        break;
+                    }
+                }
+            }
+            game.run.sniperEventEnemyId = -1;
+            game.run.player.nerve =
+                std::min(UpdateConstants::nerveMax, game.run.player.nerve + 18.0F);
+            playSFX(game, game.resources.sounds.critical);
+            continue;
+        }
 
         for (auto& boss : game.run.bosses)
         {
@@ -3951,10 +4003,11 @@ void updateBullets(Game& game, float deltaTime)
         for (auto& asteroid : game.run.asteroids)
         {
             if (bullet.active && asteroid.active &&
-                CheckCollisionCircles(bullet.position, bullet.radius, asteroid.position,
-                                      asteroid.radius))
+                bulletTouchesCircle(bullet, asteroid.position, asteroid.radius))
             {
-                bullet.active = false;
+                // Laser bolts shatter rocks and fly on, as they phase through enemies; a wide arc
+                // would otherwise vanish whenever any part of an arm brushed a rock.
+                bullet.active = bullet.streak > 0;
                 asteroid.active = false;
                 game.run.score += asteroidScore(asteroid.tier);
                 breakAsteroid(game, asteroid);
@@ -4087,9 +4140,20 @@ void updateBullets(Game& game, float deltaTime)
             }
         }
 
-        if (Vector2Distance(bullet.position, game.run.player.position) > entityDespawnRadius)
+        // Despawn once every part is out of range, so a wide arc whose front has left doesn't
+        // vanish while its arms are still on screen.
+        const auto outOfRange = [&](Vector2 p)
+        { return Vector2Distance(p, game.run.player.position) > entityDespawnRadius; };
+        if (outOfRange(bullet.position))
         {
-            bullet.active = false;
+            const LaserShape shape =
+                bullet.arc ? laserShape(bullet) : LaserShape{.points = {bullet.position}, .count = 1};
+            bool allOut = true;
+            for (int k = 0; k < shape.count && allOut; k++)
+            {
+                allOut = outOfRange(shape.points.at(static_cast<size_t>(k)));
+            }
+            bullet.active = !allOut;
         }
     }
 }
@@ -4792,6 +4856,11 @@ void updateProjectiles(Game& game, float deltaTime)
         {
             continue;
         }
+        if (projectile.life > 0)
+        {
+            projectile.life -= deltaTime;
+            projectile.active = projectile.life > 0;
+        }
 
         if (projectile.homing)
         {
@@ -4836,6 +4905,17 @@ void updateProjectiles(Game& game, float deltaTime)
             }
         }
 
+        if (projectile.orbitTime > 0 && !projectile.fromPlayer)
+        {
+            projectile.orbitTime -= deltaTime;
+            projectile.orbitAngle += projectile.orbitSpin * deltaTime;
+            projectile.orbitRadius = std::max(0.0F, projectile.orbitRadius - projectile.orbitShrink * deltaTime);
+            const Vector2 out{.x = std::cos(projectile.orbitAngle), .y = std::sin(projectile.orbitAngle)};
+            projectile.position = Vector2Add(projectile.orbitCenter, Vector2Scale(out, projectile.orbitRadius));
+            projectile.velocity =
+                projectile.orbitTime > 0 ? Vector2{} : Vector2Scale(out, projectile.orbitFling);
+        }
+        projectile.velocity = Vector2Add(projectile.velocity, Vector2Scale(projectile.accel, deltaTime));
         projectile.position = Vector2Add(projectile.position,
                                          Vector2Scale(projectile.velocity, deltaTime * frameScale));
         applyWormholeTransit(game, projectile.position, projectile.velocity, projectile.radius);
@@ -5497,6 +5577,10 @@ auto UpdateGame(Game& game, float deltaTime) -> bool
     }
     syncScreenSize(game);
     updateTouchControls(game);
+    if (game.autoplay && updateAutoplayBot(game, deltaTime))
+    {
+        return true;
+    }
     updatePointerHold(game);
 
     updateBgParticles(game);

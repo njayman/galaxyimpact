@@ -77,6 +77,12 @@ class Enemy
     bool isElite;
     bool hitByDash;
     float hitFlashTimer;
+    int32_t sniperPhase = 0; // 0 idle, 1 targeting tell, 2 live line shot
+    float sniperTimer = 0;
+    Vector2 sniperLineStart{};
+    Vector2 sniperLineEnd{};
+    Vector2 sniperEventPlayerStart{};
+    bool sniperLineHitPlayer = false;
     bool orbitContact;
     float orbitDamageAccum;
     bool beamContact;

@@ -256,6 +256,7 @@ void resetRun(Game& game)
     game.run.asteroids.reserve(static_cast<size_t>(maxAsteroid));
     game.run.bossProjectiles.clear();
     game.run.gasHazards.clear();
+    game.run.tactics = TacticTracker{};
     game.run.enemies.clear();
 
     game.run.enemies.reserve(static_cast<size_t>(UpdateConstants::maxEnemies));
@@ -276,6 +277,13 @@ void resetRun(Game& game)
     game.run.turrets.clear();
     game.run.chainLightningBolts.clear();
     game.run.sniperShots.clear();
+    game.run.sniperEventPhase = 0;
+    game.run.sniperEventTimer = 0;
+    game.run.sniperEventCooldown = 0;
+    game.run.sniperEventEnemyId = -1;
+    game.run.sniperEventStart = Vector2{};
+    game.run.sniperEventEnd = Vector2{};
+    game.run.sniperEventPlayerStart = Vector2{};
     game.run.weapons = {Weapon{.type = ship.defaultWeapon, .level = 1}};
     game.run.skillLevels.fill(0);
     game.run.skillLevels.at(

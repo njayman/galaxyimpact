@@ -55,9 +55,12 @@ auto main(int argc, char* argv[]) -> int
     SetTargetFPS(fpsOptions.at(static_cast<size_t>(game.resources.settings.fpsIndex)));
     applyBGMState(game);
 
-    if (sandbox)
+    const bool autoplay = std::any_of(argv + 1, argv + argc, [](const char* arg)
+                                      { return std::strcmp(arg, "--autoplay") == 0; });
+    if (sandbox || autoplay)
     {
         enterSandbox(game);
+        game.autoplay = autoplay;
     }
 
     bool shouldExit = false;

@@ -111,6 +111,7 @@ void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bo
                        float seed, float thicknessScale, float waveScale, bool calm, Color color,
                        Color tipColor);
 void drawKrakenTentacle(const Boss& boss, int32_t slot);
+void drawBossQteHud(const Game& game);
 void drawKrakenStaggeredTentacle(const Boss& boss, int32_t slot);
 void drawKrakenLimb(const Boss& boss, int32_t slot);
 void drawKrakenGrabbedEnemy(Vector2 pos, int32_t kindIndex, float scale, float facingAngle);
@@ -135,6 +136,7 @@ void drawClusterEnemyShape(Vector2 center, float baseRadius, float seed, Color c
 void drawMeteorBossShape(Vector2 center, float radius, int32_t seed, Color baseColor);
 auto hashNoise(float seed) -> float;
 void drawSandboxToggleIndicator(const Game& game);
+void drawBossDirectorTells(const Boss& boss, Vector2 center);
 void drawSandboxMenu(const Game& game);
 void drawSandboxBrowser(const Game& game);
 void drawLaserBolt(const Bullet& b);
@@ -2017,9 +2019,14 @@ void drawGameplayWorld(const Game& game)
 
     for (const auto& shot : game.run.sniperShots)
     {
-        const float fade = shot.timer / sniperLineFlashDuration;
-        DrawLineEx(shot.from, shot.to, 3, Fade(Palette::StructLight, fade));
-        DrawLineEx(shot.from, shot.to, 1, Fade(WHITE, fade));
+        const float totalDuration =
+            sniperDodgeTellDuration + sniperLiveLineDuration + sniperCounterDuration;
+        const float fade = std::clamp(shot.timer / totalDuration, 0.0F, 1.0F);
+        const Color lineColor = game.run.sniperEventPhase == 3 ? Palette::Charge : Palette::Crit;
+        const float width = game.run.sniperEventPhase == 2 ? sniperLineWidth : 4.0F;
+        DrawLineEx(shot.from, shot.to, width + 4.0F, Fade(lineColor, 0.2F * fade));
+        DrawLineEx(shot.from, shot.to, width, Fade(lineColor, 0.75F * fade));
+        DrawLineEx(shot.from, shot.to, 2.0F, Fade(WHITE, fade));
     }
 
     for (const auto& wave : game.run.bossDeathShockwaves)
@@ -2053,6 +2060,14 @@ void drawGameplayWorld(const Game& game)
         else if (p.homing)
         {
             drawComet(p);
+        }
+        else if (p.isBlade)
+        {
+            // Grinder spike blade: two spinning squares make an 8-point star.
+            const float rot = static_cast<float>(GetTime()) * 720.0F;
+            DrawPoly(p.position, 4, p.radius * 1.3F, rot, Palette::Crit);
+            DrawPoly(p.position, 4, p.radius * 1.3F, rot + 45, Palette::Crit);
+            DrawCircleV(p.position, p.radius * 0.45F, Palette::StructDark);
         }
         else
         {
@@ -2889,6 +2904,29 @@ void drawWreckwormSegmentShape(Vector2 center, float radius, float seed, Color b
     }
 }
 
+// Dazed: stars circling overhead. Read: a pulsing ring when the boss picks a counter-pattern.
+void drawBossDirectorTells(const Boss& boss, Vector2 center)
+{
+    const float r = std::max(boss.size.x, boss.size.y) / 2;
+    const auto t = static_cast<float>(GetTime());
+    if (boss.dazedTimer > 0)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            const float a = t * 4.0F + static_cast<float>(i) * 2.094F;
+            DrawCircleV(Vector2{.x = center.x + std::cos(a) * r * 0.6F,
+                                .y = center.y - r * 0.9F + std::sin(a) * r * 0.2F},
+                        r * 0.08F, Palette::Accent);
+        }
+    }
+    if (boss.readTellTimer > 0)
+    {
+        const float pulse = 1.0F + 0.15F * std::sin(t * 20.0F);
+        DrawRing(center, r * 1.15F * pulse, r * 1.25F * pulse, 0, 360, 48,
+                 Fade(Palette::Crit, std::min(1.0F, boss.readTellTimer * 2.0F)));
+    }
+}
+
 void drawBoss(const Game& game, const Boss& boss)
 {
     const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
@@ -2912,6 +2950,11 @@ void drawBoss(const Game& game, const Boss& boss)
     {
         const float flicker = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 18.0F);
         ufoColor = ColorLerp(ufoColor, Palette::ElementStatic, 0.4F * flicker);
+    }
+    if (boss.phaseInvulnTimer > 0)
+    {
+        const float flicker = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 25.0F);
+        ufoColor = ColorLerp(ufoColor, WHITE, 0.7F * flicker);
     }
 
     const float deathElapsed = bossDeathAnimDuration - boss.deathAnimTimer;
@@ -2969,6 +3012,23 @@ void drawBoss(const Game& game, const Boss& boss)
     }
     drawElementalDebuffEffects(bossCenter, std::max(boss.size.x, boss.size.y) / 2, boss.burnDps > 0,
                                boss.debuffStatic, boss.debuffFreeze);
+    drawBossDirectorTells(boss, bossCenter);
+    if (boss.pattern == BossPattern::StrafeRun && boss.patternStep == 2)
+    {
+        // Telegraph the run lines (the start can sit near the screen edge).
+        DrawLineEx(boss.runStart, boss.runEnd, 6, Fade(Palette::Crit, 0.35F));
+        if (boss.phase >= 1)
+        {
+            DrawLineEx(Vector2Add(boss.runStart, boss.runMirrorShift),
+                       Vector2Add(boss.runEnd, boss.runMirrorShift), 6, Fade(Palette::Crit, 0.35F));
+        }
+    }
+    if (boss.decoyActive)
+    {
+        // P2 Hunter decoy: a flickering ghost of the hull on the mirror run.
+        const float flicker = 0.5F + 0.15F * std::sin(static_cast<float>(GetTime()) * 22.0F);
+        drawBossHull(boss.shape, boss.decoyCenter, boss.size, Fade(boss.color, flicker));
+    }
 
     if (boss.isKraken)
     {
@@ -4010,8 +4070,188 @@ void drawBossHealthBars(const Game& game)
     }
 }
 
+// Boss QTE cutscene HUD ----------------------------------------------------
+
+void drawQteArrow(Vector2 center, Vector2 dir, float size, Color color)
+{
+    const Vector2 perp{.x = -dir.y, .y = dir.x};
+    const Vector2 tip = Vector2Add(center, Vector2Scale(dir, size));
+    const Vector2 back = Vector2Subtract(center, Vector2Scale(dir, size * 0.6F));
+    DrawTriangle(tip, Vector2Subtract(back, Vector2Scale(perp, size * 0.7F)),
+                 Vector2Add(back, Vector2Scale(perp, size * 0.7F)), color);
+    DrawTriangle(tip, Vector2Add(back, Vector2Scale(perp, size * 0.7F)),
+                 Vector2Subtract(back, Vector2Scale(perp, size * 0.7F)), color);
+}
+
+// A keyboard key that bobs down on the mash beat (press 0..1).
+void drawQteKeycap(const Game& game, const char* label, Vector2 center, float width, float press,
+                   Color color)
+{
+    constexpr float height = 56.0F;
+    constexpr float depth = 8.0F;
+    const float x = center.x - width / 2;
+    const float y = center.y - height / 2;
+    DrawRectangleRec(Rectangle{.x = x, .y = y + depth, .width = width, .height = height},
+                     Fade(BLACK, 0.8F));
+    const Rectangle top{.x = x, .y = y + depth * press, .width = width, .height = height};
+    DrawRectangleRec(top, Palette::StructDark);
+    DrawRectangleLinesEx(top, 3.0F, color);
+    const int32_t textWidth = measureText(game, label, 24);
+    drawText(game, label, static_cast<int32_t>(center.x) - textWidth / 2,
+             static_cast<int32_t>(top.y + height / 2 - 12), 24, color);
+}
+
+// A mouse with the asked buttons flashing.
+void drawQteMouse(Vector2 center, bool left, bool right, float press, Color color)
+{
+    constexpr float width = 52.0F;
+    constexpr float height = 76.0F;
+    const Rectangle body{.x = center.x - width / 2,
+                         .y = center.y - height / 2,
+                         .width = width,
+                         .height = height};
+    const float buttonHeight = height * 0.42F;
+    DrawRectangleRec(body, Palette::StructDark);
+    const Color lit = Fade(color, 0.35F + 0.65F * press);
+    if (left)
+    {
+        DrawRectangleRec(
+            Rectangle{.x = body.x, .y = body.y, .width = width / 2, .height = buttonHeight}, lit);
+    }
+    if (right)
+    {
+        DrawRectangleRec(Rectangle{.x = center.x, .y = body.y, .width = width / 2,
+                                   .height = buttonHeight},
+                         lit);
+    }
+    DrawRectangleLinesEx(body, 3.0F, color);
+    DrawLineEx(Vector2{.x = body.x, .y = body.y + buttonHeight},
+               Vector2{.x = body.x + width, .y = body.y + buttonHeight}, 3.0F, color);
+    DrawLineEx(Vector2{.x = center.x, .y = body.y},
+               Vector2{.x = center.x, .y = body.y + buttonHeight}, 3.0F, color);
+}
+
+// Touch: a round button named like the on-screen control it stands for.
+void drawQteTouchButton(const Game& game, const char* label, Vector2 center, float press,
+                        Color color)
+{
+    const float radius = 38.0F + 4.0F * press;
+    DrawCircleV(center, radius, Fade(color, 0.2F + 0.35F * press));
+    DrawCircleLinesV(center, radius, color);
+    const int32_t textWidth = measureText(game, label, 16);
+    drawText(game, label, static_cast<int32_t>(center.x) - textWidth / 2,
+             static_cast<int32_t>(center.y) - 8, 16, color);
+}
+
+void drawQteButtons(const Game& game, QtePrompt prompt, Vector2 center, float press, Color color)
+{
+    const bool touch = touchInputActive(game);
+    switch (prompt)
+    {
+    case QtePrompt::Up:
+    case QtePrompt::Left:
+    case QtePrompt::Right:
+    case QtePrompt::Down:
+    {
+        static constexpr std::array<const char*, 4> keys{"W", "A", "D", "S"};
+        static constexpr std::array<Vector2, 4> dirs{
+            Vector2{.x = 0, .y = -1}, Vector2{.x = -1, .y = 0}, Vector2{.x = 1, .y = 0},
+            Vector2{.x = 0, .y = 1}};
+        const auto index = static_cast<size_t>(prompt) - static_cast<size_t>(QtePrompt::Up);
+        if (touch)
+        {
+            // Flick the move stick that way.
+            DrawCircleLinesV(center, 40.0F, color);
+            drawQteArrow(Vector2Add(center, Vector2Scale(dirs.at(index), 10.0F * press)),
+                         dirs.at(index), 24.0F, color);
+        }
+        else
+        {
+            drawQteKeycap(game, keys.at(index), center, 56.0F, press, color);
+            drawQteArrow(Vector2Add(center, Vector2Scale(dirs.at(index), 62.0F + 8.0F * press)),
+                         dirs.at(index), 14.0F, color);
+        }
+        break;
+    }
+    case QtePrompt::Shield:
+        touch ? drawQteTouchButton(game, "SHIELD", center, press, color)
+              : drawQteMouse(center, false, true, press, color);
+        break;
+    case QtePrompt::Dash:
+        touch ? drawQteTouchButton(game, "DASH", center, press, color)
+              : drawQteMouse(center, true, false, press, color);
+        break;
+    case QtePrompt::Parry:
+        touch ? drawQteTouchButton(game, "COMBO", center, press, color)
+              : drawQteMouse(center, true, true, press, color);
+        break;
+    case QtePrompt::Nerve:
+        touch ? drawQteTouchButton(game, "NERVE", center, press, color)
+              : drawQteKeycap(game, "SPACE", center, 170.0F, press, color);
+        break;
+    case QtePrompt::None:
+        break;
+    }
+}
+
+// Cutscene mode: the regular HUD is gone; only letterbox bars, the button to
+// mash, its timer and a marker on the side the threat comes from.
+void drawBossQteHud(const Game& game)
+{
+    const float width = static_cast<float>(game.resources.screenWidth) / hudScale(game);
+    const float height = static_cast<float>(game.resources.screenHeight) / hudScale(game);
+    const float barHeight = height * 0.09F;
+    DrawRectangleRec(Rectangle{.x = 0, .y = 0, .width = width, .height = barHeight}, BLACK);
+    DrawRectangleRec(
+        Rectangle{.x = 0, .y = height - barHeight, .width = width, .height = barHeight}, BLACK);
+
+    const QtePrompt prompt = game.run.qtePrompt;
+    if (prompt == QtePrompt::None)
+    {
+        return;
+    }
+
+    const auto time = static_cast<float>(GetTime());
+    const float press = 0.5F + 0.5F * std::sin(time * 28.0F);
+    const bool isAction = prompt >= QtePrompt::Shield;
+    const Color color = isAction ? Palette::Charge : Palette::Crit;
+    const Vector2 screenCenter{.x = width / 2, .y = height / 2};
+
+    // Threat marker at the edge the attack comes from.
+    if (Vector2LengthSqr(game.run.qteThreatDir) > 0)
+    {
+        const Vector2 from = Vector2Negate(game.run.qteThreatDir);
+        const float edge = std::min(width, height) * 0.4F;
+        const float blink = 0.5F + 0.5F * std::sin(time * 20.0F);
+        drawQteArrow(Vector2Add(screenCenter, Vector2Scale(from, edge)), game.run.qteThreatDir,
+                     20.0F, Fade(Palette::Crit, 0.5F + 0.5F * blink));
+    }
+
+    const Vector2 center{.x = screenCenter.x, .y = height * 0.3F};
+    drawQteButtons(game, prompt, center, press, color);
+
+    if (game.run.qteTimerMax > 0)
+    {
+        constexpr float timerWidth = 180.0F;
+        const float frac = std::clamp(game.run.qteTimer / game.run.qteTimerMax, 0.0F, 1.0F);
+        const float y = center.y + 70.0F;
+        DrawRectangleRec(Rectangle{.x = center.x - timerWidth / 2, .y = y, .width = timerWidth,
+                                   .height = 6.0F},
+                         Fade(Palette::StructMid, 0.5F));
+        DrawRectangleRec(Rectangle{.x = center.x - timerWidth / 2 * frac, .y = y,
+                                   .width = timerWidth * frac, .height = 6.0F},
+                         color);
+    }
+}
+
 void drawHUD(const Game& game)
 {
+    if (bossQteActive(game))
+    {
+        drawBossQteHud(game);
+        return;
+    }
+
     drawBossHealthBars(game);
     drawHealthBar(game, 10, 10);
     drawShieldStackPips(game, 10 + healthBarWidthWithLabel() + 20, 10);
@@ -4054,6 +4294,19 @@ void drawHUD(const Game& game)
               "Fullscreen";
     drawText(game, controlHint, 10, scaledScreenHeight - 28, 18, Palette::StructMid);
 
+    if (game.run.sniperEventPhase != 0)
+    {
+        const char* qteText = game.run.sniperEventPhase == 1
+                                  ? "DODGE THE LINE!"
+                                  : game.run.sniperEventPhase == 2
+                                        ? "SNIPER FIRE!"
+                                        : "COUNTER-FIRE! SHOOT THE LINE!";
+        const int32_t textWidth = static_cast<int32_t>(
+            MeasureTextEx(game.resources.font, qteText, 26, 1).x);
+        const Color qteColor = game.run.sniperEventPhase == 3 ? Palette::Charge : Palette::Crit;
+        drawText(game, qteText, (scaledScreenWidth - textWidth) / 2, 130, 26, qteColor);
+    }
+
     if (game.run.achievementToastTimer > 0)
     {
         const auto textWidth = static_cast<int32_t>(
@@ -4065,7 +4318,7 @@ void drawHUD(const Game& game)
 
 void drawTouchControls(const Game& game)
 {
-    if (!game.touch.visible)
+    if (!game.touch.visible || game.autoplay)
     {
         return;
     }
@@ -4684,6 +4937,85 @@ void drawSandboxToggleIndicator(const Game& game)
 {
     const Rectangle rect = sandboxToggleIndicatorRect(game);
     GuiButton(rect, "Instructions [TAB]");
+
+    // M12 director debug panel: what the bot/player is doing and how each boss is responding.
+    const float scale = guiUiScale(game);
+    const auto px = [scale](float v) { return static_cast<int32_t>(v * scale); };
+    const int32_t font = px(20);
+    const int32_t line = px(24);
+    const int32_t barW = px(140);
+    const int32_t labelW = px(125);
+    const int32_t panelW = labelW + barW + px(170);
+    // Right side, under the ability icons: the left side holds the HP/score HUD.
+    const int32_t x = game.resources.windowWidth - panelW - px(6);
+    int32_t y = px(64);
+
+    int32_t directorBosses = 0;
+    for (const auto& boss : game.run.bosses)
+    {
+        directorBosses += static_cast<int32_t>(boss.usesDirector && boss.health > 0);
+    }
+    const int32_t rows = tacticCount + 1 + (game.autoplay ? 1 : 0) + std::max(1, directorBosses * 2);
+    DrawRectangle(x - px(6), y - px(4), panelW, rows * line + px(8),
+                  Fade(BLACK, 0.6F));
+
+    if (game.autoplay)
+    {
+        const std::string botLine = std::string("BOT: ") + autoplayHabitName(game);
+        drawText(game, botLine.c_str(), x, y, font, WHITE);
+        y += line;
+    }
+    drawText(game, "Player habits (8s)", x, y, font, Palette::Shield);
+    y += line;
+    for (int i = 0; i < tacticCount; i++)
+    {
+        const float s = game.run.tactics.score.at(static_cast<size_t>(i));
+        const Color c = s > 0.45F ? Palette::Crit : Palette::StructMid;
+        drawText(game, std::string(tacticNames.at(static_cast<size_t>(i))).c_str(), x, y, font, c);
+        DrawRectangle(x + labelW, y + px(4), barW, font - px(6), Fade(WHITE, 0.15F));
+        DrawRectangle(x + labelW, y + px(4), static_cast<int32_t>(static_cast<float>(barW) * s),
+                      font - px(6), c);
+        drawText(game, (std::to_string(static_cast<int>(s * 100)) + "%").c_str(),
+                 x + labelW + barW + px(8), y, font, c);
+        y += line;
+    }
+
+    if (directorBosses == 0)
+    {
+        drawText(game, "No director boss (Spawn Boss)", x, y, font, Palette::StructMid);
+        return;
+    }
+    for (const auto& boss : game.run.bosses)
+    {
+        if (!boss.usesDirector || boss.health <= 0)
+        {
+            continue;
+        }
+        const int hpPct = boss.health * 100 / std::max(1, boss.maxHealth);
+        const std::string head = std::string(bossPatternNames.at(static_cast<size_t>(boss.pattern))) +
+                                 "  P" + std::to_string(boss.phase + 1) + "  HP " +
+                                 std::to_string(hpPct) + "%";
+        drawText(game, head.c_str(), x, y, font, Palette::Shield);
+        y += line;
+        std::string status;
+        if (boss.phaseInvulnTimer > 0)
+        {
+            status = "PHASE SHIFT (invulnerable)";
+        }
+        else if (boss.dazedTimer > 0)
+        {
+            status = std::format("DAZED {:.1f}s (x1.5 dmg)", boss.dazedTimer);
+        }
+        else
+        {
+            status = std::format("{}  step {}  t {:.1f}s{}", bossAttackNames.at(static_cast<size_t>(boss.attack)),
+                                 boss.patternStep, std::max(0.0F, boss.patternTimer),
+                                 boss.readTellTimer > 0 ? "  READ YOU" : "");
+        }
+        drawText(game, status.c_str(), x + px(12), y, font,
+                 boss.readTellTimer > 0 ? Palette::Crit : Palette::Accent);
+        y += line;
+    }
 }
 
 void drawSandboxMenu(const Game& game)
@@ -4858,7 +5190,7 @@ auto drawGame(Game& game) -> void
         drawShipSelect(game);
         break;
     case GameState::GAMEPLAY:
-        if (game.sandbox)
+        if (game.sandbox && !bossQteActive(game))
         {
             drawSandboxToggleIndicator(game);
         }

@@ -33,6 +33,30 @@ constexpr float frameScale = 60.0F;
 constexpr float hitFlashDuration = 0.12F;
 constexpr float nerveBurstWindup = 0.35F;
 constexpr float beltbreakerPlateHealthPerTier = 220.0F;
+// Boss QTE cutscene (qte.cpp)
+constexpr float qteSlowMult = 0.04F;       // world time scale while a QTE cutscene runs
+constexpr float qteActionDuration = 0.18F; // ship's reaction animation
+constexpr float qteDodgeDistance = 150.0F;
+constexpr float qteDashDistance = 260.0F;
+constexpr float qteParryLunge = 90.0F;
+constexpr float qteNerveGain = 10.0F; // nerve per answered prompt
+constexpr int32_t qteParryChance = 15;
+constexpr int32_t qteDashChance = 15;
+constexpr int32_t qteShieldChance = 15;
+// Beltbreaker plate rush
+constexpr float beltbreakerPlateRushCueDuration = 0.6F;
+constexpr float beltbreakerPlateRushOffscreenMargin = 140.0F;
+constexpr float beltbreakerPlateRushOffscreenSpeed = 1800.0F;
+constexpr float beltbreakerPlateRushPromptDuration = 0.9F; // plate arrives exactly at timeout
+constexpr float beltbreakerPlateRushHitRadius = 44.0F;
+constexpr float beltbreakerRushBeat = 0.35F; // pause between attacks
+constexpr float beltbreakerRushLooseLingerTime = 0.7F; // missed plate's live dash before returning
+constexpr int32_t beltbreakerRushAttacks = 8;
+constexpr float beltbreakerRushMinAngleChange = 70.0F; // each attack comes from a new side
+constexpr float beltbreakerRushShieldDamageFrac = 0.05F;
+constexpr float beltbreakerRushParryDamageFrac = 0.15F;
+constexpr float beltbreakerRushNerveDamageFrac = 0.35F;
+constexpr float beltbreakerRushStagger = 1.0F;
 
 constexpr auto beltbreakerShieldedDuration(int32_t plateCount) -> float
 {
@@ -182,12 +206,29 @@ void spawnFinalBossWave(Game& game);
 auto sampleBossMoveset(int count) -> std::vector<BossAttack>;
 auto spawnRingPosition(const Game& game) -> Vector2;
 void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter);
+void updateTacticTracker(Game& game, float deltaTime);
+auto updateBossDirector(Game& game, Boss& boss, Vector2 bossCenter, float deltaTime) -> bool;
+auto bossDirectorMove(const Game& game, const Boss& boss, Vector2 bossCenter) -> Vector2;
+auto bossAimPoint(const Game& game, const Boss& boss) -> Vector2;
+auto bossDirectorDamageMult(const Boss& boss) -> float;
+void forceBossPattern(Game& game, Boss& boss, BossPattern pattern);
 void updateBeltbreakerCore(Game& game, Boss& core, float deltaTime);
 auto countAttachedAlivePlates(Game& game, const Boss& core) -> int32_t;
 auto beltbreakerPlateSlotPosition(const Boss& core, int32_t slotIndex) -> Vector2;
 auto findBeltbreakerById(Game& game, int32_t instanceId) -> Boss*;
 void updateWreckwormChain(Game& game, Boss& head, float deltaTime);
 void updateWreckwormSegmentVolley(Game& game, Boss& segment, float deltaTime);
+auto bossQteActive(const Game& game) -> bool;
+auto bossQteSlowdown(const Game& game) -> float;
+void bossQteBegin(Game& game, int32_t bossId);
+void bossQteEnd(Game& game);
+auto qtePromptForThreat(const Game& game, Vector2 threatDir) -> QtePrompt;
+auto qteReadInput(Game& game, QtePrompt prompt) -> int32_t;
+void qteStartAction(Game& game, QtePrompt prompt, Vector2 threatDir);
+void updateBossQte(Game& game, float deltaTime);
+void beginBeltbreakerPlateRush(Game& game, Boss& core);
+void updateBeltbreakerPlateRush(Game& game, Boss& core, float deltaTime);
+void sendRushPlateHome(Boss& plate);
 void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime);
 void updateKrakenLimbs(Game& game, Boss& boss, float deltaTime);
 auto krakenPodPosition(const Boss& boss, int32_t podIndex) -> Vector2;

@@ -112,7 +112,11 @@ void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega
              .hitFlashTimer = 0,
              .shape = type.shape,
              .typeIndex = static_cast<int32_t>(typeIndex),
-             .isFinalBoss = isFinal});
+             .isFinalBoss = isFinal,
+             // ponytail: demo builds keep the plain loop; the director needs ChargeDash, which
+             // the demo's attack allowlist excludes.
+             .usesDirector = !DemoConfig::isDemoBuild,
+             .patternTimer = 5.0F}); // open with a hover so the player sees it before it dashes
 }
 
 void spawnBossWave(Game& game, float healthMult, float sizeMult, bool isMega)
@@ -695,18 +699,20 @@ void resolveBanishedCoil(Game& game, Boss& boss, int32_t idx)
         return;
     }
 
-    int32_t catcher = -1;
-    for (int32_t attempt = 0; attempt < Boss::banishedTentacleCount; attempt++)
+    std::array<int32_t, Boss::banishedTentacleCount> availableCatchers{};
+    int32_t availableCatcherCount = 0;
+    for (int32_t candidate = 0; candidate < Boss::banishedTentacleCount; candidate++)
     {
-        const int32_t candidate = GetRandomValue(0, Boss::banishedTentacleCount - 1);
-        if (candidate == idx || boss.banishedStaggered[static_cast<size_t>(candidate)] ||
-            boss.banishedGrabbing[static_cast<size_t>(candidate)])
+        if (candidate != idx && !boss.banishedStaggered[static_cast<size_t>(candidate)] &&
+            !boss.banishedGrabbing[static_cast<size_t>(candidate)])
         {
-            continue;
+            availableCatchers[static_cast<size_t>(availableCatcherCount++)] = candidate;
         }
-        catcher = candidate;
-        break;
     }
+    const int32_t catcher = availableCatcherCount > 0
+                                ? availableCatchers[static_cast<size_t>(
+                                      GetRandomValue(0, availableCatcherCount - 1))]
+                                : -1;
 
     if (catcher < 0)
     {
@@ -972,9 +978,9 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
 
             if (boss.banishedAttackKind[idx] == 1)
             {
+                const float maxReach = std::max(banishedNearReach * 1.3F, banishedFarPortalDist);
                 const float radius = std::min(
-                    Vector2Distance(boss.banishedAnchor[idx], game.run.player.position),
-                    banishedNearReach * 1.3F);
+                    Vector2Distance(boss.banishedAnchor[idx], game.run.player.position), maxReach);
                 const float angle =
                     boss.banishedThrashStartAngle[idx] +
                     (boss.banishedThrashEndAngle[idx] - boss.banishedThrashStartAngle[idx]) * progress;
@@ -985,7 +991,8 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
             {
                 const Vector2 toPlayer =
                     Vector2Subtract(game.run.player.position, boss.banishedAnchor[idx]);
-                const float dist = std::min(Vector2Length(toPlayer), banishedNearReach * 1.3F);
+                const float maxReach = std::max(banishedNearReach * 1.3F, banishedFarPortalDist);
+                const float dist = std::min(Vector2Length(toPlayer), maxReach);
                 const Vector2 dir = Vector2Length(toPlayer) > 0.01F
                                         ? Vector2Scale(toPlayer, 1.0F / Vector2Length(toPlayer))
                                         : Vector2{.x = 0, .y = 1};
@@ -1157,6 +1164,17 @@ void spawnSwarmBoss(Game& game)
     playSFX(game, game.resources.sounds.bossWindUp);
 }
 
+// Rush is over for this plate: fly back to its slot with no leftover dash state.
+void sendRushPlateHome(Boss& plate)
+{
+    plate.plateRushPhase = 0;
+    plate.plateRushDelay = 0;
+    plate.plateReturning = true;
+    plate.dashHitPlayer = false;
+    plate.state = BossState::IDLE;
+    plate.chargeVelocity = Vector2{};
+}
+
 void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 {
     if (boss.hitFlashTimer > 0)
@@ -1170,7 +1188,8 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
     }
 
     if (!boss.isWreckwormSegment && !(boss.isBeltbreakerPlate && boss.plateAttached) &&
-        boss.health > 0 && boss.state == BossState::IDLE &&
+        boss.health > 0 && boss.state == BossState::IDLE && boss.dazedTimer <= 0 &&
+        boss.phaseInvulnTimer <= 0 &&
         Vector2Distance(game.run.player.position, bossCenter) <= UpdateConstants::shockwaveStompRadius)
     {
         boss.meleeStompTimer += deltaTime;
@@ -1192,9 +1211,46 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
 
     if (boss.isBeltbreakerPlate)
     {
+        if (boss.dazedTimer > 0)
+        {
+            boss.dazedTimer -= deltaTime;
+        }
+        if (boss.plateRushPhase != 0 && boss.plateRushPhase != 4)
+        {
+            // Owned by the plate-rush cutscene state machine.
+            return;
+        }
+        if (boss.plateRushPhase == 4)
+        {
+            // Broken / timed-out plate: a live charge dash. Contact hurts.
+            boss.position = Vector2Add(
+                boss.position,
+                Vector2Scale(boss.chargeVelocity, deltaTime));
+            const Vector2 plateCenter{.x = boss.position.x + boss.size.x / 2,
+                                      .y = boss.position.y + boss.size.y / 2};
+            if (Vector2Distance(plateCenter, game.run.player.position) <=
+                UpdateConstants::beltbreakerPlateRushHitRadius)
+            {
+                if (!boss.dashHitPlayer && game.run.player.health > 0 &&
+                    !game.run.player.shieldActive && !game.run.player.dashing &&
+                    game.run.player.immunityTimer <= 0)
+                {
+                    boss.dashHitPlayer = true;
+                    damagePlayer(game, enemyDamage(game, 2));
+                }
+                // One way or another the pass is over: send it home.
+                sendRushPlateHome(boss);
+                return;
+            }
+            boss.plateRushDelay -= deltaTime;
+            if (boss.plateRushDelay <= -UpdateConstants::beltbreakerRushLooseLingerTime)
+            {
+                sendRushPlateHome(boss);
+            }
+            return;
+        }
         if (boss.plateAttached)
         {
-
             if (Boss* core = findBeltbreakerById(game, boss.plateOwnerId); core != nullptr)
             {
                 const Vector2 slotCenter = beltbreakerPlateSlotPosition(*core, boss.plateSlotIndex);
@@ -1302,7 +1358,7 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
     const Vector2 perp{.x = -dirToPlayer.y, .y = dirToPlayer.x};
 
     const bool enraged =
-        boss.health > 0 &&
+        !boss.usesDirector && boss.health > 0 &&
         static_cast<float>(boss.health) <= static_cast<float>(boss.maxHealth) * enrageHealthFrac;
 
     const float speedMult = (enraged ? 1.25F : 1.0F) * (boss.debuffFreeze ? freezeSlowMult : 1.0F) *
@@ -1313,6 +1369,18 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
                             (boss.isSlagmaw ? slagmawMoveSpeedMult : 1.0F);
 
     Vector2 move;
+    if (boss.usesDirector)
+    {
+        // Director bosses scale their own speed per pattern, so keep the magnitude.
+        move = bossDirectorMove(game, boss, bossCenter);
+        if (Vector2Length(move) > 0)
+        {
+            const float chaseSpeed = (game.run.player.speed * 1.15F + 1) * speedMult;
+            boss.position =
+                Vector2Add(boss.position, Vector2Scale(move, chaseSpeed * deltaTime * frameScale));
+        }
+        return;
+    }
     if (boss.isWreckwormHead)
     {
         move = dirToPlayer;
@@ -1455,6 +1523,14 @@ void updateBeltbreakerCore(Game& game, Boss& core, float deltaTime)
             core.beltbreakerReturnTriggered = false;
             core.beltbreakerShieldTimer =
                 UpdateConstants::beltbreakerShieldedDuration(core.plateCount);
+            // First biome-boss QTE: the plates suddenly burst away and the
+            // plate-rush cutscene (reaction prompts) takes over.
+            if (!bossQteActive(game) && game.run.player.health > 0 &&
+                !game.run.player.grabbed && !game.run.player.launched &&
+                game.run.bossCutscenePhase == 0)
+            {
+                beginBeltbreakerPlateRush(game, core);
+            }
             detachBeltbreakerPlates(game, core);
             core.harassTimer = 0;
             return;
@@ -1507,6 +1583,228 @@ void updateBeltbreakerCore(Game& game, Boss& core, float deltaTime)
     if (!anyStillOut)
     {
         core.beltbreakerShielded = false;
+    }
+}
+
+// --- Beltbreaker plate-rush QTE (cutscene) --------------------------------
+//
+// When the core shields up, its plates burst off-screen and the boss QTE
+// cutscene (qte.cpp) starts. A barrage follows: one plate at a time comes in
+// from a new side, posing a prompt from its approach. Answering it plays the
+// ship's reaction (dodge / block / parry / burst) and the plate flies back
+// off-screen for another pass. A wrong or late answer ends the cutscene: the
+// plate hits for real and every plate heads home.
+// --------------------------------------------------------------------------
+
+auto beltbreakerRushOffscreenDist(const Game& game) -> float
+{
+    return std::max(static_cast<float>(game.resources.screenWidth),
+                    static_cast<float>(game.resources.screenHeight)) /
+               2 +
+           UpdateConstants::beltbreakerPlateRushOffscreenMargin;
+}
+
+auto isRushPlateOf(const Boss& plate, const Boss& core) -> bool
+{
+    return plate.isBeltbreakerPlate && plate.plateOwnerId == core.instanceId && plate.health > 0;
+}
+
+void beginBeltbreakerPlateRush(Game& game, Boss& core)
+{
+    if (std::ranges::none_of(game.run.bosses,
+                             [&](const Boss& plate) { return isRushPlateOf(plate, core); }))
+    {
+        return;
+    }
+
+    bossQteBegin(game, core.instanceId);
+    game.run.qteTimer = UpdateConstants::beltbreakerPlateRushCueDuration;
+    core.plateRushAttacksLeft = UpdateConstants::beltbreakerRushAttacks;
+    core.plateRushLastAngle = static_cast<float>(GetRandomValue(0, 359));
+
+    const Vector2 coreCenter = beltbreakerCoreCenter(core);
+    for (auto& plate : game.run.bosses)
+    {
+        if (!isRushPlateOf(plate, core))
+        {
+            continue;
+        }
+        const float angleDeg = static_cast<float>(GetRandomValue(0, 359));
+        const Vector2 dir{.x = std::cos(angleDeg * DEG2RAD), .y = std::sin(angleDeg * DEG2RAD)};
+        plate.plateAttached = false;
+        plate.plateReturning = false;
+        plate.plateExcursionTimer = 0;
+        plate.plateRushPhase = 1;
+        plate.plateRushDelay = 0;
+        plate.position =
+            Vector2Subtract(coreCenter, Vector2{.x = plate.size.x / 2, .y = plate.size.y / 2});
+        plate.state = BossState::IDLE;
+        plate.dashHitPlayer = false;
+        plate.chargeVelocity = Vector2Scale(dir, UpdateConstants::beltbreakerPlateRushOffscreenSpeed);
+    }
+    playSFX(game, game.resources.sounds.bossWindUp);
+    triggerShake(game, 8, 0.3F);
+}
+
+void endBeltbreakerPlateRush(Game& game, const Boss& core)
+{
+    bossQteEnd(game);
+    for (auto& plate : game.run.bosses)
+    {
+        if (isRushPlateOf(plate, core) && plate.plateRushPhase != 0 && plate.plateRushPhase != 4)
+        {
+            sendRushPlateHome(plate);
+        }
+    }
+}
+
+// Send a parked plate in from a new side, aimed at the player.
+void launchBeltbreakerRushAttack(Game& game, Boss& core, Boss& plate)
+{
+    const float offDist = beltbreakerRushOffscreenDist(game);
+    const float turn = static_cast<float>(
+        GetRandomValue(static_cast<int32_t>(UpdateConstants::beltbreakerRushMinAngleChange),
+                       360 - static_cast<int32_t>(UpdateConstants::beltbreakerRushMinAngleChange)));
+    core.plateRushLastAngle = std::fmod(core.plateRushLastAngle + turn, 360.0F);
+    const Vector2 fromDir{.x = std::cos(core.plateRushLastAngle * DEG2RAD),
+                          .y = std::sin(core.plateRushLastAngle * DEG2RAD)};
+    const Vector2 start = Vector2Add(game.run.player.position, Vector2Scale(fromDir, offDist));
+
+    plate.position = Vector2Subtract(start, Vector2{.x = plate.size.x / 2, .y = plate.size.y / 2});
+    plate.plateRushPhase = 3;
+    plate.plateRushPromptDirection = Vector2Negate(fromDir);
+    // Arrives on the player exactly when the prompt times out.
+    plate.chargeVelocity = Vector2Scale(plate.plateRushPromptDirection,
+                                        offDist / UpdateConstants::beltbreakerPlateRushPromptDuration);
+    core.plateRushAttacksLeft--;
+
+    game.run.qtePrompt = qtePromptForThreat(game, plate.plateRushPromptDirection);
+    game.run.qteThreatDir = plate.plateRushPromptDirection;
+    game.run.qteTimer = UpdateConstants::beltbreakerPlateRushPromptDuration;
+    game.run.qteTimerMax = UpdateConstants::beltbreakerPlateRushPromptDuration;
+    playSFX(game, game.resources.sounds.bossWindUp);
+}
+
+// The prompt was answered: the plate reacts to what the ship did.
+void resolveBeltbreakerRushHit(Game& game, Boss& plate)
+{
+    const QtePrompt prompt = game.run.qtePrompt;
+    qteStartAction(game, prompt, plate.plateRushPromptDirection);
+    game.run.qtePrompt = QtePrompt::None;
+    game.run.qteTimer = UpdateConstants::beltbreakerRushBeat;
+
+    float damageFrac = 0;
+    switch (prompt)
+    {
+    case QtePrompt::Shield:
+        damageFrac = UpdateConstants::beltbreakerRushShieldDamageFrac;
+        break;
+    case QtePrompt::Parry:
+        damageFrac = UpdateConstants::beltbreakerRushParryDamageFrac;
+        break;
+    case QtePrompt::Nerve:
+        damageFrac = UpdateConstants::beltbreakerRushNerveDamageFrac;
+        break;
+    default:
+        break; // dodged: the plate just flies past
+    }
+
+    plate.plateRushPhase = 5;
+    if (damageFrac > 0)
+    {
+        // Blocked / parried / burst: knocked back and staggered.
+        plate.chargeVelocity = Vector2Negate(plate.chargeVelocity);
+        plate.dazedTimer = UpdateConstants::beltbreakerRushStagger;
+        const auto amount =
+            std::max(1, static_cast<int32_t>(static_cast<float>(plate.maxHealth) * damageFrac));
+        damageBoss(game, plate, amount);
+        playSFX(game, game.resources.sounds.critical);
+        triggerBossShieldDashShake(game);
+    }
+    else
+    {
+        playSFX(game, game.resources.sounds.menuMove);
+    }
+}
+
+void updateBeltbreakerPlateRush(Game& game, Boss& core, float deltaTime)
+{
+    const float offDist = beltbreakerRushOffscreenDist(game);
+    Boss* incoming = nullptr;
+    bool anyInFlight = false;
+    std::vector<Boss*> parked;
+    for (auto& plate : game.run.bosses)
+    {
+        if (!isRushPlateOf(plate, core))
+        {
+            continue;
+        }
+        switch (plate.plateRushPhase)
+        {
+        case 1: // bursting out
+        case 5: // answered, leaving
+            plate.position =
+                Vector2Add(plate.position, Vector2Scale(plate.chargeVelocity, deltaTime));
+            if (Vector2Distance(Vector2Add(plate.position, Vector2Scale(plate.size, 0.5F)),
+                                game.run.player.position) > offDist)
+            {
+                plate.plateRushPhase = 2;
+                plate.chargeVelocity = Vector2{};
+                parked.push_back(&plate);
+            }
+            else
+            {
+                anyInFlight = true;
+            }
+            break;
+        case 2:
+            parked.push_back(&plate);
+            break;
+        case 3:
+            plate.position =
+                Vector2Add(plate.position, Vector2Scale(plate.chargeVelocity, deltaTime));
+            incoming = &plate;
+            break;
+        default:
+            break;
+        }
+    }
+
+    if (incoming != nullptr)
+    {
+        const int32_t answer = qteReadInput(game, game.run.qtePrompt);
+        if (answer > 0)
+        {
+            resolveBeltbreakerRushHit(game, *incoming);
+        }
+        else if (answer < 0 || game.run.qteTimer <= 0)
+        {
+            // Wrong or late: the cutscene breaks and this plate hits for real.
+            endBeltbreakerPlateRush(game, core);
+            incoming->plateRushPhase = 4;
+            incoming->plateRushDelay = 0;
+            incoming->dashHitPlayer = false;
+            playSFX(game, game.resources.sounds.nerveFizzle);
+        }
+        return;
+    }
+
+    // The prompted plate was destroyed mid-flight.
+    game.run.qtePrompt = QtePrompt::None;
+    if (game.run.qteTimer > 0)
+    {
+        return; // cue / beat between attacks
+    }
+    if (core.plateRushAttacksLeft > 0 && !parked.empty())
+    {
+        Boss* plate = parked.at(static_cast<size_t>(
+            GetRandomValue(0, static_cast<int32_t>(parked.size()) - 1)));
+        launchBeltbreakerRushAttack(game, core, *plate);
+        return;
+    }
+    if (!anyInFlight)
+    {
+        endBeltbreakerPlateRush(game, core);
     }
 }
 
@@ -1693,6 +1991,16 @@ void krakenStaggerSwipingTentacle(Boss& boss)
         const auto slot = static_cast<size_t>(s);
         if (boss.tentaclePhase[slot] == 1 || boss.tentaclePhase[slot] == 2)
         {
+            float angle =
+                (boss.tentacleSwipeStartAngle[slot] + boss.tentacleSwipeEndAngle[slot]) / 2.0F;
+            if (boss.tentaclePhase[slot] == 2)
+            {
+                const float progress = std::clamp(
+                    1.0F - boss.tentacleStateTimer[slot] / krakenTentacleSwipeDuration, 0.0F, 1.0F);
+                angle += (boss.tentacleSwipeEndAngle[slot] - boss.tentacleSwipeStartAngle[slot]) *
+                         (progress - 0.5F);
+            }
+            boss.tentacleSwipeEndAngle[slot] = angle;
             boss.tentacleHitPlayerThisSwipe[slot] = true;
             boss.tentaclePhase[slot] = 4;
             boss.tentacleStateTimer[slot] = krakenTentacleStaggerRetreatDuration;
@@ -1709,6 +2017,40 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
     }
 
     const int32_t activeCount = krakenActiveTentacleCount(boss.krakenEncounter);
+    const bool allStaggered = std::all_of(
+        boss.tentacleStaggered.begin(),
+        boss.tentacleStaggered.begin() + activeCount,
+        [](bool staggered) { return staggered; });
+    if (allStaggered)
+    {
+        if (boss.krakenCoreExposedTimer > 0)
+        {
+            boss.krakenCoreExposedTimer -= deltaTime;
+            if (boss.krakenCoreExposedTimer <= 0)
+            {
+                boss.krakenCoreExposedTimer = 0;
+                for (int32_t slot = 0; slot < activeCount; slot++)
+                {
+                    boss.tentacleStaggered[static_cast<size_t>(slot)] = false;
+                    boss.tentacleCooldownTimer[static_cast<size_t>(slot)] =
+                        krakenTentacleCooldownDuration;
+                }
+                boss.krakenCoreExposureUsed = true;
+            }
+        }
+        else if (!boss.krakenCoreExposureUsed)
+        {
+            boss.krakenCoreExposedTimer = krakenCoreExposureDuration;
+            boss.krakenCoreExposureUsed = true;
+            for (int32_t slot = 0; slot < Boss::krakenLimbSlots; slot++)
+            {
+                boss.limbPhase[static_cast<size_t>(slot)] = 0;
+                boss.limbPod[static_cast<size_t>(slot)] = -1;
+                boss.limbThrowPhase[static_cast<size_t>(slot)] = 0;
+            }
+        }
+        return;
+    }
 
     for (int32_t s = 0; s < activeCount; s++)
     {
@@ -1716,11 +2058,6 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
 
         if (boss.tentacleStaggered[slot])
         {
-            boss.tentacleStaggerTimer[slot] -= deltaTime;
-            if (boss.tentacleStaggerTimer[slot] <= 0)
-            {
-                boss.tentacleStaggered[slot] = false;
-            }
             continue;
         }
 
@@ -1765,6 +2102,7 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
                 const bool blocking = game.run.player.shieldActive;
                 if (blocking)
                 {
+                    boss.tentacleSwipeEndAngle[slot] = angle;
                     boss.tentacleHitPlayerThisSwipe[slot] = true;
                     boss.tentaclePhase[slot] = 4;
                     boss.tentacleStateTimer[slot] = krakenTentacleStaggerRetreatDuration;
@@ -1788,6 +2126,7 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
             if (boss.tentacleStateTimer[slot] <= 0)
             {
                 boss.tentaclePhase[slot] = 0;
+                boss.tentacleCooldownTimer[slot] = krakenTentacleCooldownDuration;
             }
             continue;
         }
@@ -1862,7 +2201,11 @@ auto krakenPodPosition(const Boss& boss, int32_t podIndex) -> Vector2
 
 void updateKrakenLimbs(Game& game, Boss& boss, float deltaTime)
 {
-    if (!boss.isKraken || boss.health <= 0 || boss.krakenEncounter < 2)
+    if (!boss.isKraken || boss.health <= 0 || boss.krakenEncounter < 2 ||
+        boss.krakenCoreExposedTimer > 0 ||
+        std::all_of(boss.tentacleStaggered.begin(),
+                    boss.tentacleStaggered.begin() + krakenActiveTentacleCount(boss.krakenEncounter),
+                    [](bool staggered) { return staggered; }))
     {
         return;
     }
@@ -2122,10 +2465,9 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake, bool pi
         return;
     }
 
-    if (boss.isKraken && !hitsStaggeredKrakenTentacle)
+    if (boss.isKraken && !hitsStaggeredKrakenTentacle && boss.krakenCoreExposedTimer <= 0)
     {
-        // Kraken's core body is immune; the only damage source is shooting a tentacle while
-        // it's staggered and hanging out of its gate (see updateKrakenTentacle).
+        // The core only takes weapon damage during the coordinated tentacle-down exposure.
         boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
         return;
     }
@@ -2147,6 +2489,16 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake, bool pi
         return;
     }
 
+    if (const float mult = bossDirectorDamageMult(boss); mult != 1.0F)
+    {
+        if (mult <= 0)
+        {
+            boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
+            return;
+        }
+        amount = std::max(1, static_cast<int32_t>(static_cast<float>(amount) * mult));
+    }
+
     if (boss.isWreckwormSegment && boss.isArmorSegment)
     {
         amount = std::max(
@@ -2154,6 +2506,10 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake, bool pi
     }
 
     boss.health -= amount;
+    if (game.sandbox && game.sandboxBossNoDeath)
+    {
+        boss.health = std::max(1, boss.health);
+    }
     boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
     spawnDamageNumber(game, boss.position, amount);
 
@@ -2193,12 +2549,18 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         return;
     }
 
-    if (boss.isBeltbreakerPlate && boss.plateAttached)
+    if (boss.isBeltbreakerPlate &&
+        (boss.plateAttached || boss.plateRushPhase != 0))
     {
         return;
     }
 
     if (boss.isWreckwormSegment)
+    {
+        return;
+    }
+
+    if (boss.usesDirector && updateBossDirector(game, boss, bossCenter, deltaTime))
     {
         return;
     }
@@ -2307,7 +2669,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         break;
     case BossState::WINDING_UP:
         boss.stateTimer -= deltaTime;
-        boss.targetPosition = game.run.player.position;
+        boss.targetPosition = bossAimPoint(game, boss);
 
         if (boss.stateTimer <= 0)
         {

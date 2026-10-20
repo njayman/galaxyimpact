@@ -373,6 +373,12 @@ constexpr float sniperDamageMult = 2.3F;
 
 constexpr float sniperLineLength = 2000.0F;
 constexpr float sniperLineFlashDuration = 0.2F;
+constexpr float sniperDodgeTellDuration = 0.9F;
+constexpr float sniperLiveLineDuration = 0.35F;
+constexpr float sniperCounterDuration = 0.7F;
+constexpr float sniperLineWidth = 14.0F;
+constexpr int32_t sniperLineDamage = 2;
+constexpr float krakenCoreExposureDuration = 8.0F;
 constexpr float chainLightningDamageMult = 1.9F;
 constexpr float flamethrowerDamageMult = 2.5F;
 
@@ -413,11 +419,10 @@ constexpr float krakenTentaclePortalRadius = 34.0F;
 constexpr float krakenTentacleHitRadius = 42.0F;
 constexpr int32_t krakenTentaclePlayerDamage = 2;
 
-// ponytail: stagger duration scales 5s -> 9s across the three encounters (linear), per
-// explicit request; no exact numbers were given beyond the 5-9s range.
-constexpr float krakenStaggerDurationE1 = 5.0F;
-constexpr float krakenStaggerDurationE2 = 7.0F;
-constexpr float krakenStaggerDurationE3 = 9.0F;
+// Kraken stagger persists until the core window closes, giving time to disable every active arm.
+constexpr float krakenStaggerDurationE1 = 9999.0F;
+constexpr float krakenStaggerDurationE2 = 9999.0F;
+constexpr float krakenStaggerDurationE3 = 9999.0F;
 constexpr float krakenStaggerGateOffset = 60.0F;
 
 constexpr float krakenLimbOpenDuration = 0.7F;

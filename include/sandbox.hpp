@@ -7,6 +7,8 @@
 #include <vector>
 
 void enterSandbox(Game& game);
+auto updateAutoplayBot(Game& game, float deltaTime) -> bool;
+auto autoplayHabitName(const Game& game) -> const char*;
 
 void updateSandboxInput(Game& game);
 

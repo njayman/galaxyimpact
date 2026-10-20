@@ -78,6 +78,10 @@ void updateNerve(Game& game, float deltaTime)
 
 void updateNerveBurstInput(Game& game)
 {
+    if (bossQteActive(game))
+    {
+        return;
+    }
     auto& player = game.run.player;
     if (game.run.inBanishedRealm)
     {
@@ -102,6 +106,11 @@ void damagePlayer(Game& game, int32_t amount)
     if (game.run.player.invulnerable)
     {
         return;
+    }
+
+    if (bossQteActive(game))
+    {
+        return; // only a failed prompt hurts, and that ends the cutscene first
     }
 
     if (game.run.player.nerveCharging)
@@ -243,6 +252,11 @@ void updateBossDeathShockwave(Game& game, float deltaTime)
 
 void updatePlayerMovement(Game& game, float deltaTime)
 {
+    if (bossQteActive(game))
+    {
+        return; // the QTE drives the ship (qte.cpp)
+    }
+
     const Vector2 startPosition = game.run.player.position;
 
     const bool inBlackHole =
@@ -381,7 +395,7 @@ void updatePlayerMovement(Game& game, float deltaTime)
 
         touchingAnyBoss = true;
 
-        if (boss.isBeltbreakerPlate && boss.state == BossState::SHOOTING &&
+        if ((boss.isBeltbreakerPlate || boss.usesDirector) && boss.state == BossState::SHOOTING &&
             boss.attack == BossAttack::ChargeDash && !boss.dashHitPlayer &&
             !game.run.player.dashing && !game.run.player.shieldActive &&
             game.run.player.immunityTimer <= 0)
@@ -569,6 +583,10 @@ auto chargeRegenDuration(const Game& game) -> float
 
 void updateAbilityCharges(Game& game, float deltaTime)
 {
+    if (bossQteActive(game))
+    {
+        return;
+    }
     if (game.run.player.charges < UpdateConstants::maxCharges)
     {
         game.run.player.chargeRegenTimer -= deltaTime;
