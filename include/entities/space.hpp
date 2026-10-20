@@ -128,6 +128,7 @@ class Asteroid
     float clusterRotationSpeed = 0;
 
     bool isFluid = false;
+    bool grinderOrbit = false; // Shattered Belt: caught by the black hole, orbiting it
 };
 
 const int maxAsteroid = 40;

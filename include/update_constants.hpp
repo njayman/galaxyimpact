@@ -16,6 +16,12 @@ constexpr float blackHolePull = 2;
 constexpr float blackHoleSlow = 2.5F;
 constexpr float blackHoleAsteroidPull = 1.5F;
 constexpr float blackHoleChaseSpeed = 0.3F;
+// Grinder (Shattered Belt black hole): caught rock orbits between these fractions of the hole's
+// radius and influence radius, and is flung off tangentially when the hole closes.
+constexpr float grinderOrbitMinRadiusMult = 1.8F;
+constexpr float grinderOrbitMaxInfluenceFrac = 0.7F;
+constexpr float grinderOrbitSpeedDeg = 140.0F;
+constexpr float grinderReleaseSpeed = 3.0F;
 
 constexpr float homingProjSpeed = 6.5F;
 constexpr float spreadProjSpeed = 6;

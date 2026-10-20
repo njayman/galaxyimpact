@@ -4873,9 +4873,20 @@ void updateAsteroids(Game& game, float deltaTime)
             continue;
         }
 
+        if (asteroid.grinderOrbit && !game.run.blackhole.active)
+        {
+            const float a = asteroid.clusterAngleDeg * DEG2RAD;
+            asteroid.velocity = Vector2{.x = -std::sin(a) * grinderReleaseSpeed, .y = std::cos(a) * grinderReleaseSpeed};
+            asteroid.grinderOrbit = false;
+            asteroid.inCluster = false;
+        }
+        if (asteroid.grinderOrbit)
+        {
+            asteroid.clusterCenter = game.run.blackhole.position;
+        }
+
         if (asteroid.inCluster)
         {
-
             asteroid.clusterAngleDeg = std::fmod(
                 asteroid.clusterAngleDeg + asteroid.clusterRotationSpeed * deltaTime, 360.0F);
             asteroid.position = Vector2Add(
@@ -4901,7 +4912,23 @@ void updateAsteroids(Game& game, float deltaTime)
             const Vector2 toHole = Vector2Subtract(game.run.blackhole.position, asteroid.position);
             const float dist = Vector2Length(toHole);
 
-            if (dist <= game.run.blackhole.influenceRadius && dist > 0)
+            // Grinder: in the Belt, rock caught in the pull orbits the hole as shrapnel instead
+            // of being swallowed.
+            if (!asteroid.grinderOrbit && !game.run.blackhole.isKrakenPortal &&
+                currentBiome(game.run.waveNumber) == Biome::ShatteredBelt &&
+                dist <= game.run.blackhole.influenceRadius && dist > 0)
+            {
+                asteroid.grinderOrbit = true;
+                asteroid.inCluster = true;
+                asteroid.clusterCenter = game.run.blackhole.position;
+                asteroid.clusterOrbitRadius =
+                    std::clamp(dist, game.run.blackhole.radius * grinderOrbitMinRadiusMult,
+                               game.run.blackhole.influenceRadius * grinderOrbitMaxInfluenceFrac);
+                asteroid.clusterAngleDeg = std::atan2(-toHole.y, -toHole.x) * RAD2DEG;
+                asteroid.clusterRotationSpeed = grinderOrbitSpeedDeg;
+            }
+
+            if (!asteroid.grinderOrbit && dist <= game.run.blackhole.influenceRadius && dist > 0)
             {
                 const Vector2 pull = Vector2Scale(Vector2Normalize(toHole), blackHoleAsteroidPull);
                 asteroid.position =
@@ -5448,6 +5475,10 @@ void spawnBlackHole(Game& game)
     game.run.blackhole.active = true;
     game.run.blackhole.isKrakenPortal = false;
     game.run.blackhole.timer = static_cast<float>(GetRandomValue(60, 100)) / 10.0F;
+    for (auto& dust : game.run.blackHoleDust)
+    {
+        dust.color = spawnBlackHoleDustParticle(game).color;
+    }
 }
 
 void updateBlackHole(Game& game, float deltaTime)
@@ -5485,14 +5516,19 @@ void updateBlackHole(Game& game, float deltaTime)
     }
 }
 
-auto spawnBlackHoleDustParticle(bool punctumColors) -> BlackHoleDustParticle
+auto spawnBlackHoleDustParticle(const Game& game) -> BlackHoleDustParticle
 {
-    const Color color =
-        punctumColors
-            ? Palette::PunctumDustColors.at(static_cast<size_t>(
-                  GetRandomValue(0, static_cast<int32_t>(Palette::PunctumDustColors.size() - 1))))
-            : Palette::AmbientDustColors.at(static_cast<size_t>(
-                  GetRandomValue(0, static_cast<int32_t>(Palette::AmbientDustColors.size() - 1))));
+    const auto pick = [](const auto& colors)
+    { return colors.at(static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(colors.size() - 1)))); };
+    Color color = pick(Palette::AmbientDustColors);
+    if (game.run.blackhole.isKrakenPortal)
+    {
+        color = pick(Palette::PunctumDustColors);
+    }
+    else if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
+    {
+        color = pick(Palette::ShatteredBeltDustColors);
+    }
 
     return BlackHoleDustParticle{
         .radiusFrac = 1.0F,
@@ -5526,7 +5562,7 @@ void updateBlackHoleDust(Game& game, float deltaTime)
 
         if (dust.radiusFrac <= blackHoleDustCoreFraction)
         {
-            dust = spawnBlackHoleDustParticle(game.run.blackhole.isKrakenPortal);
+            dust = spawnBlackHoleDustParticle(game);
         }
     }
 }

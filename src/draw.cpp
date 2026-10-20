@@ -142,7 +142,7 @@ void drawSandboxMenu(const Game& game);
 void drawSandboxBrowser(const Game& game);
 void drawLaserBolt(const Bullet& b);
 void drawPickupIcon(PickupType type, ElementType element, Vector2 position, float alpha);
-void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius);
+void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius, Color rim);
 
 // Straight bolt: a comet streak, faint thin tail to a bright head. Arc: a few thin strands along
 // the U, brightest and thickest at the front, thinning and fading toward the trailing ends.
@@ -2070,10 +2070,13 @@ void drawGameplayWorld(const Game& game)
 
     if (game.run.wormhole.active)
     {
+        const Color rim = currentBiome(game.run.waveNumber) == Biome::ShatteredBelt
+                              ? Palette::ShatteredBeltAccent
+                              : Palette::Shield;
         drawWormholeMouth(game.run.wormhole.positionA, game.run.wormhole.facingA,
-                          game.run.wormhole.radius);
+                          game.run.wormhole.radius, rim);
         drawWormholeMouth(game.run.wormhole.positionB, game.run.wormhole.facingB,
-                          game.run.wormhole.radius);
+                          game.run.wormhole.radius, rim);
     }
 
     for (const auto& cloud : game.run.gasHazards)
@@ -4211,11 +4214,11 @@ void drawFluidBlob(Vector2 center, float radius, Color color, float seed, Vector
     }
 }
 
-void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius)
+void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius, Color rim)
 {
-    DrawCircleV(position, radius, Fade(Palette::Shield, 0.25F));
+    DrawCircleV(position, radius, Fade(rim, 0.25F));
     DrawRing(position, radius - 4, radius, static_cast<float>(GetTime()) * 60,
-             static_cast<float>(GetTime()) * 60 + 300, 24, Palette::Shield);
+             static_cast<float>(GetTime()) * 60 + 300, 24, rim);
     DrawCircleLines(static_cast<int32_t>(position.x), static_cast<int32_t>(position.y), radius,
                     Fade(Palette::Haze, 0.6F));
 

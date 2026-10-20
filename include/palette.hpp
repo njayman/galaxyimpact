@@ -45,4 +45,5 @@ constexpr Color PunctumAccent{.r = 230, .g = 200, .b = 60, .a = 255};
 
 constexpr std::array<Color, 3> AmbientDustColors{StructMid, Haze, AccentDim};
 constexpr std::array<Color, 2> PunctumDustColors{PunctumHaze, PunctumAccent};
+constexpr std::array<Color, 3> ShatteredBeltDustColors{ShatteredBeltAccent, StructMid, StructLight};
 }

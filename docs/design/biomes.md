@@ -142,6 +142,8 @@ Starting numbers: one squall every 18 s at wave 1, ramping linearly to every 10 
 
 **Grinder** (black hole): loose rock caught in its pull orbits it as contact-damage shrapnel; shooting the orbit breaks it up. Details may be refined in this Biome's tickets.
 
+As built: asteroids (single rocks and Belt rock clusters) that enter the pull lock into an orbit between 1.8x the hole's radius and 70% of its influence radius, turning at 140°/s, instead of being swallowed. They keep the normal asteroid rules: contact damage, and they break when shot. When the hole closes they fly off along the tangent. Both Anomalies take the amber accent in the Belt: amber dust in the black hole and amber wormhole rims.
+
 ### Wave Boss flavour
 
 Mini Wave Bosses at waves 5 and 15. Pool: Shatter Prime, Fracture Queen, Ashen Sentinel, Barrier Colossus, Warbringer (stone and fracture names; Structural Wyrm left out as a Wreckworm echo).

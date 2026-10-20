@@ -300,7 +300,7 @@ void resetRun(Game& game)
     game.run.blackHoleDust.resize(blackHoleDustCount);
     for (auto& dust : game.run.blackHoleDust)
     {
-        dust = spawnBlackHoleDustParticle(false);
+        dust = spawnBlackHoleDustParticle(game);
         dust.radiusFrac = static_cast<float>(GetRandomValue(220, 1000)) / 1000.0F;
     }
     game.run.wormhole = Wormhole{};
