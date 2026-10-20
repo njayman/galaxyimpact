@@ -250,6 +250,30 @@ void updateBossDeathShockwave(Game& game, float deltaTime)
                   [](const BossDeathShockwave& wave) { return wave.timer <= 0; });
 }
 
+// Blight Gate: the exit mouth the player just came out of leaves (or refreshes) a spore cloud.
+void leaveBlightGateSpores(Game& game)
+{
+    const Vector2 playerPos = game.run.player.position;
+    const Vector2 exitMouth = Vector2Distance(playerPos, game.run.wormhole.positionA) <
+                                      Vector2Distance(playerPos, game.run.wormhole.positionB)
+                                  ? game.run.wormhole.positionA
+                                  : game.run.wormhole.positionB;
+    for (auto& cloud : game.run.gasHazards)
+    {
+        if (cloud.spores && Vector2Equals(cloud.position, exitMouth) != 0)
+        {
+            cloud.life = blightGateSporeLifetime;
+            return;
+        }
+    }
+    game.run.gasHazards.push_back(GasHazard{.position = exitMouth,
+                                            .radius = blightGateSporeRadius,
+                                            .seed = static_cast<float>(GetRandomValue(0, 10000)),
+                                            .life = blightGateSporeLifetime,
+                                            .anchored = true,
+                                            .spores = true});
+}
+
 void updatePlayerMovement(Game& game, float deltaTime)
 {
     if (bossQteActive(game))
@@ -341,15 +365,21 @@ void updatePlayerMovement(Game& game, float deltaTime)
         }
     }
 
+    bool exitedWormhole = false;
     if (game.run.player.dashing)
     {
-        applyWormholeTransit(game, game.run.player.position, game.run.player.dashVelocity,
-                             game.run.player.radius);
+        exitedWormhole = applyWormholeTransit(game, game.run.player.position,
+                                              game.run.player.dashVelocity, game.run.player.radius);
     }
     else
     {
         Vector2 noVelocity{};
-        applyWormholeTransit(game, game.run.player.position, noVelocity, game.run.player.radius);
+        exitedWormhole = applyWormholeTransit(game, game.run.player.position, noVelocity,
+                                              game.run.player.radius);
+    }
+    if (exitedWormhole && currentBiome(game.run.waveNumber) == Biome::Rustbloom)
+    {
+        leaveBlightGateSpores(game);
     }
 
     game.run.player.velocity = Vector2Subtract(game.run.player.position, startPosition);

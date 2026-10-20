@@ -2346,9 +2346,15 @@ void drawGameplayWorld(const Game& game)
 
     if (game.run.wormhole.active)
     {
-        const Color rim = currentBiome(game.run.waveNumber) == Biome::ShatteredBelt
-                              ? Palette::ShatteredBeltAccent
-                              : Palette::Shield;
+        Color rim = Palette::Shield;
+        if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
+        {
+            rim = Palette::ShatteredBeltAccent;
+        }
+        else if (currentBiome(game.run.waveNumber) == Biome::Rustbloom)
+        {
+            rim = Palette::RustbloomAccent;
+        }
         drawWormholeMouth(game.run.wormhole.positionA, game.run.wormhole.facingA,
                           game.run.wormhole.radius, rim);
         drawWormholeMouth(game.run.wormhole.positionB, game.run.wormhole.facingB,
@@ -2360,9 +2366,15 @@ void drawGameplayWorld(const Game& game)
         const float pulse =
             0.85F + 0.15F * std::sin(static_cast<float>(GetTime()) * 2.2F + cloud.seed);
         const float fadeAlpha = std::min(1.0F, cloud.life / 1.5F);
-        const Color cloudColor =
-            cloud.isFire ? ColorLerp(Palette::Accent, Palette::Crit, 0.3F)
-                         : ColorLerp(Palette::RustbloomAccent, Palette::RustbloomHaze, 0.3F);
+        Color cloudColor = ColorLerp(Palette::RustbloomAccent, Palette::RustbloomHaze, 0.3F);
+        if (cloud.isFire)
+        {
+            cloudColor = ColorLerp(Palette::Accent, Palette::Crit, 0.3F);
+        }
+        else if (cloud.spores)
+        {
+            cloudColor = ColorLerp(Palette::RustbloomAccent, Palette::RustbloomHaze, 0.7F);
+        }
         drawFluidBlob(cloud.position, cloud.radius * pulse, Fade(cloudColor, 0.55F * fadeAlpha),
                       cloud.seed, Vector2{});
     }

@@ -489,4 +489,5 @@ class GasHazard
     bool active = true;
     bool isFire = false;
     bool anchored = false; // director Zone walls hold position instead of drifting at the player
+    bool spores = false;   // Blight Gate spore cloud: slows the player instead of burning
 };

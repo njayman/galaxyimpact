@@ -3364,6 +3364,13 @@ void updateGasHazards(Game& game, float deltaTime)
             continue;
         }
 
+        if (cloud.spores)
+        {
+            game.run.player.slowTimer =
+                std::max(game.run.player.slowTimer, blightGateSporeSlowRefresh);
+            continue;
+        }
+
         if (game.run.player.health > 0)
         {
             game.run.player.burnDps = wreckwormCloudBurnDps;
@@ -5593,6 +5600,10 @@ auto spawnBlackHoleDustParticle(const Game& game) -> BlackHoleDustParticle
     else if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
     {
         color = pick(Palette::ShatteredBeltDustColors);
+    }
+    else if (currentBiome(game.run.waveNumber) == Biome::Rustbloom)
+    {
+        color = pick(Palette::RustbloomDustColors);
     }
 
     return BlackHoleDustParticle{

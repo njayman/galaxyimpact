@@ -318,6 +318,11 @@ constexpr float wormholeRadius = 26;
 constexpr float wormholeLifetime = 20.0F;
 constexpr float wormholeSpawnCooldownMin = 40.0F;
 constexpr float wormholeSpawnCooldownMax = 70.0F;
+// Blight Gate (Rustbloom wormhole): the exit the player comes out of leaves an anchored spore
+// cloud; while inside, the player's slow timer is held at this refresh duration.
+constexpr float blightGateSporeLifetime = 4.0F;
+constexpr float blightGateSporeRadius = 70.0F;
+constexpr float blightGateSporeSlowRefresh = 0.3F;
 
 constexpr float wormholeBeamDuration = 2.5F;
 constexpr float wormholeBeamFlankMinDist = 150;
