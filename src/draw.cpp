@@ -134,6 +134,8 @@ void drawNerveBar(const Game& game, int32_t x, int32_t y);
 auto drawDamageMeter(const Game& game, int32_t x, int32_t y) -> int32_t;
 void drawChargePips(const Game& game, int32_t x, int32_t y);
 void drawOrganicEnemyShape(Vector2 center, float baseRadius, float seed, Color color);
+void drawHuskSentinelShape(Vector2 center, float radius, float seed, Vector2 aim, Color color);
+void drawCarrionSpots(Vector2 center, float radius, float seed, Color color);
 void drawClusterEnemyShape(Vector2 center, float baseRadius, float seed, Color color);
 void drawMeteorBossShape(Vector2 center, float radius, int32_t seed, Color baseColor);
 void drawSandboxToggleIndicator(const Game& game);
@@ -2993,6 +2995,55 @@ void drawOrganicEnemyShape(Vector2 center, float baseRadius, float seed, Color c
     }
 }
 
+// Husk Sentinel: a rusted wreck turret whose barrel tracks the player, crusted over with bloom.
+void drawHuskSentinelShape(Vector2 center, float radius, float seed, Vector2 aim, Color color)
+{
+    const float alpha = static_cast<float>(color.a) / 255.0F;
+    drawPanelShape(center, radius, 6, hashNoise(seed * 5.3F) * 360.0F,
+                   ColorAlpha(ColorLerp(color, Palette::StructDark, 0.45F), alpha), seed * 90.0F);
+
+    const Vector2 muzzle = Vector2Add(center, Vector2Scale(Vector2Normalize(aim), radius * 1.35F));
+    DrawLineEx(center, muzzle, radius * 0.32F,
+               ColorAlpha(ColorLerp(Palette::StructMid, color, 0.4F), alpha));
+    DrawCircleV(muzzle, radius * 0.17F, ColorAlpha(Palette::StructDark, alpha));
+    DrawCircleV(center, radius * 0.5F, color);
+    DrawCircleLines(static_cast<int32_t>(center.x), static_cast<int32_t>(center.y), radius * 0.5F,
+                    Fade(Palette::StructDark, 0.7F * alpha));
+
+    constexpr int32_t crustCount = 6;
+    for (int32_t i = 0; i < crustCount; i++)
+    {
+        const float crustSeed = seed * 3.1F + static_cast<float>(i) * 17.0F;
+        const float angle = hashNoise(crustSeed) * 2.0F * std::numbers::pi_v<float>;
+        const float dist = radius * (0.45F + 0.45F * hashNoise(crustSeed + 1.0F));
+        const Vector2 pos = Vector2Add(
+            center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+        const float lumpRadius = radius * (0.16F + 0.14F * hashNoise(crustSeed + 2.0F));
+        const Color lump = ColorLerp(Palette::RustbloomAccent, Palette::RustbloomVoid,
+                                     0.35F * hashNoise(crustSeed + 3.0F));
+        DrawCircleV(pos, lumpRadius, ColorAlpha(lump, alpha));
+        DrawCircleV(Vector2Add(pos, Vector2{.x = -lumpRadius * 0.3F, .y = -lumpRadius * 0.3F}),
+                    lumpRadius * 0.4F, Fade(Palette::Heal, 0.5F * alpha));
+    }
+}
+
+// Carrion Drone: green rot spots over its rust haze body.
+void drawCarrionSpots(Vector2 center, float radius, float seed, Color color)
+{
+    const float alpha = static_cast<float>(color.a) / 255.0F;
+    constexpr int32_t spotCount = 4;
+    for (int32_t i = 0; i < spotCount; i++)
+    {
+        const float spotSeed = seed * 8.9F + static_cast<float>(i) * 23.0F;
+        const float angle = hashNoise(spotSeed) * 2.0F * std::numbers::pi_v<float>;
+        const float dist = hashNoise(spotSeed + 1.0F) * radius * 0.45F;
+        const Vector2 pos = Vector2Add(
+            center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+        DrawCircleV(pos, radius * (0.12F + 0.08F * hashNoise(spotSeed + 2.0F)),
+                    ColorAlpha(Palette::RustbloomAccent, alpha));
+    }
+}
+
 void drawElementalDebuffEffects(Vector2 pos, float radius, bool burning, bool shocked, bool frozen)
 {
     const auto t = static_cast<float>(GetTime());
@@ -3057,6 +3108,11 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     if (!kind.biomeExclusive && currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
     {
         color = ColorLerp(color, Palette::ShatteredBeltAccent, beltDustTint);
+    }
+    else if (!kind.biomeExclusive && currentBiome(game.run.waveNumber) == Biome::Rustbloom)
+    {
+        const Color bloom = ColorLerp(Palette::RustbloomHaze, Palette::RustbloomAccent, 0.5F);
+        color = ColorLerp(color, bloom, rustbloomTint);
     }
     if (enemy.fadeAlpha < 1.0F)
     {
@@ -3130,10 +3186,21 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     const float spin = std::fmod(static_cast<float>(GetTime()) * 20.0F +
                                      (enemy.position.x + enemy.position.y) * 0.15F,
                                  360.0F);
-    if (kind.shape == EnemyShape::Organic)
+    if (enemy.kind == enemyKindHuskSentinel)
+    {
+        drawHuskSentinelShape(enemy.position, kind.radius * enemy.organicRadiusMult,
+                              enemy.organicSeed,
+                              Vector2Subtract(game.run.player.position, enemy.position), color);
+    }
+    else if (kind.shape == EnemyShape::Organic)
     {
         drawOrganicEnemyShape(enemy.position, kind.radius * enemy.organicRadiusMult,
                               enemy.organicSeed, color);
+        if (enemy.kind == enemyKindCarrionDrone)
+        {
+            drawCarrionSpots(enemy.position, kind.radius * enemy.organicRadiusMult,
+                             enemy.organicSeed, color);
+        }
     }
     else if (kind.shape == EnemyShape::Cluster)
     {

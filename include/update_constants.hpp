@@ -268,7 +268,7 @@ constexpr float caveTunnelHalfWidth = 0.17F;
 constexpr float beltDustLaneAngleDeg = 33.0F;
 // Amber tint on Global Enemies, Wave Bosses and Elite Hazards fighting in the Belt.
 constexpr float beltDustTint = 0.15F;
-// Green-brown tint on Wave Bosses and Elite Hazards fighting in Rustbloom.
+// Green-brown tint on Global Enemies, Wave Bosses and Elite Hazards fighting in Rustbloom.
 constexpr float rustbloomTint = 0.15F;
 
 // Debris Squall: the interval ramps linearly from Start at wave 1 to End at wave 25.

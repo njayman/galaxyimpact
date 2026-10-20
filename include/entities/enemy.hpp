@@ -174,7 +174,9 @@ constexpr int enemyKindSwarmling = 1;
 
 constexpr int enemyKindRockDebris = 18;
 constexpr int enemyKindSporeSwarmling = 22;
+constexpr int enemyKindHuskSentinel = 23;
 constexpr int enemyKindHiveNode = 24;
+constexpr int enemyKindCarrionDrone = 26;
 
 constexpr int enemyKindMeteorChunk = 33;
 
@@ -497,7 +499,7 @@ constexpr std::array<EnemyKind, 35> enemyKinds{
               .contactDamage = 0,
               .score = 8,
               .pattern = EnemyPattern::Chase,
-              .color = Palette::Charge,
+              .color = Palette::RustbloomHaze,
               .shape = EnemyShape::Organic,
               .minWave = 26,
               .isLeech = true,
