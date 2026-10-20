@@ -1719,7 +1719,7 @@ void drawBeltPlanet(const Game& game)
 {
     constexpr int32_t zonesPerSide = 3;
     constexpr float drift = 0.05F;      // screen offset per unit of distance from the zone centre
-    constexpr float visibility = 0.22F; // how far toward full colour the planet is drawn
+    constexpr float visibility = 0.05F; // how far toward full colour the planet is drawn
 
     const Vector2 player = game.run.player.position;
     const float zoneSize = 2.0F * GameConstants::arenaHalf / zonesPerSide;
