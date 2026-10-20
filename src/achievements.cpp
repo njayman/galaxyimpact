@@ -4,9 +4,12 @@
 #include "entities/ship.hpp"
 #include "game.hpp"
 #include "platform.hpp"
+#include <algorithm>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace
 {
@@ -98,8 +101,61 @@ void writeSizedInts(std::ostream& file, const std::array<T, N>& arr)
     }
 }
 
-// Unversioned saves had 15 weapon types (before Laser Shots) and no array lengths.
-constexpr size_t legacyWeaponTypeCount = 15;
+// Unversioned saves stored arrays back to back with no lengths: W weapon kills, E dash kills,
+// 3 stats, W type unlocks, W evolution unlocks, then (in later files) the infinite-mode flag.
+// The weapon/enemy counts changed between releases, so infer them: try weapon counts from
+// newest down and take the first layout whose total length fits and whose 0/1 flags and slot
+// cap are valid. Returns nullopt if nothing fits.
+auto parseLegacyAchievements(const std::vector<int32_t>& v) -> std::optional<Achievements>
+{
+    constexpr size_t newestLegacyWeaponCount = 15; // before Laser Shots
+    constexpr size_t oldestWeaponCount = 6;
+    const auto isFlag = [](int32_t x) { return x == 0 || x == 1; };
+    for (size_t w = newestLegacyWeaponCount; w >= oldestWeaponCount; w--)
+    {
+        for (const size_t flag : {1U, 0U})
+        {
+            if (v.size() < 3 * w + 3 + flag)
+            {
+                continue;
+            }
+            const size_t e = v.size() - 3 * w - 3 - flag;
+            if (e > enemyKinds.size())
+            {
+                continue;
+            }
+            const size_t stats = w + e;
+            const size_t types = stats + 3;
+            const size_t evos = types + w;
+            const int32_t slotCap = v.at(stats + 2);
+            const bool flagsValid =
+                std::all_of(v.begin() + static_cast<std::ptrdiff_t>(types),
+                            v.begin() + static_cast<std::ptrdiff_t>(evos + w + flag), isFlag);
+            if (!flagsValid || slotCap < 3 || slotCap > 6)
+            {
+                continue;
+            }
+
+            Achievements a{};
+            for (size_t i = 0; i < w && i < a.killsByWeapon.size(); i++)
+            {
+                a.killsByWeapon.at(i) = v.at(i);
+                a.typeUnlocked.at(i) = v.at(types + i) != 0;
+                a.evolutionUnlocked.at(i) = v.at(evos + i) != 0;
+            }
+            for (size_t i = 0; i < e; i++)
+            {
+                a.dashKillsByEnemyKind.at(i) = v.at(w + i);
+            }
+            a.dashOrNerveKills = v.at(stats);
+            a.highestWaveReached = v.at(stats + 1);
+            a.slotCap = slotCap;
+            a.infiniteModeUnlocked = flag != 0 && v.back() != 0;
+            return a;
+        }
+    }
+    return std::nullopt;
+}
 } // namespace
 
 auto loadAchievements() -> Achievements
@@ -114,23 +170,20 @@ auto loadAchievements() -> Achievements
 
     std::string marker;
     file >> marker;
-    const bool sized = marker == "v2";
-    if (!sized)
+    if (marker != "v2")
     {
         file.clear();
         file.seekg(0);
+        std::vector<int32_t> values;
+        for (int32_t value = 0; file >> value;)
+        {
+            values.push_back(value);
+        }
+        return parseLegacyAchievements(values).value_or(achievements);
     }
 
-    if (sized)
-    {
-        readSizedInts(file, achievements.killsByWeapon);
-        readSizedInts(file, achievements.dashKillsByEnemyKind);
-    }
-    else
-    {
-        readInts(file, achievements.killsByWeapon, legacyWeaponTypeCount);
-        readInts(file, achievements.dashKillsByEnemyKind, achievements.dashKillsByEnemyKind.size());
-    }
+    readSizedInts(file, achievements.killsByWeapon);
+    readSizedInts(file, achievements.dashKillsByEnemyKind);
     if (int32_t value = 0; file >> value)
     {
         achievements.dashOrNerveKills = value;
@@ -143,16 +196,8 @@ auto loadAchievements() -> Achievements
     {
         achievements.slotCap = value;
     }
-    if (sized)
-    {
-        readSizedInts(file, achievements.typeUnlocked);
-        readSizedInts(file, achievements.evolutionUnlocked);
-    }
-    else
-    {
-        readInts(file, achievements.typeUnlocked, legacyWeaponTypeCount);
-        readInts(file, achievements.evolutionUnlocked, legacyWeaponTypeCount);
-    }
+    readSizedInts(file, achievements.typeUnlocked);
+    readSizedInts(file, achievements.evolutionUnlocked);
     if (int32_t value = 0; file >> value)
     {
         achievements.infiniteModeUnlocked = value != 0;
