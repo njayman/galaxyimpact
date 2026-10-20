@@ -1997,6 +1997,65 @@ void drawRustbloomBackground(const Game& game)
     }
 }
 
+// Fire trail behind a Debris Squall rock, drawn like the Flamethrower's particles: soft red and
+// pale-gold puffs with a red core, flickering, shrinking and fading as they fall behind.
+void drawSquallRockFlame(Vector2 pos, Vector2 along, Vector2 across, float radius, float seed)
+{
+    constexpr int32_t puffCount = 6;
+    const auto t = static_cast<float>(GetTime());
+    for (int32_t k = puffCount - 1; k >= 0; k--)
+    {
+        const float back = static_cast<float>(k) / puffCount; // 0 at the rock, 1 at the tail
+        const float fade = 1.0F - back;
+        const float wobble = std::sin(t * 22.0F + seed + static_cast<float>(k) * 1.7F) * radius * 0.35F * back;
+        const Vector2 p = Vector2Add(Vector2Subtract(pos, Vector2Scale(along, radius * (0.6F + 6.0F * back))),
+                                     Vector2Scale(across, wobble));
+        const float flicker = 0.75F + 0.25F * std::sin(t * 24.0F + p.x * 0.1F + p.y * 0.1F);
+        const float r = radius * (1.1F + 0.6F * back) * fade + radius * 0.3F;
+        const Color color = (k + static_cast<int32_t>(seed)) % 2 == 0 ? Palette::Accent : Palette::Crit;
+        DrawCircleV(p, r, Fade(color, 0.22F * fade * flicker));
+        DrawCircleV(p, r * 0.5F, Fade(Palette::Accent, 0.35F * fade));
+    }
+}
+
+// A Debris Squall rock: an irregular six-sided body cut into facets, each shaded by which way it
+// faces (lit, mid or shadow), the trailing face warmed by the fire, plus one crater.
+void drawSquallRock(Vector2 pos, Vector2 along, float radius, float rotationDeg, float seed)
+{
+    constexpr int32_t sides = 6;
+    const Vector2 light = Vector2Normalize(Vector2{.x = -0.6F, .y = -0.8F});
+    std::array<Vector2, sides> pts{};
+    for (int32_t i = 0; i < sides; i++)
+    {
+        const float deg = rotationDeg + static_cast<float>(i) * (360.0F / sides) +
+                          (hashNoise(seed + 10.0F + static_cast<float>(i)) - 0.5F) * 30.0F;
+        const float r = radius * (0.75F + 0.4F * hashNoise(seed + 20.0F + static_cast<float>(i)));
+        pts.at(i) = Vector2Add(pos, Vector2{.x = std::cos(deg * DEG2RAD) * r, .y = std::sin(deg * DEG2RAD) * r});
+    }
+    for (int32_t i = 0; i < sides; i++)
+    {
+        const Vector2 a = pts.at(i);
+        const Vector2 b = pts.at((i + 1) % sides);
+        const Vector2 normal = Vector2Normalize(Vector2Subtract(Vector2Lerp(a, b, 0.5F), pos));
+        const float lit = Vector2DotProduct(normal, light);
+        Color c = lit > 0 ? ColorLerp(Palette::StructMid, Palette::StructLight, lit * 0.8F)
+                          : ColorLerp(Palette::StructMid, Palette::Void, -lit * 0.75F);
+        c = ColorLerp(c, Palette::ElementBurn, std::max(0.0F, -Vector2DotProduct(normal, along)) * 0.35F);
+        const float cross = (a.x - pos.x) * (b.y - pos.y) - (a.y - pos.y) * (b.x - pos.x);
+        if (cross < 0)
+        {
+            DrawTriangle(pos, a, b, c);
+        }
+        else
+        {
+            DrawTriangle(pos, b, a, c);
+        }
+    }
+    const float craterDeg = hashNoise(seed + 30.0F) * 360.0F * DEG2RAD;
+    DrawCircleV(Vector2Add(pos, Vector2{.x = std::cos(craterDeg) * radius * 0.3F, .y = std::sin(craterDeg) * radius * 0.3F}),
+                radius * 0.2F, Fade(Palette::Void, 0.45F));
+}
+
 void drawDebrisSquall(const Game& game)
 {
     if (game.run.debrisSquallPhase == 0)
@@ -2066,9 +2125,9 @@ void drawDebrisSquall(const Game& game)
         const float off = (hashNoise(seed + 1.0F) * 2.0F - 1.0F) * debrisSquallHalfWidth;
         const float radius = 6.0F + hashNoise(seed + 2.0F) * 10.0F;
         const Vector2 pos = at(s, off);
-        DrawLineEx(pos, at(s - radius * 5, off), radius * 0.6F, Fade(amber, 0.3F));
-        DrawPoly(pos, 5, radius, hashNoise(seed + 3.0F) * 360.0F + game.run.debrisSquallFront,
-                 Palette::StructMid);
+        drawSquallRockFlame(pos, along, across, radius, seed);
+        drawSquallRock(pos, along, radius, hashNoise(seed + 3.0F) * 360.0F + game.run.debrisSquallFront * 0.3F,
+                       seed);
     }
 }
 
