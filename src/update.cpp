@@ -1646,7 +1646,7 @@ auto estimatePlayerDps(const Game& game) -> float
         case WeaponType::LaserShots:
         {
             // dmg here is the raw weaponDamage; mirror the fire code's per-shot multipliers.
-            const int32_t streaks = 3 + w.level / 4;
+            const int32_t streaks = (3 + w.level / 4) * (w.evolved ? laserVolleyCountMult : 1);
             hitsPerCooldown = static_cast<float>(streaks) * laserShotDamageMult *
                               (w.evolved ? laserVolleyDamageMult : 1.0F);
             break;
@@ -2077,14 +2077,15 @@ void updateWeapons(Game& game, float deltaTime)
             // A loose barrage: a few thin streaks scattered across a wide field in angle,
             // side offset, start position and length, so it reads as a volley, not one line.
             // Evolved: the same volley as bigger, faster, harder chevrons.
-            const int32_t streaks = 3 + w.level / 4;
+            const int32_t streaks = (3 + w.level / 4) * (w.evolved ? laserVolleyCountMult : 1);
             const float evoDamage = w.evolved ? laserVolleyDamageMult : 1.0F;
             const float evoSpeed = w.evolved ? laserVolleySpeedMult : 1.0F;
             const float halfWidth = w.evolved ? laserVolleyHalfWidth : laserShotHalfWidth;
             const auto dmg = std::max(1, static_cast<int32_t>(baseDamage * laserShotDamageMult * evoDamage));
             const Vector2 side{.x = -dir.y, .y = dir.x};
             // Each level widens the field a bit: +8%/level, so 1.64x at level 8.
-            const float field = 1.0F + 0.08F * static_cast<float>(w.level);
+            const float field = (1.0F + 0.08F * static_cast<float>(w.level)) *
+                                (w.evolved ? laserVolleyScatterMult : 1.0F);
             for (int32_t s = 0; s < streaks; s++)
             {
                 const Vector2 d =

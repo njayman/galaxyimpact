@@ -434,6 +434,8 @@ constexpr float laserShotFieldHalfWidth = 18.0F; // random side offset at the no
 // Evolved Laser Shots: the same barrage of chevron bolts, faster, bigger and harder hitting.
 constexpr float laserVolleySpeedMult = 1.6F;  // x the base laser shot speed
 constexpr float laserVolleyDamageMult = 1.5F; // x the base per-streak damage
+constexpr int32_t laserVolleyCountMult = 2;    // x the base barrage's bolts
+constexpr float laserVolleyScatterMult = 1.8F; // x the base spread angle and field width
 constexpr float laserVolleyHalfWidth = 7.0F;
 constexpr float laserVolleyLength = 30.0F;    // chevron length, also the hit segment
 constexpr float mineDamageMult = 0.7F;
