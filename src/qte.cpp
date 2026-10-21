@@ -28,9 +28,9 @@ auto qteSlotFree(const Game& game) -> bool
            !run.player.launched && run.bossCutscenePhase == 0;
 }
 
-auto bossQteCanStart(const Game& game) -> bool
+auto bossQteCanStart(const Game& game, QteKind kind) -> bool
 {
-    return qteSlotFree(game) && game.run.qteCooldown <= 0;
+    return qteSlotFree(game) && game.run.qteCooldowns.at(static_cast<size_t>(kind)) <= 0;
 }
 
 auto bossQteSlowdown(const Game& game) -> float
@@ -52,9 +52,10 @@ void clearQtePlayerPose(Player& player)
     player.nerveCharging = false;
 }
 
-void bossQteBegin(Game& game, int32_t bossId)
+void bossQteBegin(Game& game, int32_t bossId, QteKind kind)
 {
     game.run.qteBossId = bossId;
+    game.run.qteKind = static_cast<int32_t>(kind);
     game.run.qtePrompt = QtePrompt::None;
     game.run.qteTimer = 0;
     game.run.qteTimerMax = 0;
@@ -69,10 +70,11 @@ void bossQteBegin(Game& game, int32_t bossId)
 
 void bossQteEnd(Game& game)
 {
-    if (game.run.qteBossId >= 0)
+    if (game.run.qteBossId >= 0 && game.run.qteKind >= 0)
     {
-        game.run.qteCooldown = UpdateConstants::qteMinGap; // the gap is between Boss QTEs only
+        game.run.qteCooldowns.at(static_cast<size_t>(game.run.qteKind)) = UpdateConstants::qteMinGap;
     }
+    game.run.qteKind = -1;
     game.run.qteBossId = -1;
     game.run.qteEnemyId = -1;
     game.run.qteFinisherPhase = 0;
@@ -277,7 +279,10 @@ void updateBossQte(Game& game, float deltaTime)
     auto& run = game.run;
     if (!bossQteActive(game))
     {
-        run.qteCooldown = std::max(0.0F, run.qteCooldown - deltaTime);
+        for (float& cooldown : run.qteCooldowns)
+        {
+            cooldown = std::max(0.0F, cooldown - deltaTime);
+        }
         return;
     }
     if (run.qteTimer > 0)
@@ -317,6 +322,11 @@ void updateBossQte(Game& game, float deltaTime)
         {
             updateWreckwormRush(game, *head, deltaTime);
         }
+        return;
+    }
+    if (Boss* slagmaw = findSlagmawById(game, run.qteBossId); slagmaw != nullptr)
+    {
+        updateSlagmawSwallowed(game, *slagmaw, deltaTime);
         return;
     }
     // Owner died mid-cutscene.

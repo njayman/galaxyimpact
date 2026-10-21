@@ -154,6 +154,13 @@ struct GameResources
 };
 
 // Rustbloom's Biome Hazard: a ground patch that blooms where something died and slowly spreads.
+// Slagmaw Magma Ram leaves these along its charge; standing in one burns.
+struct MagmaPool
+{
+    Vector2 position;
+    float life;
+};
+
 struct RustPatch
 {
     Vector2 position;
@@ -232,7 +239,10 @@ struct GameplayState
     int32_t qteStickDir = 0; // last touch-stick cardinal, for flick edge detection
     int32_t qteMashCount = 0;  // presses landed on the current Mash prompt
     int32_t qteMashTarget = 0; // presses that fill the Mash bar
-    float qteCooldown = 0;     // minimum gap before the next Boss QTE may start
+    // Minimum gap before the same Boss QTE may start again, per kind (QteKind), so one boss's
+    // QTEs don't lock out its others.
+    std::array<float, 4> qteCooldowns{};
+    int32_t qteKind = -1; // kind of the running Boss QTE
     float asteroidSpawnTimer;
     float enemySpawnTimer;
     float solarForgeHeatMeter;
@@ -274,6 +284,8 @@ struct GameplayState
     float debrisSquallEnemyTickTimer;
     uint64_t debrisSquallBrokenMask; // bit per rock shot this sweep
     std::vector<RustPatch> rustPatches;
+    std::vector<MagmaPool> magmaPools;
+    float magmaPoolTick = 0;
     float rustPatchTickTimer;
     float shieldDashShakeCooldownTimer;
     bool punctumTrapActive;

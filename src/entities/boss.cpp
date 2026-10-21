@@ -14,6 +14,7 @@
 
 void seedWreckwormTrail(Boss& head, Vector2 headCenter, Vector2 trailDir);
 void beginWreckwormConstrict(Game& game, Boss& head);
+void updateSlagmawDevour(Game& game, Boss& slagmaw, float deltaTime);
 auto wreckwormCoilSegmentDeg(const Boss& head, int32_t segmentIndex) -> float;
 
 auto isGenericMovesetAttack(BossAttack attack) -> bool
@@ -29,6 +30,7 @@ auto isGenericMovesetAttack(BossAttack attack) -> bool
     case BossAttack::DashRush:
     case BossAttack::CloudBreath:
     case BossAttack::TailWrap:
+    case BossAttack::Devour:
         return false;
     default:
         return true;
@@ -381,8 +383,9 @@ void spawnSlagmaw(Game& game, int32_t wave)
 
     const int32_t tier = wave / megaBossWaveInterval;
 
-    std::vector<BossAttack> moveset{BossAttack::Barrage, BossAttack::ChargeDash,
-                                    BossAttack::MeteorHell, BossAttack::MeteorSwarm};
+    std::vector<BossAttack> moveset{BossAttack::Barrage,    BossAttack::ChargeDash,
+                                    BossAttack::MeteorHell, BossAttack::MeteorSwarm,
+                                    BossAttack::Devour};
     float attackTimerMin = 2.5F;
     float attackTimerMax = 4.5F;
     if (wave >= 70)
@@ -1213,9 +1216,10 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
         boss.recoveryTimer -= deltaTime;
     }
 
-    if (boss.isWreckwormHead && boss.wreckwormPunishTimer > 0)
+    if ((boss.isWreckwormHead && boss.wreckwormPunishTimer > 0) ||
+        (boss.isSlagmaw && boss.slagmawPunishTimer > 0))
     {
-        return; // stunned by a clean Constrict
+        return; // stunned by a clean Constrict, Rush or Swallowed
     }
 
     if (!boss.isWreckwormSegment && !(boss.isBeltbreakerPlate && boss.plateAttached) &&
@@ -1642,7 +1646,7 @@ void updateBeltbreakerCore(Game& game, Boss& core, float deltaTime)
                 UpdateConstants::beltbreakerShieldedDuration(core.plateCount);
             // First biome-boss QTE: the plates suddenly burst away and the
             // plate-rush cutscene (reaction prompts) takes over.
-            if (bossQteCanStart(game))
+            if (bossQteCanStart(game, QteKind::PlateRush))
             {
                 beginBeltbreakerPlateRush(game, core);
             }
@@ -1732,7 +1736,7 @@ void beginBeltbreakerPlateRush(Game& game, Boss& core)
         return;
     }
 
-    bossQteBegin(game, core.instanceId);
+    bossQteBegin(game, core.instanceId, QteKind::PlateRush);
     game.run.qteTimer = UpdateConstants::beltbreakerPlateRushCueDuration;
     core.plateRushAttacksLeft = UpdateConstants::beltbreakerRushAttacks;
     core.plateRushLastAngle = static_cast<float>(GetRandomValue(0, 359));
@@ -1971,7 +1975,7 @@ auto wreckwormCoilSegmentDeg(const Boss& head, int32_t segmentIndex) -> float
 
 void beginWreckwormConstrict(Game& game, Boss& head)
 {
-    bossQteBegin(game, head.instanceId);
+    bossQteBegin(game, head.instanceId, QteKind::Constrict);
     game.run.qtePrompt = QtePrompt::Mash;
     game.run.qteTimer = UpdateConstants::wreckwormConstrictMashDuration;
     game.run.qteTimerMax = UpdateConstants::wreckwormConstrictMashDuration;
@@ -2136,7 +2140,7 @@ void tryBeginWreckwormRush(Game& game, Boss& head, Vector2 headCenter)
 {
     // The Storm Serpent shares the moves but Boss QTEs belong to Biome Bosses only.
     if (!head.isWreckwormHead || head.krakenSnakeVariant || head.wreckwormPunishTimer > 0 ||
-        !bossQteCanStart(game))
+        !bossQteCanStart(game, QteKind::Rush))
     {
         return;
     }
@@ -2146,7 +2150,7 @@ void tryBeginWreckwormRush(Game& game, Boss& head, Vector2 headCenter)
     {
         return;
     }
-    bossQteBegin(game, head.instanceId);
+    bossQteBegin(game, head.instanceId, QteKind::Rush);
     game.run.qteThreatDir = Vector2Normalize(head.chargeVelocity);
     head.rushPromptsLeft = UpdateConstants::wreckwormRushPrompts;
     playSFX(game, game.resources.sounds.bossWindUp);
@@ -2230,6 +2234,208 @@ void updateWreckwormRush(Game& game, Boss& head, float deltaTime)
         return;
     }
     endWreckwormRush(game, head, true); // every prompt answered
+}
+
+// --- Slagmaw Devour and Swallowed QTE (cutscene) -------------------------------
+//
+// Devour: after a gold tell the maw inhales along a locked cone, dragging the player
+// toward it (a dash rides through the pull). Reaching the maw starts the Swallowed QTE,
+// or takes a bite when a QTE can't start. Swallowed: a Mash to brace the jaws, then
+// prompts as Slagmaw chews and whips, slag gobs coming from shifting angles; every
+// answer strikes it from inside. Clean clear: the ship bursts out and Slagmaw chokes
+// for the Punish Window. Fail: spat out with one burn hit.
+// --------------------------------------------------------------------------
+
+auto slagmawMawCenter(const Boss& slagmaw) -> Vector2
+{
+    const Vector2 center{.x = slagmaw.position.x + slagmaw.size.x / 2,
+                         .y = slagmaw.position.y + slagmaw.size.y / 2};
+    return Vector2Add(center, Vector2Scale(slagmaw.slagmawFacing, slagmaw.size.x / 2 * slagmawMawOffset));
+}
+
+auto findSlagmawById(Game& game, int32_t instanceId) -> Boss*
+{
+    for (auto& boss : game.run.bosses)
+    {
+        if (boss.isSlagmaw && boss.health > 0 && boss.instanceId == instanceId)
+        {
+            return &boss;
+        }
+    }
+    return nullptr;
+}
+
+void beginSlagmawSwallowed(Game& game, Boss& slagmaw)
+{
+    bossQteBegin(game, slagmaw.instanceId, QteKind::Swallowed);
+    game.run.qtePrompt = QtePrompt::Mash;
+    game.run.qteTimer = UpdateConstants::slagmawSwallowMashDuration;
+    game.run.qteTimerMax = UpdateConstants::slagmawSwallowMashDuration;
+    game.run.qteMashTarget = UpdateConstants::slagmawSwallowMashPresses;
+    game.run.qteThreatDir = Vector2{};
+    slagmaw.swallowPromptsLeft = UpdateConstants::slagmawSwallowPrompts;
+    playSFX(game, game.resources.sounds.slamBoom);
+    triggerShake(game, 12, 0.4F);
+}
+
+// Either way the ship leaves the maw and Devour is over.
+void endSlagmawSwallowed(Game& game, Boss& slagmaw, bool clean)
+{
+    bossQteEnd(game);
+    slagmaw.swallowPromptsLeft = 0;
+    const Vector2 maw = slagmawMawCenter(slagmaw);
+    game.run.player.position = Vector2Add(maw, Vector2Scale(slagmaw.slagmawFacing, slagmaw.size.x * 0.4F));
+    slagmaw.state = BossState::IDLE;
+    slagmaw.stateTimer = 0;
+    triggerShake(game, 12, 0.35F);
+    if (clean)
+    {
+        slagmaw.slagmawPunishTimer = UpdateConstants::slagmawPunishWindow;
+        slagmaw.attackTimer = UpdateConstants::slagmawPunishWindow;
+        spawnKillExplosion(game, maw, Palette::Charge, 30, 1.6F);
+        playSFX(game, game.resources.sounds.critical);
+        return;
+    }
+    damagePlayer(game, enemyDamage(game, UpdateConstants::slagmawSwallowBurnDamage));
+    playSFX(game, game.resources.sounds.nerveFizzle);
+}
+
+void updateSlagmawDevour(Game& game, Boss& slagmaw, float deltaTime)
+{
+    auto& player = game.run.player;
+    if (bossQteActive(game) || player.health <= 0)
+    {
+        return;
+    }
+    const Vector2 maw = slagmawMawCenter(slagmaw);
+    const Vector2 toPlayer = Vector2Subtract(player.position, maw);
+    const float dist = Vector2Length(toPlayer);
+    if (dist <= slagmaw.size.x * 0.18F + player.radius)
+    {
+        if (bossQteCanStart(game, QteKind::Swallowed))
+        {
+            beginSlagmawSwallowed(game, slagmaw);
+            return;
+        }
+        damagePlayer(game, enemyDamage(game, devourBiteDamage)); // a bite, then thrown clear
+        player.position = Vector2Add(maw, Vector2Scale(slagmaw.devourDir, slagmaw.size.x * 0.4F));
+        slagmaw.stateTimer = 0;
+        return;
+    }
+    if (dist > devourRange || dist < 0.01F || player.dashing ||
+        Vector2DotProduct(Vector2Scale(toPlayer, 1.0F / dist), slagmaw.devourDir) <
+            std::cos(devourConeHalfDeg * DEG2RAD))
+    {
+        return;
+    }
+    player.position = Vector2Subtract(player.position, Vector2Scale(toPlayer, devourPull * deltaTime / dist));
+}
+
+void updateSlagmawSwallowed(Game& game, Boss& slagmaw, float deltaTime)
+{
+    auto& run = game.run;
+    // It chews and whips about; between moves the ship is hauled back into the maw.
+    slagmaw.slagmawFacing =
+        Vector2Rotate(slagmaw.devourDir, std::sin(static_cast<float>(GetTime()) * 7.0F) * 0.35F);
+    if (run.qteActionTimer <= 0)
+    {
+        run.player.position =
+            Vector2Lerp(run.player.position, slagmawMawCenter(slagmaw), std::min(1.0F, deltaTime * 10.0F));
+    }
+
+    if (run.qtePrompt == QtePrompt::Mash)
+    {
+        if (qteReadInput(game, QtePrompt::Mash) > 0)
+        {
+            run.qteMashCount++;
+            triggerShake(game, 3, 0.08F);
+        }
+        if (run.qteMashCount >= run.qteMashTarget)
+        {
+            run.qtePrompt = QtePrompt::None;
+            run.qteTimer = UpdateConstants::slagmawSwallowMashBeat;
+            run.qteTimerMax = 0;
+            playSFX(game, game.resources.sounds.critical);
+        }
+        else if (run.qteTimer <= 0)
+        {
+            endSlagmawSwallowed(game, slagmaw, false);
+        }
+        return;
+    }
+
+    if (run.qtePrompt != QtePrompt::None)
+    {
+        const int32_t answer = qteReadInput(game, run.qtePrompt);
+        if (answer > 0)
+        {
+            const float frac = run.qtePrompt == QtePrompt::Parry ? UpdateConstants::slagmawSwallowParryStrikeFrac
+                               : run.qtePrompt == QtePrompt::Nerve
+                                   ? UpdateConstants::slagmawSwallowNerveStrikeFrac
+                                   : UpdateConstants::slagmawSwallowStrikeFrac;
+            qteStartAction(game, run.qtePrompt, run.qteThreatDir);
+            damageBoss(game, slagmaw,
+                       std::max(1, static_cast<int32_t>(static_cast<float>(slagmaw.maxHealth) * frac)), true,
+                       false, false);
+            playSFX(game, game.resources.sounds.critical);
+            if (slagmaw.health <= 0)
+            {
+                bossQteEnd(game);
+                return;
+            }
+            run.qtePrompt = QtePrompt::None;
+            run.qteTimer = UpdateConstants::slagmawSwallowBeat;
+            run.qteTimerMax = 0;
+        }
+        else if (answer < 0 || run.qteTimer <= 0)
+        {
+            endSlagmawSwallowed(game, slagmaw, false);
+        }
+        return;
+    }
+
+    if (run.qteTimer > 0)
+    {
+        return; // beat between prompts
+    }
+    if (slagmaw.swallowPromptsLeft > 0)
+    {
+        // A slag gob from a new angle inside the jaws.
+        slagmaw.swallowPromptsLeft--;
+        const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+        run.qteThreatDir = Vector2{.x = std::cos(angle), .y = std::sin(angle)};
+        run.qtePrompt = qtePromptForThreat(game, run.qteThreatDir, UpdateConstants::slagmawSwallowParryChance);
+        run.qteTimer = UpdateConstants::slagmawSwallowPromptWindow;
+        run.qteTimerMax = UpdateConstants::slagmawSwallowPromptWindow;
+        playSFX(game, game.resources.sounds.spreadBurst);
+        return;
+    }
+    endSlagmawSwallowed(game, slagmaw, true); // every prompt answered
+}
+
+// Magma Ram pools burn the player inside one every tick, ignoring hit immunity.
+void updateMagmaPools(Game& game, float deltaTime)
+{
+    auto& run = game.run;
+    bool inPool = false;
+    for (auto& pool : run.magmaPools)
+    {
+        pool.life -= deltaTime;
+        inPool = inPool || (pool.life > 0 && Vector2Distance(pool.position, run.player.position) <
+                                                 magmaPoolRadius + run.player.radius);
+    }
+    std::erase_if(run.magmaPools, [](const MagmaPool& pool) { return pool.life <= 0; });
+    if (!inPool || run.player.health <= 0 || run.player.dashing)
+    {
+        run.magmaPoolTick = 0;
+        return;
+    }
+    run.magmaPoolTick -= deltaTime;
+    if (run.magmaPoolTick <= 0)
+    {
+        run.magmaPoolTick = magmaPoolTickInterval;
+        damagePlayer(game, enemyDamage(game, magmaPoolDamage));
+    }
 }
 
 auto wreckwormDashRushOffDist(const Game& game) -> float
@@ -2920,6 +3126,10 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake, bool pi
     {
         amount = static_cast<int32_t>(std::ceil(static_cast<float>(amount) * UpdateConstants::wreckwormPunishDamageMult));
     }
+    if (boss.isSlagmaw && boss.slagmawPunishTimer > 0)
+    {
+        amount = static_cast<int32_t>(std::ceil(static_cast<float>(amount) * UpdateConstants::slagmawPunishDamageMult));
+    }
     if (bossQteActive(game))
     {
         amount = static_cast<int32_t>(std::ceil(static_cast<float>(amount) * UpdateConstants::qteDamageMult));
@@ -3013,6 +3223,20 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
     {
         boss.wreckwormPunishTimer -= deltaTime; // stunned: starts no attack (IDLE below)
     }
+    if (boss.isSlagmaw)
+    {
+        if (boss.slagmawPunishTimer > 0)
+        {
+            boss.slagmawPunishTimer -= deltaTime; // choking: starts no attack (IDLE below)
+        }
+        // The maw tracks the player, held on the cone while Devour inhales.
+        if (boss.state != BossState::SHOOTING || boss.attack != BossAttack::Devour)
+        {
+            const Vector2 toPlayer = Vector2Normalize(Vector2Subtract(game.run.player.position, bossCenter));
+            boss.slagmawFacing = Vector2Normalize(
+                Vector2Lerp(boss.slagmawFacing, toPlayer, std::min(1.0F, deltaTime * 2.5F)));
+        }
+    }
 
     if (boss.usesDirector && updateBossDirector(game, boss, bossCenter, deltaTime))
     {
@@ -3037,7 +3261,8 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
     case BossState::IDLE:
         boss.attackTimer -= deltaTime;
 
-        if (boss.attackTimer <= 0 && boss.health > 0 && boss.wreckwormPunishTimer <= 0)
+        if (boss.attackTimer <= 0 && boss.health > 0 && boss.wreckwormPunishTimer <= 0 &&
+            boss.slagmawPunishTimer <= 0)
         {
             boss.attack = boss.moveset.at(static_cast<size_t>(
                 GetRandomValue(0, static_cast<int32_t>(boss.moveset.size()) - 1)));
@@ -3056,6 +3281,10 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             else if (boss.isBeltbreaker && boss.attack == BossAttack::GravityWell)
             {
                 boss.stateTimer = ringCrushTell; // plates contract round the core
+            }
+            else if (boss.isSlagmaw && boss.attack == BossAttack::Barrage)
+            {
+                boss.stateTimer = slagSprayTell; // body flares gold
             }
 
             switch (boss.attack)
@@ -3129,6 +3358,9 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 break;
             case BossAttack::CloudBreath:
                 boss.color = Palette::RustbloomAccent;
+                break;
+            case BossAttack::Devour:
+                boss.color = Palette::Charge;
                 break;
             case BossAttack::Count:
                 break;
@@ -3295,8 +3527,27 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 
         if (boss.attack == BossAttack::ChargeDash)
         {
-            boss.position = Vector2Add(boss.position, Vector2Scale(boss.chargeVelocity,
-                                            deltaTime * (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F)));
+            const Vector2 step = Vector2Scale(boss.chargeVelocity,
+                                              deltaTime * (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F));
+            boss.position = Vector2Add(boss.position, step);
+            if (boss.isSlagmaw)
+            {
+                // Magma Ram: burning pools along the charge, evenly spaced however far a frame moves.
+                const float stepLength = Vector2Length(step);
+                boss.magmaTrailDist += stepLength;
+                while (stepLength > 0 && boss.magmaTrailDist >= magmaPoolSpacing)
+                {
+                    boss.magmaTrailDist -= magmaPoolSpacing;
+                    const Vector2 at = Vector2Subtract(
+                        Vector2Add(bossCenter, step), Vector2Scale(step, boss.magmaTrailDist / stepLength));
+                    game.run.magmaPools.push_back(MagmaPool{.position = at, .life = magmaPoolLife});
+                }
+            }
+        }
+
+        if (boss.attack == BossAttack::Devour)
+        {
+            updateSlagmawDevour(game, boss, deltaTime);
         }
 
         if (boss.attack == BossAttack::DashRush)
@@ -3375,13 +3626,20 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                     !isSporeSpit && (boss.isWreckwormHead || boss.isWreckwormSegment);
                 constexpr std::array<Color, 3> fluidColors{Palette::RustbloomAccent, Palette::Charge,
                                                             Palette::Accent};
-                // Spores leave the slime head's mouth, which turns to face the player.
+                // Spores leave the slime head's mouth, which turns to face the player; Slag
+                // Spray sprays from Slagmaw's maw in a loose fan.
                 const Vector2 muzzle =
-                    isSporeSpit ? Vector2Add(bossCenter, Vector2Scale(direction, boss.size.x * 0.3F))
-                                : bossCenter;
+                    isSporeSpit    ? Vector2Add(bossCenter, Vector2Scale(direction, boss.size.x * 0.3F))
+                    : boss.isSlagmaw ? slagmawMawCenter(boss)
+                                     : bossCenter;
+                const Vector2 shotDir =
+                    boss.isSlagmaw
+                        ? Vector2Rotate(direction, static_cast<float>(GetRandomValue(-100, 100)) / 100.0F *
+                                                       slagSpraySpreadDeg * DEG2RAD)
+                        : direction;
                 game.run.bossProjectiles.push_back(BossProjectile{
                     .position = muzzle,
-                    .velocity = Vector2Scale(direction, barrageProjSpeed * attackScale),
+                    .velocity = Vector2Scale(shotDir, barrageProjSpeed * attackScale),
                     .radius = 6,
                     .homing = false,
                     .active = true,
@@ -3417,6 +3675,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                                    .fromPlayer = false,
                                    .damage = enemyDamage(game, crossfireProjectileDamage),
                                    .health = 1});
+                game.run.bossProjectiles.back().isEmber = boss.isSlagmaw;
                 playSFX(game, game.resources.sounds.spreadBurst);
             }
         }
@@ -3479,7 +3738,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 
             // Closing on a player who did not slip out through the gap starts Constrict.
             if (!boss.krakenSnakeVariant && elapsed >= wreckwormCoilClampAssembleDuration &&
-                elapsed < releaseStart && bossQteCanStart(game))
+                elapsed < releaseStart && bossQteCanStart(game, QteKind::Constrict))
             {
                 const Vector2 fromCenter = Vector2Subtract(game.run.player.position, boss.targetPosition);
                 const float dist = Vector2Length(fromCenter);
@@ -3774,6 +4033,9 @@ void forceBossAttack(Game& game, Boss& boss, BossAttack attack)
     case BossAttack::CloudBreath:
         boss.color = Palette::RustbloomAccent;
         break;
+    case BossAttack::Devour:
+        boss.color = Palette::Charge;
+        break;
     case BossAttack::Count:
         break;
     }
@@ -3977,6 +4239,12 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         playSFX(game, game.resources.sounds.spreadBurst);
         break;
     }
+    case BossAttack::Devour:
+        boss.stateTimer = devourDuration;
+        boss.devourDir = boss.slagmawFacing;
+        playSFX(game, game.resources.sounds.nerveCharge);
+        triggerShake(game, 6, 0.4F);
+        break;
     case BossAttack::TailWrap:
     {
         boss.stateTimer = wreckwormTailWrapDuration;

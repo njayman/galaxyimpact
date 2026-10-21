@@ -57,6 +57,8 @@ enum class BossAttack : std::uint8_t
     CloudBreath,
     TailWrap,
 
+    Devour,
+
     Count
 };
 
@@ -66,7 +68,7 @@ constexpr std::array<std::string_view, bossAttackCount> bossAttackNames{
     "Beam",          "Spread",         "Slam",       "WormholeBeam", "ChargeDash",
     "SummonAdds",    "ShockwaveStomp", "Barrage",    "GravityWell",  "HomingBarrage",
     "PlateHurl",     "BurrowCharge",   "CoilClamp",  "MeteorHell",   "MeteorSwarm",
-    "DashRush",      "CloudBreath",    "TailWrap"};
+    "DashRush",      "CloudBreath",    "TailWrap",   "Devour"};
 
 // M12 adaptive director (generic bosses only): the boss mixes these at runtime, weighted toward
 // whatever counters the player's current habit. See src/entities/boss_director.cpp.
@@ -276,6 +278,11 @@ class Boss
     bool slagmawBreaksIntoDrifters = false;
     bool slagmawBreaksIntoHalves = false;
     int32_t slagmawBreakGeneration = 0;
+    Vector2 slagmawFacing{.x = 0, .y = 1}; // the maw turns to track the player
+    Vector2 devourDir{};                   // the inhale cone's axis, locked when it starts
+    float slagmawPunishTimer = 0;          // Punish Window after a clean Swallowed
+    int32_t swallowPromptsLeft = 0;
+    float magmaTrailDist = 0;              // Magma Ram: distance since the last pool
 
     float parryStunTimer = 0;
 
@@ -480,6 +487,7 @@ class BossProjectile
     uint32_t ricochetLastHit = 0; // Enemy::id bounced off last; never re-hit in a row
 
     int32_t visualEnemyKind = -1;
+    bool isEmber = false; // Slagmaw Seeker Ember
 };
 
 class BossDeathShockwave

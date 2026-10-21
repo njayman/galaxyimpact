@@ -141,6 +141,11 @@ void drawHuskSentinelShape(Vector2 center, float radius, float seed, Vector2 aim
 void drawCarrionSpots(Vector2 center, float radius, float seed, Color color);
 void drawClusterEnemyShape(Vector2 center, float baseRadius, float seed, Color color);
 void drawMeteorBossShape(Vector2 center, float radius, int32_t seed, Color baseColor);
+void drawSlagmawShape(Vector2 center, float radius, float seed, Vector2 facing, float mawOpen, float heat,
+                      float flash, float alpha);
+void drawDevourCone(Vector2 maw, Vector2 dir);
+void drawSlagGob(Vector2 position, float radius, Vector2 velocity);
+void drawMagmaPools(const Game& game);
 void drawSandboxToggleIndicator(const Game& game);
 void drawBossDirectorTells(const Boss& boss, Vector2 center);
 void drawSandboxMenu(const Game& game);
@@ -2733,6 +2738,7 @@ void drawGameplayWorld(const Game& game)
     }
 
     drawRustPatches(game);
+    drawMagmaPools(game);
 
     if (game.run.blackhole.active)
     {
@@ -2961,6 +2967,24 @@ void drawGameplayWorld(const Game& game)
             const Vector2 tail = Vector2Subtract(p.position, Vector2Scale(Vector2Normalize(p.velocity), p.radius * 3));
             DrawLineEx(tail, p.position, p.radius, Fade(Palette::ShatteredBeltAccent, 0.4F));
             DrawPoly(p.position, 5, p.radius * 1.3F, p.position.x + p.position.y, Palette::StructLight);
+        }
+        else if (p.isEmber)
+        {
+            // Seeker Ember: a spinning gold diamond in an ember glow, shedding sparks.
+            const auto t = static_cast<float>(GetTime());
+            const Vector2 back = Vector2Scale(Vector2Normalize(p.velocity), -1.0F);
+            for (int32_t k = 1; k <= 3; k++)
+            {
+                const auto kf = static_cast<float>(k);
+                const Vector2 spark = Vector2Add(
+                    p.position, Vector2Add(Vector2Scale(back, p.radius * (1.2F + kf * 1.3F)),
+                                           Vector2{.x = std::sin(t * 23.0F + kf) * 2.5F, .y = std::cos(t * 19.0F + kf) * 2.5F}));
+                DrawRectangleV(Vector2Subtract(spark, Vector2{.x = 1.5F, .y = 1.5F}), Vector2{.x = 3, .y = 3},
+                               Fade(Palette::ElementBurn, 0.8F - kf * 0.22F));
+            }
+            DrawCircleV(p.position, p.radius * 1.8F, Fade(Palette::ElementBurn, 0.22F));
+            DrawPoly(p.position, 4, p.radius * 1.15F, t * 400.0F, Color{.r = 255, .g = 188, .b = 72, .a = 255});
+            DrawCircleV(p.position, p.radius * 0.35F, Fade(WHITE, 0.85F));
         }
         else if (p.homing)
         {
@@ -4183,8 +4207,58 @@ void drawBoss(const Game& game, const Boss& boss)
 
     if (boss.isSlagmaw)
     {
-        drawMeteorBossShape(bossCenter, boss.size.x / 2, boss.instanceId,
-                            Fade(ufoColor, boss.ghostFadeAlpha));
+        const auto t = static_cast<float>(GetTime());
+        const bool winding = boss.state == BossState::WINDING_UP;
+        const bool shooting = boss.state == BossState::SHOOTING;
+        const float windup =
+            winding ? std::clamp(1.0F - boss.stateTimer / (boss.attack == BossAttack::Barrage
+                                                                  ? slagSprayTell
+                                                                  : bossWindupDuration(boss.attack)),
+                                 0.0F, 1.0F)
+                    : 0.0F;
+        const bool swallowing = game.run.qteBossId == boss.instanceId;
+        float mawOpen = 0.15F + 0.08F * std::sin(t * 1.5F);
+        float heat = 0.15F;
+        if (swallowing || (shooting && boss.attack == BossAttack::Devour))
+        {
+            mawOpen = 1.0F;
+            heat = 1.0F;
+        }
+        else if (winding && boss.attack == BossAttack::Devour)
+        {
+            mawOpen = 0.3F + 0.7F * windup; // the maw glows gold for the tell
+            heat = windup;
+        }
+        else if (boss.attack == BossAttack::Barrage && (winding || shooting))
+        {
+            mawOpen = winding ? 0.6F * windup : 0.7F; // Slag Spray: the body flares gold
+            heat = winding ? windup : 0.8F;
+        }
+        if (boss.slagmawPunishTimer > 0)
+        {
+            mawOpen = 0.5F + 0.25F * std::sin(t * 22.0F); // choking
+            heat = 0.4F + 0.4F * std::sin(t * 9.0F);
+        }
+        Vector2 center = bossCenter;
+        if (swallowing)
+        {
+            center = Vector2Add(center, Vector2{.x = std::sin(t * 37.0F) * 6.0F, .y = std::cos(t * 29.0F) * 6.0F});
+        }
+        if (shooting && boss.attack == BossAttack::Devour)
+        {
+            drawDevourCone(slagmawMawCenter(boss), boss.devourDir);
+        }
+        const float flash = boss.hitFlashTimer > 0 ? boss.hitFlashTimer / UpdateConstants::hitFlashDuration : 0.0F;
+        drawSlagmawShape(center, boss.size.x / 2, static_cast<float>(boss.instanceId), boss.slagmawFacing,
+                         mawOpen, heat, flash, boss.ghostFadeAlpha);
+        if (swallowing && game.run.qtePrompt != QtePrompt::None && game.run.qtePrompt != QtePrompt::Mash &&
+            game.run.qteTimerMax > 0)
+        {
+            // The slag gob the current prompt answers, flying in from its angle.
+            const float left = std::clamp(game.run.qteTimer / game.run.qteTimerMax, 0.0F, 1.0F);
+            const Vector2 gob = Vector2Subtract(game.run.player.position, Vector2Scale(game.run.qteThreatDir, 240.0F * left));
+            drawSlagGob(gob, 13.0F, game.run.qteThreatDir);
+        }
     }
     else if (boss.isWreckwormHead && boss.krakenSnakeVariant)
     {
@@ -4409,7 +4483,8 @@ void drawBoss(const Game& game, const Boss& boss)
     }
 
     if ((boss.isBeltbreaker && boss.beltbreakerPunishTimer > 0) ||
-        (boss.isWreckwormHead && boss.wreckwormPunishTimer > 0))
+        (boss.isWreckwormHead && boss.wreckwormPunishTimer > 0) ||
+        (boss.isSlagmaw && boss.slagmawPunishTimer > 0))
     {
         // Punish Window: pulsing fragments ring the open core (Beltbreaker) or stunned head.
         const float pulse = 0.6F + 0.4F * std::sin(static_cast<float>(GetTime()) * 14.0F);
@@ -4754,32 +4829,196 @@ void drawComet(const BossProjectile& projectile)
 
 void drawMeteorProjectile(const BossProjectile& projectile)
 {
-    const float speed = Vector2Length(projectile.velocity);
-    Vector2 tailDir{.x = 0, .y = -1};
-    if (speed > 0)
+    drawSlagGob(projectile.position, projectile.radius, projectile.velocity);
+}
+
+// Slag gob: a jagged basalt crust round a molten gold core, a short ember streak behind.
+void drawSlagGob(Vector2 position, float radius, Vector2 velocity)
+{
+    constexpr Color gold{.r = 255, .g = 188, .b = 72, .a = 255};
+    const float speed = Vector2Length(velocity);
+    const Vector2 back = speed > 0.01F ? Vector2Scale(velocity, -1.0F / speed) : Vector2{.x = 0, .y = 1};
+    DrawLineEx(position, Vector2Add(position, Vector2Scale(back, radius * 3.2F)), radius * 1.1F,
+               Fade(Palette::ElementBurn, 0.25F));
+    DrawLineEx(position, Vector2Add(position, Vector2Scale(back, radius * 1.8F)), radius * 0.6F, Fade(gold, 0.35F));
+    constexpr int32_t sides = 6;
+    const float spin = static_cast<float>(GetTime()) * 3.0F + position.x * 0.05F;
+    std::array<Vector2, sides> verts{};
+    for (int32_t i = 0; i < sides; i++)
     {
-        tailDir = Vector2Scale(projectile.velocity, -1 / speed);
+        const float a = spin + static_cast<float>(i) * 2.0F * PI / sides;
+        const float r = radius * (0.85F + 0.25F * hashNoise(static_cast<float>(i) * 3.7F + 1.3F));
+        verts.at(static_cast<size_t>(i)) = Vector2Add(position, Vector2{.x = std::cos(a) * r, .y = std::sin(a) * r});
+    }
+    const Color crust = ColorLerp(Palette::SolarForgeAccent, Palette::Void, 0.75F);
+    for (int32_t i = 0; i < sides; i++)
+    {
+        DrawTriangle(position, verts.at(static_cast<size_t>((i + 1) % sides)), verts.at(static_cast<size_t>(i)), crust);
+    }
+    DrawCircleV(position, radius * 0.55F, gold);
+    DrawCircleV(position, radius * 0.25F, ColorLerp(gold, WHITE, 0.6F));
+}
+
+// Devour's inhale: a faint gold wedge with streaks flowing down it into the maw.
+void drawDevourCone(Vector2 maw, Vector2 dir)
+{
+    constexpr Color gold{.r = 255, .g = 188, .b = 72, .a = 255};
+    const auto t = static_cast<float>(GetTime());
+    const float half = devourConeHalfDeg * DEG2RAD;
+    const Vector2 a = Vector2Add(maw, Vector2Scale(Vector2Rotate(dir, half), devourRange));
+    const Vector2 b = Vector2Add(maw, Vector2Scale(Vector2Rotate(dir, -half), devourRange));
+    DrawTriangle(maw, a, b, Fade(gold, 0.06F));
+    DrawTriangle(maw, b, a, Fade(gold, 0.06F));
+    DrawLineEx(maw, a, 2.0F, Fade(gold, 0.22F));
+    DrawLineEx(maw, b, 2.0F, Fade(gold, 0.22F));
+    for (int32_t k = 0; k < 14; k++)
+    {
+        const auto kf = static_cast<float>(k);
+        const float angle = (hashNoise(kf * 3.1F) - 0.5F) * 2.0F * half;
+        const float frac = std::fmod(t * 1.4F + hashNoise(kf * 7.7F), 1.0F); // 0 far .. 1 at the maw
+        const Vector2 along = Vector2Rotate(dir, angle * (1.0F - frac * 0.7F));
+        const Vector2 p = Vector2Add(maw, Vector2Scale(along, devourRange * (1.0F - frac)));
+        DrawLineEx(p, Vector2Add(p, Vector2Scale(along, 46.0F)), 2.0F, Fade(gold, 0.55F * frac));
+    }
+}
+
+// Slagmaw: a jagged basalt mass, every facet lit from the upper left, split by molten gold seams
+// running back from a maw that faces `facing`. mawOpen 0..1 parts the toothed jaws on a glowing
+// throat; heat 0..1 brightens the seams, throat and haze (tells, Devour).
+void drawSlagmawShape(Vector2 center, float radius, float seed, Vector2 facing, float mawOpen, float heat,
+                      float flash, float alpha)
+{
+    const auto t = static_cast<float>(GetTime());
+    const auto paint = [&](Color c, float a) { return Fade(ColorLerp(c, WHITE, 0.2F * flash), a * alpha); };
+    constexpr Color basalt{.r = 34, .g = 27, .b = 27, .a = 255};
+    constexpr Color basaltLit{.r = 104, .g = 84, .b = 76, .a = 255}; // warm, catching the light
+    constexpr Color gold{.r = 255, .g = 188, .b = 72, .a = 255};
+    const Color ember = Palette::ElementBurn;
+    const float glow = std::clamp(0.35F + 0.2F * std::sin(t * 2.0F + seed) + 0.6F * heat, 0.0F, 1.0F);
+    const Vector2 face = Vector2Length(facing) > 0.01F ? Vector2Normalize(facing) : Vector2{.x = 0, .y = 1};
+    const Vector2 side{.x = -face.y, .y = face.x};
+    const Vector2 light = Vector2Normalize(Vector2{.x = -1, .y = -1});
+
+    DrawCircleV(center, radius * 1.2F, paint(ember, 0.05F + 0.1F * heat));
+    DrawCircleV(center, radius * 1.07F, paint(ember, 0.07F + 0.12F * heat));
+
+    constexpr int32_t sides = 22;
+    std::array<Vector2, sides> verts{};
+    for (int32_t i = 0; i < sides; i++)
+    {
+        const float a = static_cast<float>(i) * 2.0F * PI / sides;
+        const float r = radius * (0.86F + 0.14F * hashNoise(seed * 5.3F + static_cast<float>(i) * 1.7F));
+        verts.at(static_cast<size_t>(i)) = Vector2Add(center, Vector2{.x = std::cos(a) * r, .y = std::sin(a) * r});
+    }
+    for (int32_t i = 0; i < sides; i++)
+    {
+        const Vector2 v0 = verts.at(static_cast<size_t>(i));
+        const Vector2 v1 = verts.at(static_cast<size_t>((i + 1) % sides));
+        const float lit = 0.5F + 0.5F * Vector2DotProduct(
+                                           Vector2Normalize(Vector2Subtract(Vector2Lerp(v0, v1, 0.5F), center)), light);
+        DrawTriangle(center, v1, v0, paint(ColorLerp(basalt, basaltLit, 0.65F * lit * lit), 1.0F));
+        DrawLineEx(v0, v1, radius * 0.018F, paint(basaltLit, 0.5F * lit));
     }
 
-    constexpr int segments = 6;
-    for (int i = segments; i >= 1; i--)
+    // Raised plates, kept off the maw side.
+    for (int32_t k = 0; k < 6; k++)
     {
-        const float frac = static_cast<float>(i) / segments;
-        const Vector2 segPos =
-            Vector2Add(projectile.position,
-                       Vector2Scale(tailDir, projectile.radius * 2.2F * static_cast<float>(i)));
-        const Color flame =
-            i % 2 == 0 ? Palette::ElementBurn : ColorLerp(Palette::ElementBurn, YELLOW, 0.5F);
-        DrawCircleV(segPos, projectile.radius * (1 - frac * 0.5F),
-                    Fade(flame, 0.55F * (1 - frac * 0.6F)));
+        const auto kf = static_cast<float>(k);
+        const float a = hashNoise(seed * 2.3F + kf * 4.1F) * 2.0F * PI;
+        const Vector2 dir{.x = std::cos(a), .y = std::sin(a)};
+        if (Vector2DotProduct(dir, face) > 0.3F)
+        {
+            continue;
+        }
+        const Vector2 pos = Vector2Add(center, Vector2Scale(dir, radius * (0.3F + 0.35F * hashNoise(seed + kf))));
+        const float size = radius * (0.1F + 0.06F * hashNoise(seed * 1.9F + kf));
+        DrawPoly(pos, 5, size, a * RAD2DEG, paint(ColorLerp(basalt, basaltLit, 0.45F), 1.0F));
+        DrawPolyLinesEx(pos, 5, size, a * RAD2DEG, 1.5F, paint(Palette::Void, 0.6F));
     }
 
-    DrawCircleV(projectile.position, projectile.radius * 1.15F, Fade(Palette::ElementBurn, 0.35F));
-    DrawCircleV(projectile.position, projectile.radius,
-                ColorLerp(Palette::SolarForgeAccent, Palette::Void, 0.4F));
-    DrawCircleLines(static_cast<int32_t>(projectile.position.x),
-                    static_cast<int32_t>(projectile.position.y), projectile.radius,
-                    Fade(ColorLerp(Palette::SolarForgeAccent, WHITE, 0.3F), 0.5F));
+    // Molten seams: jagged veins, each starting at its own point round the back of the maw and
+    // running out toward the rim.
+    const Vector2 mawCenter = Vector2Add(center, Vector2Scale(face, radius * slagmawMawOffset));
+    const float backAngle = std::atan2(-face.y, -face.x);
+    for (int32_t k = 0; k < 6; k++)
+    {
+        const auto kf = static_cast<float>(k);
+        float a = backAngle + (kf - 2.5F) * 0.55F;
+        Vector2 p = Vector2Add(mawCenter, Vector2{.x = std::cos(a) * radius * 0.42F, .y = std::sin(a) * radius * 0.42F});
+        for (int32_t seg = 0; seg < 3; seg++)
+        {
+            a += (hashNoise(seed * 3.3F + kf * 5.0F + static_cast<float>(seg)) - 0.5F) * 0.8F;
+            const Vector2 q = Vector2Add(p, Vector2{.x = std::cos(a) * radius * 0.22F, .y = std::sin(a) * radius * 0.22F});
+            const float taper = 1.0F - static_cast<float>(seg) * 0.22F;
+            DrawLineEx(p, q, radius * 0.05F * taper, paint(ember, 0.35F * glow));
+            DrawLineEx(p, q, radius * 0.022F * taper, paint(gold, glow));
+            p = q;
+        }
+        DrawCircleV(p, radius * 0.025F, paint(gold, glow));
+    }
+
+    // The maw: jaws parting on a glowing throat, ringed by basalt teeth.
+    const Vector2 maw = Vector2Add(center, Vector2Scale(face, radius * slagmawMawOffset));
+    const float halfWidth = radius * (0.34F + 0.06F * mawOpen);
+    const float halfDepth = radius * (0.05F + 0.2F * mawOpen);
+    const auto point = [&](float a, float s)
+    {
+        return Vector2Add(maw, Vector2Add(Vector2Scale(side, std::cos(a) * halfWidth * s),
+                                          Vector2Scale(face, std::sin(a) * halfDepth * s)));
+    };
+    constexpr int32_t mawVerts = 24;
+    const auto ellipse = [&](float s, Color c)
+    {
+        for (int32_t i = 0; i < mawVerts; i++)
+        {
+            const float a0 = static_cast<float>(i) * 2.0F * PI / mawVerts;
+            const float a1 = static_cast<float>(i + 1) * 2.0F * PI / mawVerts;
+            DrawTriangle(maw, point(a1, s), point(a0, s), c);
+            DrawTriangle(maw, point(a0, s), point(a1, s), c);
+        }
+    };
+    ellipse(1.14F, paint(ColorLerp(basalt, Palette::Void, 0.4F), 1.0F));
+    ellipse(1.0F, paint(Palette::Void, 1.0F));
+    ellipse(0.62F, paint(gold, (0.25F + 0.65F * heat) * mawOpen));
+    // Four uneven fangs per jaw.
+    for (const float lip : {0.0F, PI})
+    {
+        for (int32_t k = 1; k <= 4; k++)
+        {
+            const auto kf = static_cast<float>(k);
+            const float a = lip + PI * kf / 5.0F;
+            const Vector2 b1 = point(a - PI / 12.0F, 1.05F);
+            const Vector2 b2 = point(a + PI / 12.0F, 1.05F);
+            const Vector2 tip = Vector2Lerp(point(a, 1.0F), maw, 0.35F + 0.3F * hashNoise(seed + lip + kf));
+            const Color tooth = paint(ColorLerp(basalt, Palette::Haze, 0.35F), 1.0F);
+            DrawTriangle(b1, tip, b2, tooth);
+            DrawTriangle(b1, b2, tip, tooth);
+        }
+    }
+}
+
+// Magma Ram pools: a dark crust ring round molten slag, cooling as it fades, bubbling.
+void drawMagmaPools(const Game& game)
+{
+    constexpr Color gold{.r = 255, .g = 188, .b = 72, .a = 255};
+    const auto t = static_cast<float>(GetTime());
+    for (const auto& pool : game.run.magmaPools)
+    {
+        const float f = std::clamp(pool.life / magmaPoolLife, 0.0F, 1.0F);
+        const float r = magmaPoolRadius;
+        DrawCircleV(pool.position, r, Fade(ColorLerp(Palette::SolarForgeAccent, Palette::Void, 0.8F), 0.75F * f));
+        DrawCircleV(pool.position, r * 0.8F, Fade(Palette::ElementBurn, 0.55F * f));
+        DrawCircleV(pool.position, r * 0.45F, Fade(gold, 0.5F * f));
+        for (int32_t k = 0; k < 3; k++)
+        {
+            const auto kf = static_cast<float>(k);
+            const float phase = std::fmod(t * 1.2F + hashNoise(pool.position.x * 0.01F + kf), 1.0F);
+            const float a = hashNoise(pool.position.y * 0.01F + kf * 3.0F) * 2.0F * PI;
+            const Vector2 bubble = Vector2Add(pool.position, Vector2{.x = std::cos(a) * r * 0.5F, .y = std::sin(a) * r * 0.5F});
+            DrawCircleLines(static_cast<int32_t>(bubble.x), static_cast<int32_t>(bubble.y), r * 0.08F * (0.5F + phase),
+                            Fade(gold, (1.0F - phase) * 0.8F * f));
+        }
+    }
 }
 
 void drawSporeProjectile(const BossProjectile& projectile)

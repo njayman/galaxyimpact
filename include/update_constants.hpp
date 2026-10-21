@@ -259,6 +259,19 @@ constexpr auto meteorHellDuration(int32_t wave) -> float
 }
 
 constexpr float slagmawMoveSpeedMult = 0.32F;
+constexpr float slagSprayTell = 0.5F;      // body flares gold before Slag Spray
+constexpr float slagSpraySpreadDeg = 14.0F; // each gob's random angle off the aim, +-
+constexpr float slagmawMawOffset = 0.55F;  // maw centre, in body radii from the centre
+constexpr float devourDuration = 2.0F;
+constexpr float devourConeHalfDeg = 35.0F;
+constexpr float devourRange = 760.0F;
+constexpr float devourPull = 300.0F;       // units per second toward the maw
+constexpr int32_t devourBiteDamage = 2;    // reaching the maw while a QTE can't start
+constexpr float magmaPoolSpacing = 70.0F;
+constexpr float magmaPoolRadius = 64.0F;
+constexpr float magmaPoolLife = 2.0F;
+constexpr float magmaPoolTickInterval = 0.5F;
+constexpr int32_t magmaPoolDamage = 1;
 constexpr float ghostFadeDuration = 2.2F;
 constexpr float ghostTeleportMargin = 120.0F;
 

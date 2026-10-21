@@ -1111,6 +1111,7 @@ void updateGameplay(Game& game, float deltaTime)
     updateAsteroids(game, deltaTime);
     updateSolarForgeHeat(game, deltaTime);
     updateRicochetRelay(game, deltaTime);
+    updateMagmaPools(game, deltaTime);
     updatePunctumThunder(game, deltaTime);
     updateDebrisSquall(game, deltaTime);
     updateRustPatches(game, deltaTime);

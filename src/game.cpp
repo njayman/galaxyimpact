@@ -352,11 +352,14 @@ void resetRun(Game& game)
     game.run.qteEnemyId = -1;
     game.run.qteFinisherPhase = 0;
     game.run.qtePrompt = QtePrompt::None;
-    game.run.qteCooldown = 0;
+    game.run.qteCooldowns.fill(0);
+    game.run.qteKind = -1;
     game.run.backdropSeed = static_cast<float>(GetRandomValue(0, 9999)) * 10.0F;
     game.run.debrisSquallTimer = debrisSquallIntervalStart;
     game.run.debrisSquallPhase = 0;
     game.run.rustPatches.clear();
+    game.run.magmaPools.clear();
+    game.run.magmaPoolTick = 0;
     game.run.rustPatchTickTimer = rustPatchEntryGrace;
     game.run.punctumTrapActive = false;
     game.run.inBanishedRealm = false;

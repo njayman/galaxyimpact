@@ -32,7 +32,7 @@ From [Biome rework scope: what is open to change](https://github.com/njayman/gal
 From [Shared Boss QTE rules](https://github.com/njayman/galaxyimpact/issues/3).
 
 - **Cutscene contract:** HUD hidden with letterbox bars, world at 4% speed, player immune. One Prompt at a time from the shared input set: four directions, Shield, Dash, Parry (shield + dash), Nerve, and Mash. A late answer, or a wrong one once the chain is live, ends the cutscene and the threat lands live, still dodgeable. The chain goes live on the first correct answer: until then wrong presses are ignored, since the player is usually mid-fight on other controls when a QTE pops. Only the threat and its choreography differ per Biome Boss.
-- **Trigger:** a beat the Biome Boss already has and that recurs. Skipped while the player is grabbed or launched, or another cutscene runs. At least 20 s between Boss QTEs.
+- **Trigger:** a beat the Biome Boss already has and that recurs. Skipped while the player is grabbed or launched, or another cutscene runs. At least 20 s before the same Boss QTE can start again (per QTE, so a boss's Rush does not lock out its Constrict).
 - **Damage:** every hit on an enemy or boss while a Boss QTE runs deals 3x damage, prompt strikes included.
 - **Flawless clear:** a 3 s Punish Window; the boss is dazed, cannot attack and takes +50% damage.
 - **Fail:** the live hit only; damage already dealt sticks.
@@ -286,7 +286,7 @@ As built: Spore Spit keeps the `Barrage` attack slot and branches on the Wreckwo
 - **Prompts:** 9 total (1 Mash + 8 strikes), strikes at 0.8 s window, 20% Parry share; strikes use directions, Shield, Dash, Parry, Nerve.
 - **Clean clear:** the coil springs open; the head is stunned for the 3 s Punish Window (+50%), and armoured segments take full damage during it.
 - **Fail:** the coil crushes for one hit and releases the player.
-- As built: the Mash takes 8 presses in the 1.6 s window (5 a second, leaving room to react); it is mashed on the Nerve input (SPACE, or the NERVE touch button) and other inputs are ignored. The crush is 2 base damage, scaled like other enemy hits (as heavy as a plate dash or Ring Crush). The coil catches the player when its closing ring reaches them outside the gap, then rides with the ship and keeps tightening during the Mash. Strikes come from segments that have not struck yet. Clean or failed, the clamp skips to its release and the segments rejoin the chain; during the Punish Window the head stops moving, starts no attacks, segments hold their volleys, and a ring of pulsing fragments marks the stunned head. The 20 s minimum gap is shared by every Boss QTE, Plate Rush included.
+- As built: the Mash takes 8 presses in the 1.6 s window (5 a second, leaving room to react); it is mashed on the Nerve input (SPACE, or the NERVE touch button) and other inputs are ignored. The crush is 2 base damage, scaled like other enemy hits (as heavy as a plate dash or Ring Crush). The coil catches the player when its closing ring reaches them outside the gap, then rides with the ship and keeps tightening during the Mash. Strikes come from segments that have not struck yet. Clean or failed, the clamp skips to its release and the segments rejoin the chain; during the Punish Window the head stops moving, starts no attacks, segments hold their volleys, and a ring of pulsing fragments marks the stunned head. The 20 s minimum gap is per Boss QTE, so the Wreckworm's Rush does not lock out its Constrict.
 
 ### Boss QTE: Rush
 
@@ -382,6 +382,8 @@ Waves 60, 70, 75. Skeleton kept: a huge slow mass (0.32x speed), now basalt with
 - **Prompts:** 10 total (1 Mash + 9), 0.7 s window, 25% Parry share.
 - **Clean clear:** the player bursts out and Slagmaw chokes: 3 s Punish Window (+50%) with the maw exposed as a weak point.
 - **Fail:** the player is spat out and takes one burn hit.
+
+- As built: Slagmaw is a faceted basalt mass lit from the upper left, warm gold seams running back from a maw ringed by uneven fangs that turns to track the player; tells heat the seams and open the maw. Slag Spray keeps Barrage's aimed stream with a 0.5 s gold flare tell, spraying jagged slag gobs from the maw within 14 degrees. Magma Ram drops a pool every 70 units of the charge (64 radius, 2 s, 1 damage per 0.5 s, ignoring hit immunity; a dash crosses unharmed). Seeker Embers are spinning gold diamonds that shed sparks. Devour: 1 s tell, then a 2 s inhale along a cone (35 degrees each side, 760 long) locked to where the maw faced, pulling 300 units a second; a dash rides through the pull; reaching the maw while the QTE is on its gap takes a 2 damage bite and throws the player clear. Swallowed: Mash 8 presses in 1.6 s, then 9 prompts (0.7 s, 25% Parry) with a slag gob flying in from each prompt's angle while the boss shakes and the maw whips; each answer strikes for 1.5% of max health (4% Parry, 8% Nerve), tripled by the QTE damage rule. Wave 75 halves keep the old moveset (no Devour).
 
 ### Open for build
 

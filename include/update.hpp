@@ -81,6 +81,20 @@ constexpr float wreckwormConstrictLungeRearFrac = 0.4F;
 constexpr int32_t wreckwormConstrictCrushDamage = 2; // as heavy as a plate dash or ring crush
 constexpr float wreckwormPunishWindow = 3.0F; // clean clear: stunned head
 constexpr float wreckwormPunishDamageMult = 1.5F;
+// Slagmaw Swallowed: Devour drags the player into the maw
+constexpr float slagmawSwallowMashDuration = 1.6F;
+constexpr int32_t slagmawSwallowMashPresses = 8;
+constexpr float slagmawSwallowMashBeat = 0.5F;
+constexpr int32_t slagmawSwallowPrompts = 9;
+constexpr float slagmawSwallowPromptWindow = 0.7F;
+constexpr float slagmawSwallowBeat = 0.3F;
+constexpr int32_t slagmawSwallowParryChance = 25;
+constexpr float slagmawSwallowStrikeFrac = 0.015F; // of max health per answer, before qteDamageMult
+constexpr float slagmawSwallowParryStrikeFrac = 0.04F;
+constexpr float slagmawSwallowNerveStrikeFrac = 0.08F;
+constexpr int32_t slagmawSwallowBurnDamage = 2; // fail: spat out with one burn hit
+constexpr float slagmawPunishWindow = 3.0F;     // clean clear: Slagmaw chokes
+constexpr float slagmawPunishDamageMult = 1.5F;
 // Wreckworm rush (Burrow Charge, Dash Rush): a dodge chain as the head and body pass
 constexpr float wreckwormRushTriggerDist = 340.0F; // head this close and closing starts it
 constexpr float wreckwormRushCrawlSpeed = 420.0F;  // head's real-time crawl, so it passes the ship
@@ -254,9 +268,16 @@ void updateWreckwormChain(Game& game, Boss& head, float deltaTime);
 void updateWreckwormSegmentVolley(Game& game, Boss& segment, float deltaTime);
 auto bossQteActive(const Game& game) -> bool;
 auto bossQteSlowdown(const Game& game) -> float;
-void bossQteBegin(Game& game, int32_t bossId);
+enum class QteKind : std::uint8_t
+{
+    PlateRush,
+    Constrict,
+    Rush,
+    Swallowed
+};
+void bossQteBegin(Game& game, int32_t bossId, QteKind kind);
 void bossQteEnd(Game& game);
-auto bossQteCanStart(const Game& game) -> bool;
+auto bossQteCanStart(const Game& game, QteKind kind) -> bool;
 auto qteSlotFree(const Game& game) -> bool;
 void sniperQteBegin(Game& game, int32_t enemyId, Vector2 aim);
 void updateSniperQte(Game& game, float deltaTime);
@@ -272,6 +293,10 @@ auto findWreckwormHeadById(Game& game, int32_t instanceId) -> Boss*;
 void updateWreckwormConstrict(Game& game, Boss& head, float deltaTime);
 void tryBeginWreckwormRush(Game& game, Boss& head, Vector2 headCenter);
 void updateWreckwormRush(Game& game, Boss& head, float deltaTime);
+auto findSlagmawById(Game& game, int32_t instanceId) -> Boss*;
+void updateSlagmawSwallowed(Game& game, Boss& slagmaw, float deltaTime);
+void updateMagmaPools(Game& game, float deltaTime);
+auto slagmawMawCenter(const Boss& slagmaw) -> Vector2;
 void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime);
 void updateKrakenLimbs(Game& game, Boss& boss, float deltaTime);
 auto krakenPodPosition(const Boss& boss, int32_t podIndex) -> Vector2;

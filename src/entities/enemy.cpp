@@ -413,7 +413,7 @@ void killEnemyForBossAttack(Game& game, size_t index, bool alwaysLoot)
 
 void sniperQteBegin(Game& game, int32_t enemyId, Vector2 aim)
 {
-    bossQteBegin(game, -1);
+    bossQteBegin(game, -1, QteKind::Rush); // not a Boss QTE: sets no gap (see bossQteEnd)
     game.run.qteEnemyId = enemyId;
     game.run.qteThreatDir = aim;
     game.run.qtePrompt = qtePromptForThreat(game, aim, sniperQteParryChance);
