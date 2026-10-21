@@ -148,8 +148,8 @@ void drawLaserBolt(const Bullet& b);
 void drawPickupIcon(PickupType type, ElementType element, Vector2 position, float alpha);
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius, Color rim);
 
-// Laser bolt: a comet streak, faint thin tail to a bright head. Evolved: a chevron arrow, a
-// cyan ">" and a split tail bar, each over a deep-blue outline, trailing a faint wake.
+// Laser bolt: a comet streak, faint thin tail to a bright head. Evolved: a glowing magenta ">"
+// with a white-hot core, trailing a soft violet body that fades out.
 void drawLaserBolt(const Bullet& b)
 {
     const LaserShape shape = laserShape(b);
@@ -162,7 +162,6 @@ void drawLaserBolt(const Bullet& b)
         const float len = b.streak;
         const auto at = [&](float back, float across)
         { return Vector2Add(tip, Vector2Add(Vector2Scale(fwd, -back * len), Vector2Scale(side, across * h))); };
-        DrawLineEx(at(1.0F, 0), at(2.4F, 0), h * 0.6F, Fade(Palette::ElementFreeze, 0.14F)); // wake
         // A solid quad from a to c, `w` thick; both windings so raylib never culls it.
         const auto bar = [](Vector2 a, Vector2 c, float w, Color col)
         {
@@ -176,20 +175,34 @@ void drawLaserBolt(const Bullet& b)
                 DrawTriangle(x, z, y, col);
             }
         };
-        constexpr Color outline{.r = 40, .g = 78, .b = 210, .a = 255};
-        constexpr Color fill{.r = 160, .g = 228, .b = 255, .a = 255};
-        for (const bool inner : {false, true})
+        constexpr Color violet{.r = 120, .g = 40, .b = 210, .a = 255};
+        constexpr Color magenta{.r = 235, .g = 70, .b = 235, .a = 255};
+        constexpr Color hot{.r = 255, .g = 215, .b = 255, .a = 255};
+        // Glowing body trailing behind the head, violet and fading out.
+        constexpr int trailSteps = 6;
+        for (int i = 0; i < trailSteps; i++)
         {
-            const float w = h * (inner ? 0.62F : 1.0F);
-            const Color c = inner ? fill : outline;
-            const float grow = inner ? 0.0F : 0.06F; // outline overhangs the fill at the ends
+            const float t0 = static_cast<float>(i) / trailSteps;
+            const float t1 = static_cast<float>(i + 1) / trailSteps;
+            bar(at(0.3F + t0 * 1.6F, 0), at(0.3F + t1 * 1.6F, 0), h * 2.2F * (1.0F - t0 * 0.6F),
+                Fade(ColorLerp(magenta, violet, t0), 0.28F * (1.0F - t0)));
+        }
+        // The ">" head: a wide soft glow, a magenta band, then a white-hot core.
+        struct Pass
+        {
+            float width;
+            Color color;
+        };
+        for (const Pass pass : {Pass{.width = 2.4F, .color = Fade(violet, 0.22F)},
+                                Pass{.width = 1.3F, .color = Fade(magenta, 0.75F)},
+                                Pass{.width = 0.5F, .color = hot}})
+        {
             for (const float sign : {1.0F, -1.0F})
             {
-                bar(at(-grow, 0), at(0.5F + grow, 1.6F * sign), w, c); // arm
+                bar(at(0, 0), at(0.55F, 1.7F * sign), h * pass.width, pass.color);
             }
-            bar(at(0.58F - grow, 0), at(1.0F + grow, 0), w * 0.8F, c); // tail bar, split from the arms
+            DrawCircleV(tip, h * pass.width / 2, pass.color);
         }
-        DrawCircleV(at(0.1F, 0), h * 0.28F, WHITE);
         return;
     }
     constexpr int steps = 5;
