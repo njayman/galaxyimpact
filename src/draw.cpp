@@ -148,75 +148,60 @@ void drawLaserBolt(const Bullet& b);
 void drawPickupIcon(PickupType type, ElementType element, Vector2 position, float alpha);
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius, Color rim);
 
-// Straight bolt: a comet streak, faint thin tail to a bright head. Arc: a few thin strands along
-// the U, brightest and thickest at the front, thinning and fading toward the trailing ends.
+// Laser bolt: a comet streak, faint thin tail to a bright head. Evolved: a chevron arrow, a
+// cyan ">" and a split tail bar, each over a deep-blue outline, trailing a faint wake.
 void drawLaserBolt(const Bullet& b)
 {
     const LaserShape shape = laserShape(b);
-    if (shape.count == 2)
+    if (b.chevron)
     {
-        constexpr int steps = 5;
-        for (int i = 0; i < steps; i++)
+        const Vector2 tip = b.position;
+        const Vector2 fwd = Vector2Normalize(b.velocity);
+        const Vector2 side{.x = -fwd.y, .y = fwd.x};
+        const float h = b.halfWidth;
+        const float len = b.streak;
+        const auto at = [&](float back, float across)
+        { return Vector2Add(tip, Vector2Add(Vector2Scale(fwd, -back * len), Vector2Scale(side, across * h))); };
+        DrawLineEx(at(1.0F, 0), at(2.4F, 0), h * 0.6F, Fade(Palette::ElementFreeze, 0.14F)); // wake
+        // A solid quad from a to c, `w` thick; both windings so raylib never culls it.
+        const auto bar = [](Vector2 a, Vector2 c, float w, Color col)
         {
-            const float t0 = static_cast<float>(i) / steps;
-            const float t1 = static_cast<float>(i + 1) / steps;
-            DrawLineEx(Vector2Lerp(shape.points[0], shape.points[1], t0),
-                       Vector2Lerp(shape.points[0], shape.points[1], t1),
-                       b.halfWidth * 2.0F * (0.3F + 0.7F * t1), Fade(b.color, 0.08F + 0.92F * t1 * t1));
+            const Vector2 d = Vector2Normalize(Vector2Subtract(c, a));
+            const Vector2 n{.x = -d.y * w / 2, .y = d.x * w / 2};
+            const Vector2 p0 = Vector2Add(a, n), p1 = Vector2Subtract(a, n);
+            const Vector2 p2 = Vector2Subtract(c, n), p3 = Vector2Add(c, n);
+            for (const auto& [x, y, z] : {std::array{p0, p1, p2}, std::array{p0, p2, p3}})
+            {
+                DrawTriangle(x, y, z, col);
+                DrawTriangle(x, z, y, col);
+            }
+        };
+        constexpr Color outline{.r = 40, .g = 78, .b = 210, .a = 255};
+        constexpr Color fill{.r = 160, .g = 228, .b = 255, .a = 255};
+        for (const bool inner : {false, true})
+        {
+            const float w = h * (inner ? 0.62F : 1.0F);
+            const Color c = inner ? fill : outline;
+            const float grow = inner ? 0.0F : 0.06F; // outline overhangs the fill at the ends
+            for (const float sign : {1.0F, -1.0F})
+            {
+                bar(at(-grow, 0), at(0.5F + grow, 1.6F * sign), w, c); // arm
+            }
+            bar(at(0.58F - grow, 0), at(1.0F + grow, 0), w * 0.8F, c); // tail bar, split from the arms
         }
-        DrawCircleV(shape.points[1], b.halfWidth * 1.1F, Fade(WHITE, 0.9F));
+        DrawCircleV(at(0.1F, 0), h * 0.28F, WHITE);
         return;
     }
-
-    const int mid = shape.count / 2;
-    std::array<Vector2, LaserShape::arcPoints> normals{};
-    for (int i = 0; i < shape.count; i++)
+    constexpr int steps = 5;
+    for (int i = 0; i < steps; i++)
     {
-        const Vector2 d = Vector2Subtract(shape.points.at(static_cast<size_t>(std::min(i + 1, shape.count - 1))),
-                                          shape.points.at(static_cast<size_t>(std::max(i - 1, 0))));
-        normals.at(static_cast<size_t>(i)) = Vector2Normalize(Vector2{.x = -d.y, .y = d.x});
+        const float t0 = static_cast<float>(i) / steps;
+        const float t1 = static_cast<float>(i + 1) / steps;
+        DrawLineEx(Vector2Lerp(shape.points[0], shape.points[1], t0),
+                   Vector2Lerp(shape.points[0], shape.points[1], t1),
+                   b.halfWidth * 2.0F * (0.3F + 0.7F * t1), Fade(b.color, 0.08F + 0.92F * t1 * t1));
     }
-    struct Strand
-    {
-        float offset; // in half-widths, across the arc
-        float width;  // x half-width at the front
-        float alpha;
-    };
-    // A white-hot core over the bolt's tint, so it glows instead of reading as a dull band.
-    const Color core = ColorLerp(b.color, WHITE, 0.5F);
-    for (const Strand strand : {Strand{.offset = 0, .width = 4.5F, .alpha = 0.16F},
-                                Strand{.offset = -1.9F, .width = 0.7F, .alpha = 0.8F},
-                                Strand{.offset = 1.9F, .width = 0.7F, .alpha = 0.8F},
-                                Strand{.offset = 0, .width = 1.8F, .alpha = 1.0F}})
-    {
-        const Color tint = strand.width < 1.0F || strand.alpha >= 1.0F ? core : b.color;
-        // Joined quads (shared edges, no overlap), so translucent strands don't band at joints.
-        const auto edge = [&](int k, float sign)
-        {
-            const auto idx = static_cast<size_t>(k);
-            const float u = static_cast<float>(std::abs(k - mid)) / static_cast<float>(mid);
-            const float half = std::max(0.3F, b.halfWidth * strand.width * 0.5F * (1.0F - 0.85F * u));
-            return Vector2Add(shape.points.at(idx),
-                              Vector2Scale(normals.at(idx), strand.offset * b.halfWidth + sign * half));
-        };
-        for (int i = 0; i + 1 < shape.count; i++)
-        {
-            const float u = static_cast<float>(std::abs(i - mid) + std::abs(i + 1 - mid)) /
-                            (2.0F * static_cast<float>(mid)); // 0 at the front, 1 at the ends
-            const Color color = Fade(tint, strand.alpha * (1.0F - 0.8F * u));
-            Vector2 a = edge(i, 1);
-            Vector2 c = edge(i + 1, -1);
-            Vector2 q1 = edge(i + 1, 1);
-            Vector2 q2 = edge(i, -1);
-            // raylib culls clockwise triangles; flip both when this quad winds the other way
-            if ((q1.x - a.x) * (c.y - a.y) - (q1.y - a.y) * (c.x - a.x) > 0)
-            {
-                std::swap(q1, q2);
-            }
-            DrawTriangle(a, q1, c, color);
-            DrawTriangle(a, c, q2, color);
-        }
-    }
+    DrawCircleV(shape.points[1], b.halfWidth * 1.1F, Fade(WHITE, 0.9F));
 }
 
 void beginPixelZoom(const Game& game)
@@ -1071,22 +1056,10 @@ void drawWeaponIcon(WeaponType kind, Vector2 c, float s, Color color, bool evolv
     case WeaponType::LaserShots:
         if (evolved)
         {
-            // Heavy Lance: a small pointed arch, like the bolt itself.
-            constexpr int points = 9;
-            Vector2 prev{};
-            for (int i = 0; i < points; i++)
-            {
-                const float rel = -1.0F + 2.0F * static_cast<float>(i) / (points - 1);
-                const float a = rel * 105.0F * DEG2RAD;
-                const float pull = 0.35F * (1.0F - std::abs(rel)) * (1.0F - std::abs(rel));
-                const Vector2 p{.x = c.x + std::sin(a) * s,
-                                .y = c.y + s * 0.35F - (std::cos(a) + pull) * s};
-                if (i > 0)
-                {
-                    DrawLineEx(prev, p, 2.0F, color);
-                }
-                prev = p;
-            }
+            // A chevron arrow, like the bolt itself: ">" and a split tail bar.
+            DrawLineEx(Vector2{.x = c.x + s * 0.7F, .y = c.y}, Vector2{.x = c.x, .y = c.y - s * 0.7F}, 2.0F, color);
+            DrawLineEx(Vector2{.x = c.x + s * 0.7F, .y = c.y}, Vector2{.x = c.x, .y = c.y + s * 0.7F}, 2.0F, color);
+            DrawLineEx(Vector2{.x = c.x - s * 0.9F, .y = c.y}, Vector2{.x = c.x - s * 0.1F, .y = c.y}, 2.0F, color);
             break;
         }
         for (const float dy : {-0.5F, 0.0F, 0.5F})

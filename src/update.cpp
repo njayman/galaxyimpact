@@ -1572,10 +1572,6 @@ auto weaponCooldown(const Game& game, WeaponType kind, int32_t level, bool evolv
     {
         base /= 2.0F; // evolution doubles Shockwave's attack speed
     }
-    if (kind == WeaponType::LaserShots && evolved)
-    {
-        base *= heavyLanceSpacing; // spaced-out arcs; damage per bolt scales up to match
-    }
     base *= 1 - 0.1F * static_cast<float>(
                            game.run.skillLevels.at(static_cast<size_t>(SkillType::Cooldown)));
 
@@ -1651,8 +1647,8 @@ auto estimatePlayerDps(const Game& game) -> float
         {
             // dmg here is the raw weaponDamage; mirror the fire code's per-shot multipliers.
             const int32_t streaks = 3 + w.level / 4;
-            hitsPerCooldown = w.evolved ? 0.36F * 1.5F * heavyLanceSpacing
-                                        : static_cast<float>(streaks) * laserShotDamageMult;
+            hitsPerCooldown = static_cast<float>(streaks) * laserShotDamageMult *
+                              (w.evolved ? laserVolleyDamageMult : 1.0F);
             break;
         }
         default:
@@ -2078,55 +2074,40 @@ void updateWeapons(Game& game, float deltaTime)
             const auto jitter = [](float range)
             { return static_cast<float>(GetRandomValue(-100, 100)) / 100.0F * range; };
             const auto baseDamage = static_cast<float>(weaponDamage(game, w.level));
-            if (w.evolved)
+            // A loose barrage: a few thin streaks scattered across a wide field in angle,
+            // side offset, start position and length, so it reads as a volley, not one line.
+            // Evolved: the same volley as bigger, faster, harder chevrons.
+            const int32_t streaks = 3 + w.level / 4;
+            const float evoDamage = w.evolved ? laserVolleyDamageMult : 1.0F;
+            const float evoSpeed = w.evolved ? laserVolleySpeedMult : 1.0F;
+            const float halfWidth = w.evolved ? laserVolleyHalfWidth : laserShotHalfWidth;
+            const auto dmg = std::max(1, static_cast<int32_t>(baseDamage * laserShotDamageMult * evoDamage));
+            const Vector2 side{.x = -dir.y, .y = dir.x};
+            // Each level widens the field a bit: +8%/level, so 1.64x at level 8.
+            const float field = 1.0F + 0.08F * static_cast<float>(w.level);
+            for (int32_t s = 0; s < streaks; s++)
             {
-                // One wide arc; the 0.36 matches a 3-streak barrage's single-target damage.
-                const auto dmg =
-                    static_cast<int32_t>(baseDamage * 0.36F * 1.5F * heavyLanceSpacing);
+                const Vector2 d =
+                    Vector2Rotate(dir, jitter(laserShotSpreadDeg * field) * DEG2RAD);
+                const auto ahead = static_cast<float>(GetRandomValue(0, 45));
+                const Vector2 start = Vector2Add(
+                    Vector2Add(nose,
+                               Vector2Scale(side, jitter(laserShotFieldHalfWidth * field))),
+                    Vector2Scale(d, ahead));
                 game.run.bullets.push_back(Bullet{
-                    .position = nose,
-                    .velocity = Vector2Scale(dir, projectileSpeed * heavyLanceSpeedMult),
-                    .radius = heavyLanceHalfWidth,
-                    .color = Palette::Crit,
+                    .position = start,
+                    .velocity = Vector2Scale(d, projectileSpeed * laserShotSpeedMult * evoSpeed *
+                                                    (1.0F + jitter(0.06F))),
+                    .radius = halfWidth,
+                    .color = Palette::ElementStatic,
                     .active = true,
-                    .damage = std::max(1, dmg),
+                    .damage = dmg,
                     .source = DamageSource::LaserShots,
-                    .streak = heavyLanceRadius * lengthMult * (1.0F + jitter(0.15F)),
-                    .halfWidth = heavyLanceHalfWidth,
-                    .arc = true,
-                    .arcSkew = jitter(heavyLanceMaxSkew) * DEG2RAD});
-            }
-            else
-            {
-                // A loose barrage: a few thin streaks scattered across a wide field in angle,
-                // side offset, start position and length, so it reads as a volley, not one line.
-                const int32_t streaks = 3 + w.level / 4;
-                const auto dmg = std::max(1, static_cast<int32_t>(baseDamage * laserShotDamageMult));
-                const Vector2 side{.x = -dir.y, .y = dir.x};
-                // Each level widens the field a bit: +8%/level, so 1.64x at level 8.
-                const float field = 1.0F + 0.08F * static_cast<float>(w.level);
-                for (int32_t s = 0; s < streaks; s++)
-                {
-                    const Vector2 d =
-                        Vector2Rotate(dir, jitter(laserShotSpreadDeg * field) * DEG2RAD);
-                    const auto ahead = static_cast<float>(GetRandomValue(0, 45));
-                    const Vector2 start = Vector2Add(
-                        Vector2Add(nose,
-                                   Vector2Scale(side, jitter(laserShotFieldHalfWidth * field))),
-                        Vector2Scale(d, ahead));
-                    game.run.bullets.push_back(Bullet{
-                        .position = start,
-                        .velocity = Vector2Scale(d, projectileSpeed * laserShotSpeedMult *
-                                                        (1.0F + jitter(0.06F))),
-                        .radius = laserShotHalfWidth,
-                        .color = Palette::ElementStatic,
-                        .active = true,
-                        .damage = dmg,
-                        .source = DamageSource::LaserShots,
-                        .streak = laserShotStreak * lengthMult * (1.0F + jitter(0.3F)),
-                        .halfWidth = laserShotHalfWidth,
-                        .traveled = ahead});
-                }
+                    .streak = w.evolved ? laserVolleyLength
+                                        : laserShotStreak * lengthMult * (1.0F + jitter(0.3F)),
+                    .halfWidth = halfWidth,
+                    .chevron = w.evolved,
+                    .traveled = ahead});
             }
             playSFX(game, game.resources.sounds.shoot);
             break;
@@ -4452,20 +4433,9 @@ void updateBullets(Game& game, float deltaTime)
             }
         }
 
-        // Despawn once every part is out of range, so a wide arc whose front has left doesn't
-        // vanish while its arms are still on screen.
-        const auto outOfRange = [&](Vector2 p)
-        { return Vector2Distance(p, game.run.player.position) > entityDespawnRadius; };
-        if (outOfRange(bullet.position))
+        if (Vector2Distance(bullet.position, game.run.player.position) > entityDespawnRadius)
         {
-            const LaserShape shape =
-                bullet.arc ? laserShape(bullet) : LaserShape{.points = {bullet.position}, .count = 1};
-            bool allOut = true;
-            for (int k = 0; k < shape.count && allOut; k++)
-            {
-                allOut = outOfRange(shape.points.at(static_cast<size_t>(k)));
-            }
-            bullet.active = !allOut;
+            bullet.active = false;
         }
     }
 }

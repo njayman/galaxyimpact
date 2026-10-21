@@ -431,11 +431,11 @@ constexpr float laserShotStreak = 62.0F;      // streak length, also the hit seg
 constexpr float laserShotHalfWidth = 1.5F;
 constexpr float laserShotSpreadDeg = 7.0F;      // each streak's random angle off the aim, +-
 constexpr float laserShotFieldHalfWidth = 18.0F; // random side offset at the nose, +-
-constexpr float heavyLanceSpeedMult = 2.8F;   // evolved: faster than base
-constexpr float heavyLanceSpacing = 2.0F;     // evolved fires this many times slower, x dmg/bolt
-constexpr float heavyLanceRadius = 50.0F;     // arc radius at launch, doubles by 480 units out
-constexpr float heavyLanceHalfWidth = 5.0F;
-constexpr float heavyLanceMaxSkew = 32.0F;    // degrees an arc can lean left/right, random per arc
+// Evolved Laser Shots: the same barrage of chevron bolts, faster, bigger and harder hitting.
+constexpr float laserVolleySpeedMult = 1.6F;  // x the base laser shot speed
+constexpr float laserVolleyDamageMult = 1.5F; // x the base per-streak damage
+constexpr float laserVolleyHalfWidth = 7.0F;
+constexpr float laserVolleyLength = 30.0F;    // chevron length, also the hit segment
 constexpr float mineDamageMult = 0.7F;
 constexpr float shockDamageMult = 1.5F;
 constexpr float shockKnockbackBase = 20.0F;
