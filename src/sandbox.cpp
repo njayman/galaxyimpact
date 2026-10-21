@@ -150,20 +150,21 @@ void sandboxToggleEvolve(Game& game)
 
 void sandboxForceAttackNearestBoss(Game& game)
 {
-    if (game.run.bosses.empty())
-    {
-        return;
-    }
-    Boss* nearest = &game.run.bosses.front();
-    float bestDist = Vector2Distance(game.run.player.position, nearest->position);
+    // Body parts (segments, plates) have no moveset; only a boss that picks attacks counts.
+    Boss* nearest = nullptr;
+    float bestDist = 0;
     for (auto& boss : game.run.bosses)
     {
         const float dist = Vector2Distance(game.run.player.position, boss.position);
-        if (dist < bestDist)
+        if (!boss.moveset.empty() && (nearest == nullptr || dist < bestDist))
         {
             bestDist = dist;
             nearest = &boss;
         }
+    }
+    if (nearest == nullptr)
+    {
+        return;
     }
     forceBossAttack(game, *nearest, static_cast<BossAttack>(game.sandboxBossAttackIndex));
 }

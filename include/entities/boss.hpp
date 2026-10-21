@@ -216,6 +216,7 @@ class Boss
 
     bool isArmorSegment = false;
     float segmentVolleyTimer = 0;
+    float gunPopTimer = 0; // gun retracting back into the segment after a volley
 
     bool isSlagmaw = false;
 

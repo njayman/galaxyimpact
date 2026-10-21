@@ -109,7 +109,7 @@ void drawSporeProjectile(const BossProjectile& projectile);
 void drawKrakenHurledEnemy(const BossProjectile& projectile);
 void drawFluidBlob(Vector2 center, float radius, Color color, float seed, Vector2 trailDir);
 void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color color,
-                            Vector2 velocity);
+                            Vector2 velocity, Vector2 facing, float mouthOpen);
 void drawKrakenShape(Vector2 center, float radius, float seed, Color color);
 void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bodyRadius,
                        float seed, float thicknessScale, float waveScale, bool calm, Color color,
@@ -3856,15 +3856,169 @@ void drawPanelHex(Vector2 center, float radius, float rotationDeg, Color baseCol
     drawPanelShape(center, radius, 6, rotationDeg, baseColor, seed);
 }
 
-void drawWreckwormSegmentShape(Vector2 center, float radius, float seed, Color baseColor,
-                               bool armor)
+const Color wreckwormSlime = ColorLerp(Palette::RustbloomAccent, Palette::RustbloomVoid, 0.5F);
+
+// A goo tube between two Wreckworm parts: overlapping beads that pinch to a neck mid-span.
+void drawWreckwormGooBridge(Vector2 from, Vector2 to, float fromRadius, float toRadius, float seed)
 {
-    drawPanelHex(center, radius, seed * 40.0F, baseColor, seed);
+    const float dist = Vector2Distance(from, to);
+    if (dist < 1.0F || dist > (fromRadius + toRadius) * 1.8F)
+    {
+        return; // shed or torn apart: no strand
+    }
+    const Vector2 dir = Vector2Scale(Vector2Subtract(to, from), 1.0F / dist);
+    const Vector2 perp{.x = -dir.y, .y = dir.x};
+    const auto t = static_cast<float>(GetTime());
+    const Vector2 start = Vector2Add(from, Vector2Scale(dir, fromRadius * 0.5F));
+    const Vector2 end = Vector2Subtract(to, Vector2Scale(dir, toRadius * 0.5F));
+    constexpr int32_t beads = 9;
+    for (int32_t pass = 0; pass < 2; pass++)
+    {
+        for (int32_t i = 0; i <= beads; i++)
+        {
+            const float s = static_cast<float>(i) / beads;
+            const float pinch = 1.0F - 0.3F * std::sin(s * std::numbers::pi_v<float>);
+            const float width = std::lerp(fromRadius, toRadius, s) * 0.5F * pinch;
+            const float sag = std::sin(s * std::numbers::pi_v<float>) * std::sin(t * 2.6F + seed) *
+                              width * 0.25F;
+            const Vector2 pos = Vector2Add(Vector2Lerp(start, end, s), Vector2Scale(perp, sag));
+            if (pass == 0)
+            {
+                DrawCircleV(pos, width, wreckwormSlime);
+            }
+            else
+            {
+                DrawCircleV(Vector2Add(pos, Vector2{.x = -width * 0.35F, .y = -width * 0.35F}),
+                            width * 0.28F, Fade(WHITE, 0.12F));
+            }
+        }
+    }
+}
+
+// A slime drop oozing off a rim point: it stretches out on a thread, then falls away.
+void drawSlimeDrip(Vector2 rim, Vector2 outward, float size, float phase, Color color)
+{
+    const float p = phase - std::floor(phase);
+    const Vector2 drop = Vector2Add(rim, Vector2Scale(outward, size * (0.6F + p * 3.2F)));
+    const float alpha = p < 0.8F ? 1.0F : (1.0F - p) / 0.2F;
+    if (p < 0.65F)
+    {
+        DrawLineEx(rim, drop, size * 0.35F, Fade(color, alpha));
+    }
+    DrawCircleV(drop, size * (1.0F - p * 0.35F), Fade(color, alpha));
+    DrawCircleV(Vector2Add(drop, Vector2{.x = -size * 0.3F, .y = -size * 0.3F}), size * 0.3F,
+                Fade(WHITE, 0.3F * alpha));
+}
+
+// A gun that pushes out through a body segment's goo, aimed at the player. ext 0..1.
+void drawWreckwormSegmentGun(Vector2 center, float radius, Vector2 aim, float ext, bool flash)
+{
+    const float e = 1.0F - (1.0F - ext) * (1.0F - ext) * (1.0F - ext);
+    const Vector2 tip = Vector2Add(center, Vector2Scale(aim, radius * wreckwormGunLength * e));
+    const float aimDeg = std::atan2(aim.y, aim.x) * RAD2DEG;
+    DrawCircleV(center, radius * 0.5F * e, ColorLerp(wreckwormSlime, Palette::RustbloomVoid, 0.5F));
+    DrawLineEx(center, tip, radius * 0.42F, Palette::StructDark);
+    DrawLineEx(center, tip, radius * 0.3F, Palette::Haze);
+    DrawLineEx(center, tip, radius * 0.1F, Palette::StructDark);
+    const Vector2 band = Vector2Subtract(tip, Vector2Scale(aim, radius * 0.22F * e));
+    DrawLineEx(band, tip, radius * 0.48F, Palette::StructDark);
+    DrawLineEx(band, tip, radius * 0.38F, Palette::StructLight);
+    drawPanelShape(center, radius * 0.42F * e, 6, aimDeg, Palette::StructMid, radius);
+    DrawRing(center, radius * 0.4F * e, radius * 0.55F * e, 0, 360, 24,
+             Fade(wreckwormSlime, 0.9F));
+    // Charging: the muzzle glows as the gun comes out.
+    DrawCircleV(tip, radius * 0.14F * e, Fade(Palette::RustbloomAccent, 0.4F + 0.5F * e));
+    if (flash)
+    {
+        DrawCircleV(tip, radius * 0.26F, Fade(Palette::Crit, 0.85F));
+        DrawCircleV(tip, radius * 0.13F, WHITE);
+    }
+}
+
+// A curved chitin claw from base to tip, bowing toward `bow`, tapering to a point.
+void drawChitinClaw(Vector2 base, Vector2 tip, Vector2 bow, float width, Color color)
+{
+    constexpr int32_t steps = 6;
+    const Vector2 mid = Vector2Add(Vector2Lerp(base, tip, 0.5F), bow);
+    Vector2 prev = base;
+    for (int32_t i = 1; i <= steps; i++)
+    {
+        const float s = static_cast<float>(i) / steps;
+        const float u = 1.0F - s;
+        const Vector2 p = Vector2Add(Vector2Add(Vector2Scale(base, u * u), Vector2Scale(mid, 2.0F * u * s)),
+                                     Vector2Scale(tip, s * s));
+        const float w = width * (1.0F - s * 0.85F);
+        DrawLineEx(prev, p, w, color);
+        DrawCircleV(p, w / 2, color);
+        prev = p;
+    }
+    DrawLineEx(Vector2Lerp(base, mid, 0.3F), Vector2Lerp(mid, tip, 0.6F), width * 0.18F,
+               Fade(Palette::Haze, 0.35F));
+}
+
+void drawWreckwormSegmentShape(Vector2 center, float radius, float seed, Color baseColor,
+                               bool armor, float spinDeg, Vector2 spineDir)
+{
+    const auto t = static_cast<float>(GetTime());
+    if (armor && Vector2Length(spineDir) > 0.01F)
+    {
+        // Lateral spines swept back from the travel direction, spinning with the body.
+        const Vector2 dir = Vector2Rotate(spineDir, spinDeg * DEG2RAD);
+        const Vector2 perp{.x = -dir.y, .y = dir.x};
+        for (const float side : {1.0F, -1.0F})
+        {
+            const Vector2 base = Vector2Add(center, Vector2Scale(perp, side * radius * 0.7F));
+            const Vector2 tip = Vector2Add(
+                base, Vector2Add(Vector2Scale(perp, side * radius * 0.55F), Vector2Scale(dir, -radius * 0.35F)));
+            drawChitinClaw(base, tip, Vector2Scale(dir, radius * 0.12F), radius * 0.3F,
+                           Palette::StructDark);
+        }
+    }
+    drawPanelHex(center, radius, seed * 40.0F + spinDeg, baseColor, seed);
+    if (armor)
+    {
+        // A glowing seam where the plate has split.
+        const float glow = 0.4F + 0.3F * std::sin(t * 2.5F + seed);
+        const float a = hashNoise(seed * 4.1F) * 2.0F * std::numbers::pi_v<float> + spinDeg * DEG2RAD;
+        const Vector2 c0 = Vector2Add(center, Vector2{.x = std::cos(a) * radius * 0.7F, .y = std::sin(a) * radius * 0.7F});
+        const Vector2 c1 = Vector2Add(center, Vector2{.x = std::cos(a + 2.4F) * radius * 0.15F,
+                                                      .y = std::sin(a + 2.4F) * radius * 0.15F});
+        const Vector2 c2 = Vector2Add(center, Vector2{.x = std::cos(a + 3.3F) * radius * 0.6F,
+                                                      .y = std::sin(a + 3.3F) * radius * 0.6F});
+        DrawLineEx(c0, c1, radius * 0.06F, Fade(Palette::RustbloomAccent, glow));
+        DrawLineEx(c1, c2, radius * 0.05F, Fade(Palette::RustbloomAccent, glow));
+    }
+    if (spinDeg != 0)
+    {
+        // Spinning fast: two faint motion arcs ride the rim.
+        for (int32_t i = 0; i < 2; i++)
+        {
+            const float a = spinDeg + static_cast<float>(i) * 180.0F;
+            DrawRing(center, radius * 1.04F, radius * 1.14F, a, a + 80.0F, 16,
+                     Fade(Palette::Haze, 0.35F));
+        }
+    }
+
+    // Goo slicked over one flank, with a drip.
+    const float gooAngle = hashNoise(seed * 2.7F) * 2.0F * std::numbers::pi_v<float> +
+                           spinDeg * DEG2RAD;
+    const Vector2 gooDir{.x = std::cos(gooAngle), .y = std::sin(gooAngle)};
+    const float gooScale = armor ? 0.6F : 1.0F;
+    for (int32_t i = 0; i < 3; i++)
+    {
+        const float k = static_cast<float>(i);
+        const Vector2 pos = Vector2Add(
+            center, Vector2Scale(Vector2Rotate(gooDir, (k - 1.0F) * 0.6F), radius * (0.55F - k * 0.08F)));
+        DrawCircleV(pos, radius * (0.32F - k * 0.05F) * gooScale, wreckwormSlime);
+    }
+    DrawCircleV(Vector2Add(center, Vector2Scale(gooDir, radius * 0.5F)), radius * 0.08F * gooScale,
+                Fade(WHITE, 0.3F));
+    drawSlimeDrip(Vector2Add(center, Vector2Scale(gooDir, radius * 0.82F)), gooDir,
+                  radius * 0.1F * gooScale, t * 0.3F + seed * 0.37F, wreckwormSlime);
     if (armor)
     {
         return;
     }
-    const auto t = static_cast<float>(GetTime());
     constexpr int32_t pustuleCount = 2;
     for (int32_t i = 0; i < pustuleCount; i++)
     {
@@ -3957,8 +4111,23 @@ void drawBoss(const Game& game, const Boss& boss)
     }
     else if (boss.isWreckwormHead)
     {
+        // The mouth gapes and turns on the player for Spore Spit, half-opens while coiling.
+        const bool spitting = boss.attack == BossAttack::Barrage && boss.state != BossState::IDLE;
+        const bool coiling = boss.attack == BossAttack::CoilClamp && boss.state != BossState::IDLE;
+        const Vector2 toPlayer = Vector2Subtract(game.run.player.position, bossCenter);
+        const Vector2 facing = spitting || Vector2Length(boss.wreckwormVelocity) < 1.0F
+                                   ? toPlayer
+                                   : boss.wreckwormVelocity;
+        const float idleMouth = 0.2F + 0.08F * std::sin(static_cast<float>(GetTime()) * 2.0F);
+        const Color slime =
+            ColorLerp(ColorLerp(Palette::RustbloomAccent, Palette::RustbloomVoid, 0.15F), ufoColor,
+                      boss.color.r == boss.baseColor.r && boss.color.g == boss.baseColor.g ? 0.0F
+                                                                                          : 0.25F);
+        const float flash = std::max(boss.hitFlashTimer / UpdateConstants::hitFlashDuration, 0.0F);
         drawWreckwormHeadShape(bossCenter, boss.size.x / 2, static_cast<float>(boss.instanceId),
-                               ufoColor, boss.wreckwormVelocity);
+                               ColorLerp(slime, WHITE, 0.3F * std::min(flash, 1.0F)),
+                               boss.wreckwormVelocity, facing,
+                               spitting ? 1.0F : coiling ? 0.55F : idleMouth);
     }
     else if (boss.isWreckwormSegment && boss.krakenSnakeVariant)
     {
@@ -3966,9 +4135,60 @@ void drawBoss(const Game& game, const Boss& boss)
     }
     else if (boss.isWreckwormSegment)
     {
+        // Goo strand to the part ahead (the previous segment, or the head for the first).
+        const Boss* ahead = nullptr;
+        const Boss* head = nullptr;
+        for (const auto& other : game.run.bosses)
+        {
+            if (other.health <= 0)
+            {
+                continue;
+            }
+            if (other.isWreckwormHead && other.instanceId == boss.segmentOwnerId)
+            {
+                head = &other;
+            }
+            else if (other.isWreckwormSegment && other.segmentOwnerId == boss.segmentOwnerId &&
+                     other.segmentIndex == boss.segmentIndex - 1)
+            {
+                ahead = &other;
+            }
+        }
+        if (boss.segmentIndex == 0)
+        {
+            ahead = head;
+        }
+        Vector2 spine{};
+        if (ahead != nullptr && boss.health > 0)
+        {
+            const Vector2 aheadCenter{.x = ahead->position.x + ahead->size.x / 2,
+                                      .y = ahead->position.y + ahead->size.y / 2};
+            spine = Vector2Normalize(Vector2Subtract(aheadCenter, bossCenter));
+            drawWreckwormGooBridge(bossCenter, aheadCenter, boss.size.x / 2,
+                                   std::min(ahead->size.x / 2, boss.size.x * 0.8F),
+                                   static_cast<float>(boss.segmentIndex));
+        }
+        // Bind: the whole body spins up while the coil closes.
+        const bool binding = head != nullptr && head->attack == BossAttack::CoilClamp &&
+                             head->state != BossState::IDLE;
+        const float spinDir = boss.segmentIndex % 2 == 0 ? 1.0F : -1.0F;
         drawWreckwormSegmentShape(bossCenter, boss.size.x / 2,
                                   static_cast<float>(boss.segmentIndex + 1), ufoColor,
-                                  boss.isArmorSegment);
+                                  boss.isArmorSegment,
+                                  binding ? static_cast<float>(GetTime()) * 900.0F * spinDir : 0.0F,
+                                  spine);
+        if (!boss.isArmorSegment && boss.health > 0)
+        {
+            const float lead = std::clamp(1.0F - boss.segmentVolleyTimer / wreckwormGunPopLead, 0.0F, 1.0F);
+            const float ext = std::max(lead, boss.gunPopTimer / wreckwormGunRetractDuration);
+            if (ext > 0.01F)
+            {
+                const Vector2 aim =
+                    Vector2Normalize(Vector2Subtract(game.run.player.position, bossCenter));
+                drawWreckwormSegmentGun(bossCenter, boss.size.x / 2, aim, ext,
+                                        boss.gunPopTimer > wreckwormGunRetractDuration - 0.08F);
+            }
+        }
     }
     else if (boss.isKraken && boss.krakenEncounter >= 3 && game.run.bossCutscenePhase == 4)
     {
@@ -4547,46 +4767,169 @@ void drawKrakenHurledEnemy(const BossProjectile& projectile)
     drawKrakenGrabbedEnemy(projectile.position, projectile.visualEnemyKind, 1.0F, angle);
 }
 
-void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color color, Vector2 velocity)
+// Slime head: a glossy goo dome over a maw that faces `facing`, sitting in a lobed puddle that
+// oozes drips. Light comes from the upper left. mouthOpen 0..1.
+void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color color, Vector2 velocity,
+                            Vector2 facing, float mouthOpen)
 {
     const float speed = Vector2Length(velocity);
-    const float stretchAmount = std::min(speed / 900.0F, 0.35F);
+    const float stretchAmount = std::min(speed / 900.0F, 0.08F); // stays round: no comet look
     const Vector2 dir = speed > 1.0F ? Vector2Normalize(velocity) : Vector2{.x = 0, .y = -1};
     const Vector2 perp{.x = -dir.y, .y = dir.x};
-
+    const Vector2 face =
+        Vector2Length(facing) > 0.01F ? Vector2Normalize(facing) : dir;
+    const Vector2 facePerp{.x = -face.y, .y = face.x};
     const auto t = static_cast<float>(GetTime());
-    const float wobble = std::sin(t * 9.0F + seed) * stretchAmount * 0.6F;
-    const float stretchAlong = 1.0F + stretchAmount + wobble;
-    const float stretchAcross = 1.0F - stretchAmount * 0.5F - wobble * 0.3F;
+    constexpr float tau = 2.0F * std::numbers::pi_v<float>;
 
-    constexpr int32_t vertexCount = 16;
-    std::array<Vector2, vertexCount> verts{};
-    for (int32_t i = 0; i < vertexCount; i++)
+    // A wobbling goo outline stretched along the travel direction.
+    const auto blob = [&](Vector2 c, float r, float stretch, Color col)
     {
-        const float angle =
-            static_cast<float>(i) * (360.0F / static_cast<float>(vertexCount)) * DEG2RAD;
-        const Vector2 local{.x = std::cos(angle), .y = std::sin(angle)};
-        const float jiggle = 0.94F + hashNoise(seed * 3.1F + static_cast<float>(i)) * 0.1F +
-                             0.03F * std::sin(t * 6.0F + static_cast<float>(i) * 1.7F + seed);
-        const float r = radius * jiggle;
-        const float alongDir = local.x * dir.x + local.y * dir.y;
-        const float alongPerp = local.x * perp.x + local.y * perp.y;
-        const Vector2 offset = Vector2Add(Vector2Scale(dir, alongDir * stretchAlong * r),
-                                          Vector2Scale(perp, alongPerp * stretchAcross * r));
-        verts.at(static_cast<size_t>(i)) = Vector2Add(center, offset);
+        constexpr int32_t vertexCount = 24;
+        std::array<Vector2, vertexCount> verts{};
+        for (int32_t i = 0; i < vertexCount; i++)
+        {
+            const float angle = static_cast<float>(i) * tau / static_cast<float>(vertexCount);
+            const Vector2 local{.x = std::cos(angle), .y = std::sin(angle)};
+            const float jiggle = 0.95F + hashNoise(seed * 3.1F + static_cast<float>(i)) * 0.07F +
+                                 0.035F * std::sin(t * 4.0F + static_cast<float>(i) * 1.3F + seed);
+            const float along = Vector2DotProduct(local, dir) * (1.0F + stretch);
+            const float across = Vector2DotProduct(local, perp) * (1.0F - stretch * 0.5F);
+            verts.at(static_cast<size_t>(i)) =
+                Vector2Add(c, Vector2Scale(Vector2Add(Vector2Scale(dir, along),
+                                                      Vector2Scale(perp, across)),
+                                           r * jiggle));
+        }
+        for (size_t i = 0; i < verts.size(); i++)
+        {
+            DrawTriangle(c, verts.at((i + 1) % verts.size()), verts.at(i), col);
+        }
+    };
+
+    const Color dark = ColorLerp(color, Palette::RustbloomVoid, 0.55F);
+    const Color shade = ColorLerp(color, Palette::RustbloomVoid, 0.25F);
+    const Color lit = ColorLerp(color, WHITE, 0.14F);
+
+    // Chitin crest: three spikes fanned back from the crown, under the goo.
+    for (int32_t i = 0; i < 3; i++)
+    {
+        const float k = static_cast<float>(i) - 1.0F;
+        const Vector2 out = Vector2Rotate(Vector2Negate(face), k * 0.55F);
+        const Vector2 base = Vector2Add(center, Vector2Scale(out, radius * 0.75F));
+        const Vector2 tip = Vector2Add(center, Vector2Scale(out, radius * (1.45F - std::fabs(k) * 0.2F)));
+        drawChitinClaw(base, tip, Vector2Scale(Vector2Rotate(out, 1.57F), radius * 0.1F * k),
+                       radius * 0.26F, Palette::StructDark);
     }
 
-    for (size_t i = 0; i < verts.size(); i++)
+    // Puddle the head sits in: a dark base with lobes oozing out behind.
+    blob(Vector2Subtract(center, Vector2Scale(dir, radius * 0.12F)), radius * 1.03F,
+         stretchAmount + 0.1F, dark);
+    for (int32_t i = 0; i < 4; i++)
     {
-        DrawTriangle(center, verts.at((i + 1) % verts.size()), verts.at(i), color);
+        const float k = static_cast<float>(i);
+        const float angle = std::atan2(-dir.y, -dir.x) + (k - 1.5F) * 0.7F;
+        const float ooze = 0.5F + 0.5F * std::sin(t * 1.4F + k * 1.9F + seed);
+        const Vector2 lobe = Vector2Add(
+            center, Vector2Scale(Vector2{.x = std::cos(angle), .y = std::sin(angle)},
+                                 radius * (0.98F + 0.1F * ooze)));
+        DrawCircleV(lobe, radius * (0.11F + 0.04F * hashNoise(seed + k)), dark);
     }
 
-    DrawCircleV(Vector2Add(center, Vector2Scale(perp, -radius * 0.28F)), radius * 0.3F,
-                Fade(WHITE, 0.16F));
-    DrawCircleV(Vector2Add(center, Vector2{.x = radius * 0.18F, .y = -radius * 0.22F}),
-                radius * 0.14F, Fade(WHITE, 0.3F));
-    DrawCircleV(Vector2Add(center, Vector2Scale(dir, radius * 0.25F)), radius * 0.18F,
-                Fade(ColorLerp(color, Palette::Void, 0.3F), 0.35F));
+    // Dome, shaded in layers toward the light.
+    blob(center, radius, stretchAmount, shade);
+    blob(Vector2Add(center, Vector2{.x = -radius * 0.07F, .y = -radius * 0.08F}), radius * 0.86F,
+         stretchAmount, color);
+    blob(Vector2Add(center, Vector2{.x = -radius * 0.2F, .y = -radius * 0.22F}), radius * 0.5F,
+         stretchAmount * 0.5F, lit);
+
+    // Bubbles suspended in the goo.
+    for (int32_t i = 0; i < 4; i++)
+    {
+        const float k = static_cast<float>(i);
+        const float angle = hashNoise(seed * 5.0F + k) * tau + t * 0.15F;
+        const float dist = radius * (0.25F + 0.35F * hashNoise(seed * 7.0F + k));
+        const Vector2 pos =
+            Vector2Add(center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+        const float r = radius * (0.04F + 0.04F * hashNoise(seed * 9.0F + k));
+        DrawRing(pos, r * 0.7F, r, 0, 360, 16, Fade(lit, 0.5F));
+    }
+
+    // The maw on the front face: dark lips, a glowing throat, drool strands across the gap.
+    const Vector2 mouth = Vector2Add(center, Vector2Scale(face, radius * 0.45F));
+    const float halfWidth = radius * (0.42F + 0.1F * mouthOpen);
+    const float halfDepth = radius * (0.1F + 0.22F * mouthOpen);
+    const auto mouthPoint = [&](float angle, float scale)
+    {
+        return Vector2Add(mouth, Vector2Add(Vector2Scale(facePerp, std::cos(angle) * halfWidth * scale),
+                                            Vector2Scale(face, std::sin(angle) * halfDepth * scale)));
+    };
+    constexpr int32_t mouthVerts = 20;
+    for (int32_t pass = 0; pass < 3; pass++)
+    {
+        const float scale = std::array{1.18F, 1.0F, 0.55F}.at(static_cast<size_t>(pass));
+        const float pulse = 0.5F + 0.5F * std::sin(t * 6.0F + seed);
+        const Color col = pass == 0   ? dark
+                          : pass == 1 ? Palette::RustbloomVoid
+                                      : Fade(ColorLerp(Palette::RustbloomAccent, Palette::Crit, 0.3F),
+                                             (0.25F + 0.45F * pulse) * mouthOpen);
+        for (int32_t i = 0; i < mouthVerts; i++)
+        {
+            const float a0 = static_cast<float>(i) * tau / mouthVerts;
+            const float a1 = static_cast<float>(i + 1) * tau / mouthVerts;
+            DrawTriangle(mouth, mouthPoint(a1, scale), mouthPoint(a0, scale), col);
+            DrawTriangle(mouth, mouthPoint(a0, scale), mouthPoint(a1, scale), col);
+        }
+    }
+    // Mandibles: two pairs of curved claws flanking the maw, spreading as it opens.
+    for (const float side : {1.0F, -1.0F})
+    {
+        for (int32_t i = 0; i < 2; i++)
+        {
+            const float k = static_cast<float>(i);
+            const Vector2 base = Vector2Add(mouthPoint(side > 0 ? 0.0F : std::numbers::pi_v<float>, 1.05F),
+                                            Vector2Scale(face, -radius * 0.12F * k));
+            const float spread = (0.25F + 0.45F * mouthOpen) * side;
+            const Vector2 out = Vector2Add(Vector2Scale(face, 1.0F - k * 0.25F),
+                                           Vector2Scale(facePerp, spread + side * k * 0.35F));
+            const Vector2 tip = Vector2Add(base, Vector2Scale(Vector2Normalize(out), radius * (0.62F - k * 0.15F)));
+            drawChitinClaw(base, tip, Vector2Scale(facePerp, side * radius * 0.16F),
+                           radius * (0.16F - k * 0.03F), Palette::StructDark);
+        }
+    }
+
+    // Upper lip highlight on the dome side.
+    for (int32_t i = 0; i < mouthVerts / 2; i++)
+    {
+        const float a0 = std::numbers::pi_v<float> + static_cast<float>(i) * tau / mouthVerts;
+        const float a1 = a0 + tau / mouthVerts;
+        DrawLineEx(mouthPoint(a0, 1.22F), mouthPoint(a1, 1.22F), radius * 0.035F, Fade(lit, 0.8F));
+    }
+    for (int32_t i = 0; i < 3; i++)
+    {
+        const float x = std::array{-0.55F, 0.05F, 0.5F}.at(static_cast<size_t>(i));
+        const float sway = 0.15F * std::sin(t * 3.0F + static_cast<float>(i) * 2.0F + seed);
+        const Vector2 top = mouthPoint(std::acos(std::clamp(x, -1.0F, 1.0F)) + std::numbers::pi_v<float>, 1.0F);
+        const Vector2 bottom = mouthPoint(std::acos(std::clamp(x + sway, -1.0F, 1.0F)), 1.0F);
+        DrawLineEx(top, bottom, radius * (0.025F + 0.02F * (1.0F - mouthOpen)), Fade(lit, 0.55F));
+    }
+
+    // Gloss: hot spots where the light catches the dome.
+    DrawCircleV(Vector2Add(center, Vector2{.x = -radius * 0.34F, .y = -radius * 0.4F}),
+                radius * 0.08F, Fade(WHITE, 0.55F));
+    DrawCircleV(Vector2Add(center, Vector2{.x = -radius * 0.2F, .y = -radius * 0.5F}),
+                radius * 0.035F, Fade(WHITE, 0.45F));
+
+    // Drips oozing off the rim, plus one from the lower lip.
+    for (int32_t i = 0; i < 3; i++)
+    {
+        const float k = static_cast<float>(i);
+        const float angle = std::atan2(dir.y, dir.x) + 1.7F + k * 1.45F;
+        const Vector2 out{.x = std::cos(angle), .y = std::sin(angle)};
+        drawSlimeDrip(Vector2Add(center, Vector2Scale(out, radius * 0.95F)), out, radius * 0.06F,
+                      t * 0.25F + k * 0.37F + seed, shade);
+    }
+    drawSlimeDrip(mouthPoint(std::numbers::pi_v<float> * 0.5F, 1.15F), face, radius * 0.05F,
+                  t * 0.4F + seed, Fade(lit, 0.8F));
 }
 
 void drawKrakenShape(Vector2 center, float radius, float seed, Color color)

@@ -2678,6 +2678,7 @@ void updateWreckwormSegmentVolley(Game& game, Boss& segment, float deltaTime)
         return;
     }
 
+    segment.gunPopTimer = std::max(0.0F, segment.gunPopTimer - deltaTime);
     segment.segmentVolleyTimer -= deltaTime;
     if (segment.segmentVolleyTimer > 0)
     {
@@ -2698,8 +2699,10 @@ void updateWreckwormSegmentVolley(Game& game, Boss& segment, float deltaTime)
                             .y = segment.position.y + segment.size.y / 2};
     const Vector2 direction =
         Vector2Normalize(Vector2Subtract(game.run.player.position, segCenter));
+    segment.gunPopTimer = wreckwormGunRetractDuration;
     game.run.bossProjectiles.push_back(BossProjectile{
-        .position = segCenter,
+        .position = Vector2Add(segCenter, Vector2Scale(direction, segment.size.x / 2 *
+                                                                      wreckwormGunLength)),
         .velocity = Vector2Scale(direction, wreckwormSegmentVolleyProjSpeed),
         .radius = 5,
         .homing = false,
@@ -3257,8 +3260,12 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                     !isSporeSpit && (boss.isWreckwormHead || boss.isWreckwormSegment);
                 constexpr std::array<Color, 3> fluidColors{Palette::RustbloomAccent, Palette::Charge,
                                                             Palette::Accent};
+                // Spores leave the slime head's mouth, which turns to face the player.
+                const Vector2 muzzle =
+                    isSporeSpit ? Vector2Add(bossCenter, Vector2Scale(direction, boss.size.x * 0.3F))
+                                : bossCenter;
                 game.run.bossProjectiles.push_back(BossProjectile{
-                    .position = bossCenter,
+                    .position = muzzle,
                     .velocity = Vector2Scale(direction, barrageProjSpeed * attackScale),
                     .radius = 6,
                     .homing = false,

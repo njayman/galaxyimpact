@@ -233,6 +233,10 @@ constexpr float wreckwormSegmentVolleyIntervalMin = 3.0F;
 constexpr float wreckwormSegmentVolleyIntervalMax = 5.0F;
 constexpr float wreckwormSegmentVolleyDamageMult = 0.4F;
 constexpr float wreckwormSegmentVolleyProjSpeed = 7.0F;
+// A segment's gun pops out this long before its volley and sinks back over the retract time.
+constexpr float wreckwormGunPopLead = 0.45F;
+constexpr float wreckwormGunRetractDuration = 0.4F;
+constexpr float wreckwormGunLength = 1.5F; // muzzle distance in segment radii
 
 constexpr float meteorHellSpawnDistMin = 500.0F;
 constexpr float meteorHellSpawnDistMax = 700.0F;
