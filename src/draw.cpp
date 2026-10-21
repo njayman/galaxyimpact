@@ -148,7 +148,7 @@ void drawLaserBolt(const Bullet& b);
 void drawPickupIcon(PickupType type, ElementType element, Vector2 position, float alpha);
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius, Color rim);
 
-// Laser bolt: a comet streak, faint thin tail to a bright head. Evolved: a matte lavender 110 degree
+// Laser bolt: a comet streak, faint thin tail to a bright head. Evolved: a matte sakura-pink 110 degree
 // ">" over a darker rim, trailing a faint flat wake.
 void drawLaserBolt(const Bullet& b)
 {
@@ -175,9 +175,9 @@ void drawLaserBolt(const Bullet& b)
                 DrawTriangle(x, z, y, col);
             }
         };
-        // Matte, like the rest of the palette: a flat lavender body over a darker rim, no glow.
-        const Color body = Palette::PunctumHaze;
-        const Color rim = ColorLerp(Palette::PunctumHaze, Palette::Void, 0.45F);
+        // Matte, like the rest of the palette: a flat sakura-pink body over a darker rim, no glow.
+        constexpr Color body{.r = 238, .g = 172, .b = 192, .a = 255};
+        const Color rim = ColorLerp(body, Palette::Void, 0.45F);
         // Faint flat wake behind the head.
         constexpr int trailSteps = 6;
         for (int i = 0; i < trailSteps; i++)
