@@ -139,6 +139,19 @@ void sandboxCycleWeapon(Game& game, int32_t dir)
     first = Weapon{.type = type, .level = level};
 }
 
+// Steps the first weapon's level within its skill's range, keeping the skill level in step.
+void sandboxStepWeaponLevel(Game& game, int32_t dir)
+{
+    if (game.run.weapons.empty())
+    {
+        return;
+    }
+    Weapon& first = game.run.weapons.front();
+    const auto grant = static_cast<size_t>(weaponGrantSkill.at(static_cast<size_t>(first.type)));
+    first.level = std::clamp(first.level + dir, 1, Skills.at(grant).maxLevel);
+    game.run.skillLevels.at(grant) = first.level;
+}
+
 void sandboxToggleEvolve(Game& game)
 {
     if (!game.run.weapons.empty() &&
@@ -385,6 +398,20 @@ auto sandboxMenuSteppers() -> const std::vector<SandboxMenuStepper>&
          },
          [](Game& game) { sandboxCycleWeapon(game, -1); },
          [](Game& game) { sandboxCycleWeapon(game, 1); }},
+        {"Weapon Level",
+         [](const Game& game)
+         {
+             if (game.run.weapons.empty())
+             {
+                 return std::string("-");
+             }
+             const Weapon& first = game.run.weapons.front();
+             return std::format("{} / {}", first.level,
+                                Skills.at(static_cast<size_t>(weaponGrantSkill.at(static_cast<size_t>(first.type))))
+                                    .maxLevel);
+         },
+         [](Game& game) { sandboxStepWeaponLevel(game, -1); },
+         [](Game& game) { sandboxStepWeaponLevel(game, 1); }},
         {"Pickup",
          [](const Game& game) { return std::string(sandboxPickupName(game.sandboxPickupIndex)); },
          [](Game& game)
