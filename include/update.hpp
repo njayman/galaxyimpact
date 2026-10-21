@@ -45,6 +45,7 @@ constexpr int32_t qteParryChance = 15;
 constexpr int32_t qteDashChance = 15;
 constexpr int32_t qteShieldChance = 15;
 constexpr float qteMinGap = 20.0F; // shared rule: at least this long between Boss QTEs
+constexpr float qteDamageMult = 3.0F; // shared rule: every hit on an enemy or boss during a QTE
 // Beltbreaker plate rush
 constexpr float beltbreakerPlateRushCueDuration = 0.6F;
 constexpr float beltbreakerPlateRushOffscreenMargin = 140.0F;
@@ -76,6 +77,17 @@ constexpr float wreckwormConstrictLungeRearFrac = 0.4F;
 constexpr int32_t wreckwormConstrictCrushDamage = 2; // as heavy as a plate dash or ring crush
 constexpr float wreckwormPunishWindow = 3.0F; // clean clear: stunned head
 constexpr float wreckwormPunishDamageMult = 1.5F;
+// Wreckworm rush (Burrow Charge, Dash Rush): a dodge chain as the head and body pass
+constexpr float wreckwormRushTriggerDist = 340.0F; // head this close and closing starts it
+constexpr float wreckwormRushCrawlSpeed = 420.0F;  // head's real-time crawl, so it passes the ship
+constexpr int32_t wreckwormRushPrompts = 3;
+constexpr float wreckwormRushPromptWindow = 0.8F;
+constexpr float wreckwormRushBeat = 0.3F;
+constexpr int32_t wreckwormRushParryChance = 20;
+// Each answer strikes the head for this share of its max health (before qteDamageMult).
+constexpr float wreckwormRushStrikeFrac = 0.02F;
+constexpr float wreckwormRushParryStrikeFrac = 0.05F;
+constexpr float wreckwormRushNerveStrikeFrac = 0.1F;
 
 constexpr auto beltbreakerShieldedDuration(int32_t plateCount) -> float
 {
@@ -251,6 +263,8 @@ void updateBeltbreakerPlateRush(Game& game, Boss& core, float deltaTime);
 void sendRushPlateHome(Boss& plate);
 auto findWreckwormHeadById(Game& game, int32_t instanceId) -> Boss*;
 void updateWreckwormConstrict(Game& game, Boss& head, float deltaTime);
+void tryBeginWreckwormRush(Game& game, Boss& head, Vector2 headCenter);
+void updateWreckwormRush(Game& game, Boss& head, float deltaTime);
 void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime);
 void updateKrakenLimbs(Game& game, Boss& boss, float deltaTime);
 auto krakenPodPosition(const Boss& boss, int32_t podIndex) -> Vector2;

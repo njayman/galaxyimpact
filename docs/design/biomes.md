@@ -33,6 +33,7 @@ From [Shared Boss QTE rules](https://github.com/njayman/galaxyimpact/issues/3).
 
 - **Cutscene contract:** HUD hidden with letterbox bars, world at 4% speed, player immune. One Prompt at a time from the shared input set: four directions, Shield, Dash, Parry (shield + dash), Nerve, and Mash. A wrong or late answer ends the cutscene and the threat lands live, still dodgeable. Only the threat and its choreography differ per Biome Boss.
 - **Trigger:** a beat the Biome Boss already has and that recurs. Skipped while the player is grabbed or launched, or another cutscene runs. At least 20 s between Boss QTEs.
+- **Damage:** every hit on an enemy or boss while a Boss QTE runs deals 3x damage, prompt strikes included.
 - **Flawless clear:** a 3 s Punish Window; the boss is dazed, cannot attack and takes +50% damage.
 - **Fail:** the live hit only; damage already dealt sticks.
 - **Difficulty by Biome order** (Prompt window / Prompt count / Parry share), exact values per Biome Boss:
@@ -286,6 +287,14 @@ As built: Spore Spit keeps the `Barrage` attack slot and branches on the Wreckwo
 - **Clean clear:** the coil springs open; the head is stunned for the 3 s Punish Window (+50%), and armoured segments take full damage during it.
 - **Fail:** the coil crushes for one hit and releases the player.
 - As built: the Mash takes 8 presses in the 1.6 s window (5 a second, leaving room to react); it is mashed on the Nerve input (SPACE, or the NERVE touch button) and other inputs are ignored. The crush is 2 base damage, scaled like other enemy hits (as heavy as a plate dash or Ring Crush). The coil catches the player when its closing ring reaches them outside the gap, then rides with the ship and keeps tightening during the Mash. Strikes come from segments that have not struck yet. Clean or failed, the clamp skips to its release and the segments rejoin the chain; during the Punish Window the head stops moving, starts no attacks, segments hold their volleys, and a ring of pulsing fragments marks the stunned head. The 20 s minimum gap is shared by every Boss QTE, Plate Rush included.
+
+### Boss QTE: Rush
+
+- **Trigger:** a Burrow Charge or Dash Rush head closing within 340 units of the player (recurs; 20 s minimum gap). Not on the Storm Serpent.
+- **Threat and choreography:** the head keeps crawling through the slowed world at 420 units a second, so it and then the body pass the ship.
+- **Prompts:** 3, 0.8 s each, 0.3 s apart, the usual mix with 20% parry. Every answer strikes the head for 2% of its max health, 5% on a parry, 10% on a nerve burst, all tripled by the QTE damage rule.
+- **Clean clear:** the head ploughs to a stop and the rush ends; Punish Window as Constrict (3 s, +50% damage, no movement or attacks).
+- **Fail:** the cutscene ends and the rush carries on live, still dodgeable.
 
 ### Open for build
 

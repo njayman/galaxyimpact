@@ -208,7 +208,8 @@ class Boss
     int32_t constrictLungeSegment = -1;
     float constrictLungeFrac = 0;
     uint64_t constrictStruckMask = 0; // segments that already struck this Constrict
-    float wreckwormPunishTimer = 0; // Punish Window after a clean Constrict
+    float wreckwormPunishTimer = 0; // Punish Window after a clean Constrict or Rush
+    int32_t rushPromptsLeft = 0;    // Rush QTE prompts still to pose
 
     bool isWreckwormSegment = false;
     int32_t segmentOwnerId = -1;

@@ -270,6 +270,10 @@ void spawnOrganicHitSplash(Game& game, Vector2 position, Color color)
 void damageEnemy(Game& game, size_t index, int32_t amount)
 {
     const auto kind = enemyKinds.at(static_cast<size_t>(game.run.enemies.at(index).kind));
+    if (bossQteActive(game))
+    {
+        amount = static_cast<int32_t>(std::ceil(static_cast<float>(amount) * UpdateConstants::qteDamageMult));
+    }
     const int32_t healthBefore = game.run.enemies.at(index).health;
     game.run.enemies.at(index).health -= amount;
     game.run.enemies.at(index).hitFlashTimer = UpdateConstants::hitFlashDuration;

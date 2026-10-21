@@ -2122,6 +2122,116 @@ void updateWreckwormConstrict(Game& game, Boss& head, float deltaTime)
     endWreckwormConstrict(game, head, true); // every prompt answered
 }
 
+// --- Wreckworm rush QTE (cutscene) -----------------------------------------
+//
+// A Burrow Charge or Dash Rush head about to reach the player starts the boss QTE
+// cutscene. The head keeps crawling on real time so it, then the body, pass the
+// ship while it answers a short chain of prompts; every answer strikes the head
+// (harder for a parry or nerve burst). Clean clear: the head stalls for the Punish
+// Window. A wrong or late answer ends the cutscene and the rush lands live, still
+// dodgeable.
+// --------------------------------------------------------------------------
+
+void tryBeginWreckwormRush(Game& game, Boss& head, Vector2 headCenter)
+{
+    // The Storm Serpent shares the moves but Boss QTEs belong to Biome Bosses only.
+    if (!head.isWreckwormHead || head.krakenSnakeVariant || head.wreckwormPunishTimer > 0 ||
+        !bossQteCanStart(game))
+    {
+        return;
+    }
+    const Vector2 toPlayer = Vector2Subtract(game.run.player.position, headCenter);
+    if (Vector2Length(toPlayer) > UpdateConstants::wreckwormRushTriggerDist ||
+        Vector2DotProduct(toPlayer, head.chargeVelocity) <= 0)
+    {
+        return;
+    }
+    bossQteBegin(game, head.instanceId);
+    game.run.qteThreatDir = Vector2Normalize(head.chargeVelocity);
+    head.rushPromptsLeft = UpdateConstants::wreckwormRushPrompts;
+    playSFX(game, game.resources.sounds.bossWindUp);
+    triggerShake(game, 8, 0.3F);
+}
+
+void endWreckwormRush(Game& game, Boss& head, bool clean)
+{
+    bossQteEnd(game);
+    head.rushPromptsLeft = 0;
+    if (!clean)
+    {
+        playSFX(game, game.resources.sounds.nerveFizzle);
+        return; // the rush carries on live
+    }
+    // The head ploughs to a stop, stunned: the rush is over.
+    head.wreckwormPunishTimer = UpdateConstants::wreckwormPunishWindow;
+    head.chargeVelocity = Vector2{};
+    head.slamHit = false;
+    head.wreckwormRepositioning = false;
+    head.state = BossState::IDLE;
+    head.attackTimer = UpdateConstants::wreckwormPunishWindow;
+    playSFX(game, game.resources.sounds.critical);
+    triggerShake(game, 10, 0.35F);
+}
+
+void updateWreckwormRush(Game& game, Boss& head, float deltaTime)
+{
+    auto& run = game.run;
+    const bool rushing = head.state == BossState::SHOOTING &&
+                         (head.attack == BossAttack::BurrowCharge || head.attack == BossAttack::DashRush);
+    if (!rushing)
+    {
+        endWreckwormRush(game, head, false);
+        return;
+    }
+    head.position = Vector2Add(head.position, Vector2Scale(run.qteThreatDir,
+                                                           UpdateConstants::wreckwormRushCrawlSpeed * deltaTime));
+
+    if (run.qtePrompt != QtePrompt::None)
+    {
+        const int32_t answer = qteReadInput(game, run.qtePrompt);
+        if (answer > 0)
+        {
+            const float frac = run.qtePrompt == QtePrompt::Parry ? UpdateConstants::wreckwormRushParryStrikeFrac
+                               : run.qtePrompt == QtePrompt::Nerve
+                                   ? UpdateConstants::wreckwormRushNerveStrikeFrac
+                                   : UpdateConstants::wreckwormRushStrikeFrac;
+            qteStartAction(game, run.qtePrompt, run.qteThreatDir);
+            damageBoss(game, head,
+                       std::max(1, static_cast<int32_t>(static_cast<float>(head.maxHealth) * frac)), true,
+                       false, false);
+            playSFX(game, game.resources.sounds.critical);
+            if (head.health <= 0)
+            {
+                bossQteEnd(game);
+                return;
+            }
+            run.qtePrompt = QtePrompt::None;
+            run.qteTimer = UpdateConstants::wreckwormRushBeat;
+            run.qteTimerMax = 0;
+        }
+        else if (answer < 0 || run.qteTimer <= 0)
+        {
+            endWreckwormRush(game, head, false);
+        }
+        return;
+    }
+
+    if (run.qteTimer > 0)
+    {
+        return; // beat between prompts
+    }
+    if (head.rushPromptsLeft > 0)
+    {
+        head.rushPromptsLeft--;
+        run.qtePrompt = qtePromptForThreat(game, run.qteThreatDir, UpdateConstants::wreckwormRushParryChance);
+        run.qteTimer = UpdateConstants::wreckwormRushPromptWindow;
+        run.qteTimerMax = UpdateConstants::wreckwormRushPromptWindow;
+        playSFX(game, game.resources.sounds.bossWindUp);
+        return;
+    }
+    endWreckwormRush(game, head, true); // every prompt answered
+}
+
 auto wreckwormDashRushOffDist(const Game& game) -> float
 {
     return std::max(static_cast<float>(game.resources.screenWidth),
@@ -2810,6 +2920,10 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake, bool pi
     {
         amount = static_cast<int32_t>(std::ceil(static_cast<float>(amount) * UpdateConstants::wreckwormPunishDamageMult));
     }
+    if (bossQteActive(game))
+    {
+        amount = static_cast<int32_t>(std::ceil(static_cast<float>(amount) * UpdateConstants::qteDamageMult));
+    }
 
     if (boss.isWreckwormHead && boss.state == BossState::SHOOTING &&
         boss.attack == BossAttack::TailWrap && !piercesTailWrap && boss.segmentCount > 0 &&
@@ -3190,6 +3304,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             boss.barrageTimer -= deltaTime;
             if (boss.slamHit)
             {
+                tryBeginWreckwormRush(game, boss, bossCenter);
                 boss.position =
                     Vector2Add(boss.position, Vector2Scale(boss.chargeVelocity,
                                             deltaTime * (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F)));
@@ -3348,6 +3463,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         {
             boss.position = Vector2Add(boss.position, Vector2Scale(boss.chargeVelocity,
                                             deltaTime * (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F)));
+            tryBeginWreckwormRush(game, boss, bossCenter);
         }
 
         if (boss.attack == BossAttack::CoilClamp)

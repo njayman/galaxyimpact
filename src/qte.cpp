@@ -278,7 +278,14 @@ void updateBossQte(Game& game, float deltaTime)
     }
     if (Boss* head = findWreckwormHeadById(game, run.qteBossId); head != nullptr)
     {
-        updateWreckwormConstrict(game, *head, deltaTime);
+        if (head->attack == BossAttack::CoilClamp)
+        {
+            updateWreckwormConstrict(game, *head, deltaTime);
+        }
+        else
+        {
+            updateWreckwormRush(game, *head, deltaTime);
+        }
         return;
     }
     // Owner died mid-cutscene.
