@@ -108,6 +108,7 @@ void drawMeteorProjectile(const BossProjectile& projectile);
 void drawSporeProjectile(const BossProjectile& projectile);
 void drawKrakenHurledEnemy(const BossProjectile& projectile);
 void drawFluidBlob(Vector2 center, float radius, Color color, float seed, Vector2 trailDir);
+void drawLavaChunk(Vector2 center, float radius, float seed, Vector2 velocity);
 void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color color,
                             Vector2 velocity, Vector2 facing, float mouthOpen);
 void drawKrakenShape(Vector2 center, float radius, float seed, Color color);
@@ -2780,8 +2781,8 @@ void drawGameplayWorld(const Game& game)
         {
             const float pulse =
                 0.85F + 0.15F * std::sin(static_cast<float>(GetTime()) * 3.0F + a.position.x);
-            drawFluidBlob(a.position, a.radius * pulse, Palette::SolarForgeAccent,
-                          a.position.x * 0.037F + a.position.y * 0.019F, a.velocity);
+            drawLavaChunk(a.position, a.radius * pulse, a.position.x * 0.037F + a.position.y * 0.019F,
+                          a.velocity);
             continue;
         }
         DrawCircleV(a.position, a.radius, Palette::StructMid);
@@ -5473,6 +5474,67 @@ void drawFluidBlob(Vector2 center, float radius, Color color, float seed, Vector
         DrawCircleV(dripPos, radius * (0.14F - static_cast<float>(i) * 0.02F),
                     Fade(color, 0.6F - static_cast<float>(i) * 0.15F));
     }
+}
+
+// Solar Forge lava chunk: an angular basalt crust, lit per facet, split by glowing lava seams
+// that meet at a molten core, over a faint heat halo, shedding a few embers behind it.
+void drawLavaChunk(Vector2 center, float radius, float seed, Vector2 velocity)
+{
+    const auto t = static_cast<float>(GetTime());
+    constexpr int32_t sides = 7;
+    const float spin = seed * 3.0F + t * 0.4F;
+    std::array<Vector2, sides> verts{};
+    for (int32_t i = 0; i < sides; i++)
+    {
+        const float a = spin + static_cast<float>(i) * 2.0F * PI / sides;
+        const float r = radius * (0.8F + 0.25F * hashNoise(seed * 7.0F + static_cast<float>(i)));
+        verts.at(static_cast<size_t>(i)) = Vector2Add(center, Vector2{.x = std::cos(a) * r, .y = std::sin(a) * r});
+    }
+
+    const float pulse = 0.5F + 0.5F * std::sin(t * 2.2F + seed * 5.0F);
+    DrawCircleV(center, radius * 1.2F, Fade(Palette::SolarForgeHaze, 0.12F + 0.06F * pulse));
+
+    // Embers: a few small sparks scattered behind the travel direction, flickering.
+    const float speed = Vector2Length(velocity);
+    const Vector2 back = speed > 0.01F ? Vector2Scale(velocity, -1.0F / speed) : Vector2{.x = 0, .y = 1};
+    const Vector2 side{.x = -back.y, .y = back.x};
+    for (int32_t i = 0; i < 4; i++)
+    {
+        const float k = static_cast<float>(i);
+        const float life = std::fmod(t * 1.3F + hashNoise(seed + k) * 4.0F, 1.0F);
+        const Vector2 pos = Vector2Add(
+            center, Vector2Add(Vector2Scale(back, radius * (1.0F + life * 1.6F)),
+                               Vector2Scale(side, (hashNoise(seed * 3.0F + k) - 0.5F) * radius * 1.6F)));
+        DrawRectangleV(Vector2Subtract(pos, Vector2{.x = 1.5F, .y = 1.5F}), Vector2{.x = 3, .y = 3},
+                       Fade(ColorLerp(Palette::ElementBurn, YELLOW, 0.4F), 1.0F - life));
+    }
+
+    // Crust facets, lit from the upper left.
+    const Color crust = ColorLerp(Palette::SolarForgeAccent, Palette::Void, 0.78F);
+    const Vector2 light = Vector2Normalize(Vector2{.x = -1, .y = -1});
+    for (int32_t i = 0; i < sides; i++)
+    {
+        const Vector2 v0 = verts.at(static_cast<size_t>(i));
+        const Vector2 v1 = verts.at(static_cast<size_t>((i + 1) % sides));
+        const Vector2 mid = Vector2Normalize(Vector2Subtract(Vector2Lerp(v0, v1, 0.5F), center));
+        const float lit = 0.5F + 0.5F * Vector2DotProduct(mid, light);
+        const Color facet = ColorLerp(crust, Palette::StructLight, 0.25F * lit);
+        DrawTriangle(center, v1, v0, facet);
+        DrawTriangle(center, v0, v1, facet);
+    }
+
+    // Lava seams from the core out to three vertices, pulsing, with a molten core.
+    const Color lava = ColorLerp(Palette::ElementBurn, YELLOW, 0.25F * pulse);
+    const Vector2 core = Vector2Add(center, Vector2Scale(Vector2Subtract(verts.at(0), center), 0.15F));
+    for (const int32_t i : {0, 2, 5})
+    {
+        const Vector2 end = Vector2Lerp(core, verts.at(static_cast<size_t>(i)), 0.85F);
+        const Vector2 bend = Vector2Add(Vector2Lerp(core, end, 0.5F),
+                                        Vector2Scale(side, (hashNoise(seed + static_cast<float>(i)) - 0.5F) * radius * 0.3F));
+        DrawLineEx(core, bend, radius * 0.11F, Fade(lava, 0.85F));
+        DrawLineEx(bend, end, radius * 0.07F, Fade(lava, 0.7F));
+    }
+    DrawCircleV(core, radius * (0.16F + 0.04F * pulse), ColorLerp(lava, YELLOW, 0.4F));
 }
 
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius, Color rim)
