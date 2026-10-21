@@ -388,7 +388,7 @@ void killEnemyForBossAttack(Game& game, size_t index, bool alwaysLoot)
 // --- Sniper shot QTE (cutscene) ---------------------------------------------
 //
 // A Sniper lining up its shot starts a short QTE: one prompt against the line.
-// Answered, the ship slips the line and kills the Sniper with a counter-shot.
+// Answered, the ship slips the line, turns on the Sniper, charges and shoots it dead.
 // Wrong or late, the line goes live after a short beat, still dodgeable.
 // --------------------------------------------------------------------------
 
@@ -403,18 +403,62 @@ void sniperQteBegin(Game& game, int32_t enemyId, Vector2 aim)
     playSFX(game, game.resources.sounds.bossWindUp);
 }
 
-void updateSniperQte(Game& game, float /*deltaTime*/)
+// The finisher, on real time: turn to face the target, gather a charge, fire, kill.
+void updateQteFinisher(Game& game, size_t targetIndex, float deltaTime)
+{
+    auto& run = game.run;
+    run.qteFinisherTarget = run.enemies.at(targetIndex).position;
+    const Vector2 toTarget = Vector2Normalize(Vector2Subtract(run.qteFinisherTarget, run.player.position));
+    run.qteFinisherTimer -= deltaTime;
+    if (run.qteFinisherPhase == 1)
+    {
+        run.qteAimDir = Vector2Normalize(
+            Vector2Lerp(run.qteAimDir, toTarget, std::min(1.0F, deltaTime * 16.0F)));
+        if (run.qteFinisherTimer <= 0)
+        {
+            run.qteFinisherPhase = 2;
+            run.qteFinisherTimer = UpdateConstants::qteFinisherCharge;
+            playSFX(game, game.resources.sounds.nerveCharge);
+        }
+        return;
+    }
+    run.qteAimDir = toTarget;
+    if (run.qteFinisherPhase == 2)
+    {
+        if (run.qteFinisherTimer <= 0)
+        {
+            run.qteFinisherPhase = 3;
+            run.qteFinisherTimer = UpdateConstants::qteFinisherShot;
+            playSFX(game, game.resources.sounds.beamFire);
+            triggerShake(game, 3, 0.1F);
+        }
+        return;
+    }
+    if (run.qteFinisherTimer <= 0)
+    {
+        const Enemy& target = run.enemies.at(targetIndex);
+        spawnKillExplosion(game, target.position, enemyKinds.at(static_cast<size_t>(target.kind)).color, 30,
+                           1.6F);
+        playSFX(game, game.resources.sounds.explosion);
+        triggerShake(game, 6, 0.25F);
+        damageEnemy(game, targetIndex, run.enemies.at(targetIndex).health);
+        bossQteEnd(game);
+    }
+}
+
+void updateSniperQte(Game& game, float deltaTime)
 {
     auto& run = game.run;
     const auto sniper = std::ranges::find_if(run.enemies, [&](const Enemy& enemy)
                                              { return enemy.active && static_cast<int32_t>(enemy.id) == run.qteEnemyId; });
-    if (sniper == run.enemies.end() || run.qtePrompt == QtePrompt::None)
+    if (sniper == run.enemies.end())
     {
-        // Sniper gone, or the counter-shot beat has played out.
-        if (run.qteTimer <= 0 || sniper == run.enemies.end())
-        {
-            bossQteEnd(game);
-        }
+        bossQteEnd(game);
+        return;
+    }
+    if (run.qteFinisherPhase > 0)
+    {
+        updateQteFinisher(game, static_cast<size_t>(std::distance(run.enemies.begin(), sniper)), deltaTime);
         return;
     }
 
@@ -430,20 +474,18 @@ void updateSniperQte(Game& game, float /*deltaTime*/)
                 shot.timer = 0;
             }
         }
-        run.sniperShots.push_back(ChainLightningBolt{
-            .from = run.player.position, .to = sniper->position, .timer = sniperLineFlashDuration});
         run.sniperEventPhase = 0;
         run.sniperEventEnemyId = -1;
         run.sniperEventCooldown = sniperQteGap;
         sniper->sniperPhase = 0;
         sniper->sniperLineHitPlayer = false;
         sniper->stateTimer = std::max(enemyKinds.at(static_cast<size_t>(sniper->kind)).fireInterval, sniperQteGap);
-        // The counter-shot is a kill shot.
-        damageEnemy(game, static_cast<size_t>(std::distance(run.enemies.begin(), sniper)), sniper->health);
         playSFX(game, game.resources.sounds.critical);
         run.qtePrompt = QtePrompt::None;
-        run.qteTimer = UpdateConstants::qteActionDuration + 0.15F;
         run.qteTimerMax = 0;
+        run.qteAimDir = aimAtMouse(game); // turn from wherever the ship faced
+        run.qteFinisherPhase = 1;
+        run.qteFinisherTimer = UpdateConstants::qteFinisherTurn;
     }
     else if (answer < 0 || run.qteTimer <= 0)
     {

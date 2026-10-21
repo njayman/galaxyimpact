@@ -863,6 +863,10 @@ void updateAbilityCharges(Game& game, float deltaTime)
 
 auto aimAtMouse(const Game& game) -> Vector2
 {
+    if (game.run.qteFinisherPhase > 0)
+    {
+        return game.run.qteAimDir; // the QTE finisher turns the ship
+    }
     if (game.touch.visible)
     {
         return game.touch.aimDir;

@@ -217,6 +217,11 @@ struct GameplayState
     // Boss QTE cutscene (see qte.cpp): while qteBossId >= 0 the player only answers prompts.
     int32_t qteBossId = -1;
     int32_t qteEnemyId = -1; // a Sniper's shot QTE (no 20 s gap, see sniperQteGap)
+    // QTE finisher: the ship turns on the enemy, charges and fires. 0 none, 1 turn, 2 charge, 3 shot.
+    int32_t qteFinisherPhase = 0;
+    float qteFinisherTimer = 0;
+    Vector2 qteAimDir{}; // ship facing while the finisher runs
+    Vector2 qteFinisherTarget{};
     QtePrompt qtePrompt = QtePrompt::None;
     float qteTimer = 0;    // time left on the current prompt / beat
     float qteTimerMax = 0; // full length of the current prompt, for the HUD timer

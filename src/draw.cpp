@@ -3200,6 +3200,34 @@ void drawShip(const Game& game)
     }
     drawShipHull(shipClass, p, r, angle, shipColor);
 
+    // QTE finisher: a charge gathers at the nose, then a heavy shot hits the target.
+    const Vector2 nose = Vector2Add(p, Vector2Scale(dir, r * 1.4F));
+    if (game.run.qteFinisherPhase == 2)
+    {
+        const float c = 1.0F - std::clamp(game.run.qteFinisherTimer / UpdateConstants::qteFinisherCharge, 0.0F, 1.0F);
+        const auto t = static_cast<float>(GetTime());
+        for (int32_t i = 0; i < 6; i++)
+        {
+            const float a = t * 6.0F + static_cast<float>(i) * 1.047F;
+            const float d = r * 3.0F * (1.0F - c);
+            DrawCircleV(Vector2Add(nose, Vector2{.x = std::cos(a) * d, .y = std::sin(a) * d}), r * 0.12F,
+                        Fade(Palette::Charge, 0.4F + 0.6F * c));
+        }
+        DrawCircleV(nose, r * (0.25F + 0.55F * c), Fade(Palette::Charge, 0.35F + 0.4F * c));
+        DrawCircleV(nose, r * (0.12F + 0.3F * c), Fade(WHITE, 0.6F + 0.4F * c));
+        DrawRing(nose, r * (0.9F + 0.4F * c), r * (1.0F + 0.4F * c), 0, 360, 24, Fade(Palette::Crit, 0.5F * c));
+    }
+    else if (game.run.qteFinisherPhase == 3)
+    {
+        const float f = std::clamp(game.run.qteFinisherTimer / UpdateConstants::qteFinisherShot, 0.0F, 1.0F);
+        const Vector2 target = game.run.qteFinisherTarget;
+        DrawLineEx(nose, target, r * 1.1F * f + 2.0F, Fade(Palette::Charge, 0.45F));
+        DrawLineEx(nose, target, r * 0.5F * f + 1.0F, Fade(Palette::Crit, 0.9F));
+        DrawLineEx(nose, target, r * 0.18F * f + 1.0F, WHITE);
+        DrawCircleV(target, r * (1.6F - f), Fade(WHITE, 0.8F));
+        DrawCircleV(nose, r * 0.5F * f, WHITE);
+    }
+
     if (game.run.player.nerveCharging)
     {
         const float progress =

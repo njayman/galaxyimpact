@@ -74,6 +74,7 @@ void bossQteEnd(Game& game)
     }
     game.run.qteBossId = -1;
     game.run.qteEnemyId = -1;
+    game.run.qteFinisherPhase = 0;
     game.run.qtePrompt = QtePrompt::None;
     game.run.qteTimer = 0;
     game.run.qteTimerMax = 0;

@@ -47,6 +47,9 @@ constexpr int32_t qteDashChance = 15;
 constexpr int32_t qteShieldChance = 15;
 constexpr float qteMinGap = 20.0F; // shared rule: at least this long between Boss QTEs
 constexpr float qteDamageMult = 3.0F; // shared rule: every hit on an enemy or boss during a QTE
+constexpr float qteFinisherTurn = 0.22F;
+constexpr float qteFinisherCharge = 0.5F;
+constexpr float qteFinisherShot = 0.12F;
 // Beltbreaker plate rush
 constexpr float beltbreakerPlateRushCueDuration = 0.6F;
 constexpr float beltbreakerPlateRushOffscreenMargin = 140.0F;
