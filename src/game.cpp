@@ -23,25 +23,26 @@ auto generateBoundaryClouds() -> std::vector<GasCloud>
                                            Fade(Palette::StructMid, 0.15F),
                                            Fade(Palette::AccentDim, 0.08F)};
 
+    // Overlapping rings of gas balls pack into a solid wall from wallInner outward; the inner
+    // ring's lumpy edge is the only boundary the player sees.
     std::vector<GasCloud> clouds;
-    constexpr int clusterCount = 40;
-
-    for (int i = 0; i < clusterCount; i++)
+    constexpr int32_t layerCount = 6;
+    constexpr float layerGap = 200.0F;
+    constexpr float ballSpacing = 170.0F;
+    for (int32_t layer = 0; layer < layerCount; layer++)
     {
-        const float baseAngle = static_cast<float>(i) * 360.0F / clusterCount;
-        const float angle = (baseAngle + static_cast<float>(GetRandomValue(-8, 8))) * DEG2RAD;
-        const float dist = GameConstants::arenaHalf + static_cast<float>(GetRandomValue(-800, 800));
-        const Vector2 center{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist};
-
-        const int blobCount = GetRandomValue(3, 5);
-        for (int b = 0; b < blobCount; b++)
+        const float ringRadius = GameConstants::wallInner + static_cast<float>(layer) * layerGap;
+        const auto count = static_cast<int32_t>(2.0F * PI * ringRadius / ballSpacing);
+        for (int32_t i = 0; i < count; i++)
         {
-            const Vector2 offset{.x = static_cast<float>(GetRandomValue(-150, 150)),
-                                 .y = static_cast<float>(GetRandomValue(-150, 150))};
-            clouds.push_back(GasCloud{.position = Vector2Add(center, offset),
-                                      .radius = static_cast<float>(GetRandomValue(80, 220)),
-                                      .color = cloudColors.at(static_cast<size_t>(GetRandomValue(
-                                          0, static_cast<int32_t>(cloudColors.size() - 1))))});
+            const float angle = (static_cast<float>(i) + static_cast<float>(GetRandomValue(-30, 30)) / 100.0F) *
+                                2.0F * PI / static_cast<float>(count);
+            const float dist = ringRadius + static_cast<float>(GetRandomValue(-60, 60));
+            clouds.push_back(GasCloud{
+                .position = Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist},
+                .radius = static_cast<float>(GetRandomValue(110, 230)),
+                .color = cloudColors.at(static_cast<size_t>(
+                    GetRandomValue(0, static_cast<int32_t>(cloudColors.size() - 1))))});
         }
     }
 

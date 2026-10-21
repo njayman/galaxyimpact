@@ -23,6 +23,10 @@
 namespace GameConstants
 {
 const float arenaHalf = 20000;
+// The arena edge is a wall of gas: past wallInner the player loses wallTickDamage every wallTick.
+const float wallInner = arenaHalf - 450;
+const float wallTick = 0.3F;
+const int32_t wallTickDamage = 1;
 const float waveDuration = 25;
 const std::string highScoreFile = "highscore.txt";
 

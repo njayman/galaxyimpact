@@ -23,6 +23,7 @@ class Player
     float shieldCooldownTimer;
     float immunityTimer;
     float blackHoleCoreTimer;
+    float boundaryWallTimer = 0;
     float bossBodyTimer;
     float slowTimer;
     int charges;

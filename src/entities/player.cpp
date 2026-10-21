@@ -410,6 +410,22 @@ void updatePlayerMovement(Game& game, float deltaTime)
             Vector2Scale(Vector2Normalize(game.run.player.position), GameConstants::arenaHalf);
     }
 
+    // The gas wall eats the hull fast, ignoring hit immunity.
+    if (Vector2Length(game.run.player.position) > GameConstants::wallInner &&
+        game.run.player.health > 0)
+    {
+        game.run.player.boundaryWallTimer += deltaTime;
+        if (game.run.player.boundaryWallTimer >= GameConstants::wallTick)
+        {
+            game.run.player.boundaryWallTimer -= GameConstants::wallTick;
+            damagePlayer(game, GameConstants::wallTickDamage);
+        }
+    }
+    else
+    {
+        game.run.player.boundaryWallTimer = 0;
+    }
+
     bool touchingAnyBoss = false;
     for (auto& boss : game.run.bosses)
     {

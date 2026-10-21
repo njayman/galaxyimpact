@@ -2710,17 +2710,13 @@ void drawGameplayWorld(const Game& game)
         drawKrakenRemains(game);
     }
 
-    constexpr float arenaBoundaryVisibleMargin = 2000.0F;
-    if (const float distFromCenter = Vector2Length(game.run.player.position);
-        distFromCenter > GameConstants::arenaHalf - arenaBoundaryVisibleMargin)
-    {
-        DrawCircleLines(0, 0, GameConstants::arenaHalf, Fade(Palette::Shield, 0.5F));
-        DrawCircleLines(0, 0, GameConstants::arenaHalf - 6, Fade(Palette::Accent, 0.25F));
-    }
-
+    constexpr float gasCullDistance = 3000.0F; // ponytail: fixed cull, widen if zoom goes further out
     for (const auto& c : game.run.gasClouds)
     {
-        DrawCircleV(c.position, c.radius, c.color);
+        if (Vector2Distance(c.position, game.run.player.position) < gasCullDistance + c.radius)
+        {
+            DrawCircleV(c.position, c.radius, c.color);
+        }
     }
 
     drawRustPatches(game);
