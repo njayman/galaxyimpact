@@ -98,7 +98,6 @@ constexpr float chargeTelegraphDuration = 0.8F; // aim line tracks the player, t
 constexpr float rockhideRollInterval = 4.0F;
 constexpr float rockhideRollTell = 0.6F;
 constexpr float rockhideRollSpeedMult = 2.5F;
-constexpr float rockhideRollDistance = 220.0F;
 constexpr float enemyChargeDashDuration = UpdateConstants::enemyChargeDashDuration;
 
 constexpr float xpPickupLifetime = 10.0F;

@@ -722,11 +722,15 @@ void updateEnemies(Game& game, float deltaTime)
                     enemy.stateTimer -= deltaTime;
                     if (enemy.telegraphing)
                     {
+                        // Like the Charger: the aim tracks the player, then it rolls through them.
+                        const Vector2 toPlayer = Vector2Subtract(game.run.player.position, enemy.position);
+                        enemy.velocity = Vector2Scale(Vector2Normalize(toPlayer),
+                                                      kind.speed * speedMod * rockhideRollSpeedMult);
                         if (enemy.stateTimer <= 0)
                         {
                             enemy.telegraphing = false;
                             enemy.charging = true;
-                            enemy.stateTimer = rockhideRollDistance;
+                            enemy.stateTimer = Vector2Length(toPlayer) + UpdateConstants::enemyChargeOvershoot;
                         }
                         break;
                     }

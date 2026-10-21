@@ -3640,9 +3640,10 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     if (rollTell)
     {
         // The roll line shows where to sidestep; the cracks glow on top of the body below.
-        const Vector2 lineEnd =
-            Vector2Add(enemy.position, Vector2Scale(Vector2Normalize(enemy.velocity),
-                                                    rockhideRollDistance));
+        const Vector2 toPlayer = Vector2Subtract(game.run.player.position, enemy.position);
+        const Vector2 lineEnd = Vector2Add(
+            enemy.position, Vector2Scale(Vector2Normalize(toPlayer),
+                                         Vector2Length(toPlayer) + UpdateConstants::enemyChargeOvershoot));
         DrawLineEx(enemy.position, lineEnd, 3, Fade(Palette::ShatteredBeltAccent, 0.6F * rollGlow));
     }
 
