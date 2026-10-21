@@ -148,8 +148,8 @@ void drawLaserBolt(const Bullet& b);
 void drawPickupIcon(PickupType type, ElementType element, Vector2 position, float alpha);
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius, Color rim);
 
-// Laser bolt: a comet streak, faint thin tail to a bright head. Evolved: a glowing magenta 110 degree ">"
-// with a white-hot core, trailing a soft violet body that fades out.
+// Laser bolt: a comet streak, faint thin tail to a bright head. Evolved: a matte lavender 110 degree
+// ">" over a darker rim, trailing a faint flat wake.
 void drawLaserBolt(const Bullet& b)
 {
     const LaserShape shape = laserShape(b);
@@ -175,19 +175,18 @@ void drawLaserBolt(const Bullet& b)
                 DrawTriangle(x, z, y, col);
             }
         };
-        constexpr Color violet{.r = 120, .g = 40, .b = 210, .a = 255};
-        constexpr Color magenta{.r = 235, .g = 70, .b = 235, .a = 255};
-        constexpr Color hot{.r = 255, .g = 215, .b = 255, .a = 255};
-        // Glowing body trailing behind the head, violet and fading out.
+        // Matte, like the rest of the palette: a flat lavender body over a darker rim, no glow.
+        const Color body = Palette::PunctumHaze;
+        const Color rim = ColorLerp(Palette::PunctumHaze, Palette::Void, 0.45F);
+        // Faint flat wake behind the head.
         constexpr int trailSteps = 6;
         for (int i = 0; i < trailSteps; i++)
         {
             const float t0 = static_cast<float>(i) / trailSteps;
             const float t1 = static_cast<float>(i + 1) / trailSteps;
-            bar(at(0.3F + t0 * 1.6F, 0), at(0.3F + t1 * 1.6F, 0), h * 2.2F * (1.0F - t0 * 0.6F),
-                Fade(ColorLerp(magenta, violet, t0), 0.28F * (1.0F - t0)));
+            bar(at(0.3F + t0 * 1.4F, 0), at(0.3F + t1 * 1.4F, 0), h * 0.9F * (1.0F - t0 * 0.6F),
+                Fade(rim, 0.35F * (1.0F - t0)));
         }
-        // The ">" head: a wide soft glow, a magenta band, then a white-hot core.
         struct Pass
         {
             float width;
@@ -197,9 +196,7 @@ void drawLaserBolt(const Bullet& b)
         // and each tapers from full width at the apex to a point.
         constexpr float halfAngle = 55.0F * DEG2RAD;
         const float armLength = len * 0.75F;
-        for (const Pass pass : {Pass{.width = 2.4F, .color = Fade(violet, 0.22F)},
-                                Pass{.width = 1.3F, .color = Fade(magenta, 0.75F)},
-                                Pass{.width = 0.5F, .color = hot}})
+        for (const Pass pass : {Pass{.width = 1.4F, .color = rim}, Pass{.width = 0.9F, .color = body}})
         {
             const float miter = h * pass.width * 0.5F / std::sin(halfAngle);
             const Vector2 outer = Vector2Add(tip, Vector2Scale(fwd, miter));
