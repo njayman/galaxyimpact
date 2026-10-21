@@ -50,6 +50,14 @@ constexpr float qteDamageMult = 3.0F; // shared rule: every hit on an enemy or b
 constexpr float qteFinisherTurn = 0.22F;
 constexpr float qteFinisherCharge = 0.5F;
 constexpr float qteFinisherShot = 0.12F;
+// A clean Boss QTE chain ends in the finisher shot; each answer charges it by this share of the
+// boss's max health (then tripled by qteDamageMult): that shot is the QTE's big payoff.
+constexpr float qteFinisherChargeAnswer = 0.02F;
+constexpr float qteFinisherChargeParry = 0.05F;
+constexpr float qteFinisherChargeNerve = 0.10F;
+constexpr float qteFinisherChargeMash = 0.03F;
+constexpr float qteStunWindow = 3.0F;      // generic boss after a clean Rush: no moves, +50% damage
+constexpr float qteStunDamageMult = 1.5F;
 // Beltbreaker plate rush
 constexpr float beltbreakerPlateRushCueDuration = 0.6F;
 constexpr float beltbreakerPlateRushOffscreenMargin = 140.0F;
@@ -89,23 +97,17 @@ constexpr int32_t slagmawSwallowPrompts = 9;
 constexpr float slagmawSwallowPromptWindow = 0.7F;
 constexpr float slagmawSwallowBeat = 0.3F;
 constexpr int32_t slagmawSwallowParryChance = 25;
-constexpr float slagmawSwallowStrikeFrac = 0.015F; // of max health per answer, before qteDamageMult
-constexpr float slagmawSwallowParryStrikeFrac = 0.04F;
-constexpr float slagmawSwallowNerveStrikeFrac = 0.08F;
 constexpr int32_t slagmawSwallowBurnDamage = 2; // fail: spat out with one burn hit
 constexpr float slagmawPunishWindow = 3.0F;     // clean clear: Slagmaw chokes
 constexpr float slagmawPunishDamageMult = 1.5F;
-// Wreckworm rush (Burrow Charge, Dash Rush): a dodge chain as the head and body pass
-constexpr float wreckwormRushTriggerDist = 340.0F; // head this close and closing starts it
-constexpr float wreckwormRushCrawlSpeed = 420.0F;  // head's real-time crawl, so it passes the ship
-constexpr int32_t wreckwormRushPrompts = 3;
-constexpr float wreckwormRushPromptWindow = 0.8F;
-constexpr float wreckwormRushBeat = 0.3F;
-constexpr int32_t wreckwormRushParryChance = 20;
-// Each answer strikes the head for this share of its max health (before qteDamageMult).
-constexpr float wreckwormRushStrikeFrac = 0.02F;
-constexpr float wreckwormRushParryStrikeFrac = 0.05F;
-constexpr float wreckwormRushNerveStrikeFrac = 0.1F;
+// Rush QTE: a dodge chain as a charging boss passes (Wreckworm Burrow Charge and Dash Rush, any
+// other boss's ChargeDash while enraged)
+constexpr float rushQteTriggerDist = 340.0F; // head this close and closing starts it
+constexpr float rushQteCrawlSpeed = 420.0F;  // head's real-time crawl, so it passes the ship
+constexpr int32_t rushQtePrompts = 3;
+constexpr float rushQtePromptWindow = 0.8F;
+constexpr float rushQteBeat = 0.3F;
+constexpr int32_t rushQteParryChance = 20;
 
 constexpr auto beltbreakerShieldedDuration(int32_t plateCount) -> float
 {
@@ -279,6 +281,8 @@ void bossQteBegin(Game& game, int32_t bossId, QteKind kind);
 void bossQteEnd(Game& game);
 auto bossQteCanStart(const Game& game, QteKind kind) -> bool;
 auto qteSlotFree(const Game& game) -> bool;
+void qteBeginFinisher(Game& game);
+auto qteUpdateFinisher(Game& game, Vector2 target, float deltaTime) -> bool;
 void sniperQteBegin(Game& game, int32_t enemyId, Vector2 aim);
 void updateSniperQte(Game& game, float deltaTime);
 auto qtePromptForThreat(const Game& game, Vector2 threatDir,
@@ -291,8 +295,10 @@ void updateBeltbreakerPlateRush(Game& game, Boss& core, float deltaTime);
 void sendRushPlateHome(Boss& plate);
 auto findWreckwormHeadById(Game& game, int32_t instanceId) -> Boss*;
 void updateWreckwormConstrict(Game& game, Boss& head, float deltaTime);
-void tryBeginWreckwormRush(Game& game, Boss& head, Vector2 headCenter);
-void updateWreckwormRush(Game& game, Boss& head, float deltaTime);
+void tryBeginRushQte(Game& game, Boss& boss, Vector2 bossCenter);
+void updateRushQte(Game& game, Boss& boss, float deltaTime);
+void endBossQteClean(Game& game, Boss& boss);
+auto findBossById(Game& game, int32_t instanceId) -> Boss*;
 auto findSlagmawById(Game& game, int32_t instanceId) -> Boss*;
 void updateSlagmawSwallowed(Game& game, Boss& slagmaw, float deltaTime);
 void updateMagmaPools(Game& game, float deltaTime);

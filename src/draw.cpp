@@ -4484,7 +4484,7 @@ void drawBoss(const Game& game, const Boss& boss)
 
     if ((boss.isBeltbreaker && boss.beltbreakerPunishTimer > 0) ||
         (boss.isWreckwormHead && boss.wreckwormPunishTimer > 0) ||
-        (boss.isSlagmaw && boss.slagmawPunishTimer > 0))
+        (boss.isSlagmaw && boss.slagmawPunishTimer > 0) || boss.qteStunTimer > 0)
     {
         // Punish Window: pulsing fragments ring the open core (Beltbreaker) or stunned head.
         const float pulse = 0.6F + 0.4F * std::sin(static_cast<float>(GetTime()) * 14.0F);

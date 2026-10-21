@@ -422,49 +422,6 @@ void sniperQteBegin(Game& game, int32_t enemyId, Vector2 aim)
     playSFX(game, game.resources.sounds.bossWindUp);
 }
 
-// The finisher, on real time: turn to face the target, gather a charge, fire, kill.
-void updateQteFinisher(Game& game, size_t targetIndex, float deltaTime)
-{
-    auto& run = game.run;
-    run.qteFinisherTarget = run.enemies.at(targetIndex).position;
-    const Vector2 toTarget = Vector2Normalize(Vector2Subtract(run.qteFinisherTarget, run.player.position));
-    run.qteFinisherTimer -= deltaTime;
-    if (run.qteFinisherPhase == 1)
-    {
-        run.qteAimDir = Vector2Normalize(
-            Vector2Lerp(run.qteAimDir, toTarget, std::min(1.0F, deltaTime * 16.0F)));
-        if (run.qteFinisherTimer <= 0)
-        {
-            run.qteFinisherPhase = 2;
-            run.qteFinisherTimer = UpdateConstants::qteFinisherCharge;
-            playSFX(game, game.resources.sounds.nerveCharge);
-        }
-        return;
-    }
-    run.qteAimDir = toTarget;
-    if (run.qteFinisherPhase == 2)
-    {
-        if (run.qteFinisherTimer <= 0)
-        {
-            run.qteFinisherPhase = 3;
-            run.qteFinisherTimer = UpdateConstants::qteFinisherShot;
-            playSFX(game, game.resources.sounds.beamFire);
-            triggerShake(game, 3, 0.1F);
-        }
-        return;
-    }
-    if (run.qteFinisherTimer <= 0)
-    {
-        const Enemy& target = run.enemies.at(targetIndex);
-        spawnKillExplosion(game, target.position, enemyKinds.at(static_cast<size_t>(target.kind)).color, 30,
-                           1.6F);
-        playSFX(game, game.resources.sounds.explosion);
-        triggerShake(game, 6, 0.25F);
-        damageEnemy(game, targetIndex, run.enemies.at(targetIndex).health);
-        bossQteEnd(game);
-    }
-}
-
 void updateSniperQte(Game& game, float deltaTime)
 {
     auto& run = game.run;
@@ -477,7 +434,14 @@ void updateSniperQte(Game& game, float deltaTime)
     }
     if (run.qteFinisherPhase > 0)
     {
-        updateQteFinisher(game, static_cast<size_t>(std::distance(run.enemies.begin(), sniper)), deltaTime);
+        if (qteUpdateFinisher(game, sniper->position, deltaTime))
+        {
+            spawnKillExplosion(game, sniper->position, enemyKinds.at(static_cast<size_t>(sniper->kind)).color, 30,
+                               1.6F);
+            playSFX(game, game.resources.sounds.explosion);
+            damageEnemy(game, static_cast<size_t>(std::distance(run.enemies.begin(), sniper)), sniper->health);
+            bossQteEnd(game);
+        }
         return;
     }
 
@@ -502,9 +466,7 @@ void updateSniperQte(Game& game, float deltaTime)
         playSFX(game, game.resources.sounds.critical);
         run.qtePrompt = QtePrompt::None;
         run.qteTimerMax = 0;
-        run.qteAimDir = aimAtMouse(game); // turn from wherever the ship faced
-        run.qteFinisherPhase = 1;
-        run.qteFinisherTimer = UpdateConstants::qteFinisherTurn;
+        qteBeginFinisher(game);
     }
     else if (answer < 0 || run.qteTimer <= 0)
     {

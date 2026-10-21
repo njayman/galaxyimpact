@@ -65,6 +65,7 @@ void bossQteBegin(Game& game, int32_t bossId, QteKind kind)
     game.run.qteMashCount = 0;
     game.run.qteMashTarget = 0;
     game.run.qteChainLive = false;
+    game.run.qteFinisherCharge = 0;
     clearQtePlayerPose(game.run.player);
 }
 
@@ -269,8 +270,59 @@ void qteStartAction(Game& game, QtePrompt prompt, Vector2 threatDir)
         player.nerve = std::min(UpdateConstants::nerveMax, player.nerve + UpdateConstants::qteNerveGain);
     }
     game.run.qteChainLive = true; // from here a wrong press breaks the chain
+    game.run.qteFinisherCharge += prompt == QtePrompt::Parry   ? UpdateConstants::qteFinisherChargeParry
+                                  : prompt == QtePrompt::Nerve ? UpdateConstants::qteFinisherChargeNerve
+                                                               : UpdateConstants::qteFinisherChargeAnswer;
     game.run.qteActionTimer = UpdateConstants::qteActionDuration;
     game.run.qteActionVelocity = Vector2Scale(move, 1.0F / UpdateConstants::qteActionDuration);
+}
+
+// The finisher, on real time: lock the controls, turn to face the target, gather a charge,
+// fire. Returns true on the frame the shot lands; the caller deals its damage and ends the QTE.
+void qteBeginFinisher(Game& game)
+{
+    game.run.qtePrompt = QtePrompt::None;
+    game.run.qteTimerMax = 0;
+    game.run.qteAimDir = aimAtMouse(game); // turn from wherever the ship faced
+    game.run.qteFinisherPhase = 1;
+    game.run.qteFinisherTimer = UpdateConstants::qteFinisherTurn;
+}
+
+auto qteUpdateFinisher(Game& game, Vector2 target, float deltaTime) -> bool
+{
+    auto& run = game.run;
+    run.qteFinisherTarget = target;
+    const Vector2 toTarget = Vector2Normalize(Vector2Subtract(target, run.player.position));
+    run.qteFinisherTimer -= deltaTime;
+    if (run.qteFinisherPhase == 1)
+    {
+        run.qteAimDir = Vector2Normalize(Vector2Lerp(run.qteAimDir, toTarget, std::min(1.0F, deltaTime * 16.0F)));
+        if (run.qteFinisherTimer <= 0)
+        {
+            run.qteFinisherPhase = 2;
+            run.qteFinisherTimer = UpdateConstants::qteFinisherCharge;
+            playSFX(game, game.resources.sounds.nerveCharge);
+        }
+        return false;
+    }
+    run.qteAimDir = toTarget;
+    if (run.qteFinisherPhase == 2)
+    {
+        if (run.qteFinisherTimer <= 0)
+        {
+            run.qteFinisherPhase = 3;
+            run.qteFinisherTimer = UpdateConstants::qteFinisherShot;
+            playSFX(game, game.resources.sounds.beamFire);
+            triggerShake(game, 3, 0.1F);
+        }
+        return false;
+    }
+    if (run.qteFinisherTimer > 0)
+    {
+        return false;
+    }
+    triggerShake(game, 8, 0.3F);
+    return true;
 }
 
 // Runs on real (unslowed) time from updateGameplay.
@@ -306,28 +358,51 @@ void updateBossQte(Game& game, float deltaTime)
         updateSniperQte(game, deltaTime);
         return;
     }
+    Boss* owner = findBossById(game, run.qteBossId);
+    if (owner != nullptr && run.qteFinisherPhase > 0)
+    {
+        // A clean chain: the ship turns on the boss and fires everything it charged.
+        const Vector2 center{.x = owner->position.x + owner->size.x / 2, .y = owner->position.y + owner->size.y / 2};
+        if (qteUpdateFinisher(game, center, deltaTime))
+        {
+            if (static_cast<QteKind>(run.qteKind) == QteKind::PlateRush)
+            {
+                owner->beltbreakerShielded = false; // the shot is what shatters the shield
+            }
+            spawnKillExplosion(game, center, Palette::Crit, 40, 2.0F);
+            playSFX(game, game.resources.sounds.explosion);
+            damageBoss(game, *owner,
+                       std::max(1, static_cast<int32_t>(static_cast<float>(owner->maxHealth) * run.qteFinisherCharge)),
+                       true, false, false);
+            if (owner->health > 0)
+            {
+                endBossQteClean(game, *owner);
+            }
+            else
+            {
+                bossQteEnd(game);
+            }
+        }
+        return;
+    }
     // Dispatch to the boss running the cutscene (add other bosses' QTEs here).
-    if (Boss* core = findBeltbreakerById(game, run.qteBossId); core != nullptr)
+    if (owner != nullptr)
     {
-        updateBeltbreakerPlateRush(game, *core, deltaTime);
-        return;
-    }
-    if (Boss* head = findWreckwormHeadById(game, run.qteBossId); head != nullptr)
-    {
-        if (head->attack == BossAttack::CoilClamp)
+        switch (static_cast<QteKind>(run.qteKind))
         {
-            updateWreckwormConstrict(game, *head, deltaTime);
+        case QteKind::PlateRush:
+            updateBeltbreakerPlateRush(game, *owner, deltaTime);
+            return;
+        case QteKind::Constrict:
+            updateWreckwormConstrict(game, *owner, deltaTime);
+            return;
+        case QteKind::Rush:
+            updateRushQte(game, *owner, deltaTime);
+            return;
+        case QteKind::Swallowed:
+            updateSlagmawSwallowed(game, *owner, deltaTime);
+            return;
         }
-        else
-        {
-            updateWreckwormRush(game, *head, deltaTime);
-        }
-        return;
-    }
-    if (Boss* slagmaw = findSlagmawById(game, run.qteBossId); slagmaw != nullptr)
-    {
-        updateSlagmawSwallowed(game, *slagmaw, deltaTime);
-        return;
     }
     // Owner died mid-cutscene.
     bossQteEnd(game);

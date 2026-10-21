@@ -227,6 +227,7 @@ struct GameplayState
     bool qteChainLive = false; // false until the first correct answer: wrong presses are ignored
     // QTE finisher: the ship turns on the enemy, charges and fires. 0 none, 1 turn, 2 charge, 3 shot.
     int32_t qteFinisherPhase = 0;
+    float qteFinisherCharge = 0; // share of the target boss's max health the finisher deals
     float qteFinisherTimer = 0;
     Vector2 qteAimDir{}; // ship facing while the finisher runs
     Vector2 qteFinisherTarget{};
