@@ -3961,7 +3961,7 @@ auto demoSkillAllowed(const Game& game, SkillType id) -> bool
 
 auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
 {
-    const bool slotsFull = equippedSlotCount(game) >= game.resources.achievements.slotCap;
+    const bool slotsFull = equippedSlotCount(game) >= weaponSlotCap(game);
 
     std::vector<SkillType> eligible;
     eligible.reserve(static_cast<size_t>(SkillType::Count));
@@ -4047,7 +4047,7 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
         if (hasWeapon(game, kind) && !weaponEvolved(game, kind) &&
             game.run.skillLevels.at(static_cast<size_t>(grantSkill)) >= 3 &&
             game.run.skillLevels.at(static_cast<size_t>(passive)) >= 3 &&
-            game.resources.achievements.evolutionUnlocked.at(i))
+            isEvolutionUnlocked(game, kind))
         {
             evolvable.push_back(kind);
         }

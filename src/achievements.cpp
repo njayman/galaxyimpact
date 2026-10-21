@@ -227,13 +227,25 @@ void saveAchievements(const Achievements& achievements)
     platformSyncSaveData();
 }
 
+// Sandbox treats every weapon, evolution and slot as unlocked without touching the save.
 auto isWeaponTypeUnlocked(const Game& game, WeaponType weapon) -> bool
 {
-    if (currentShip(game).defaultWeapon == weapon)
+    if (game.sandbox || currentShip(game).defaultWeapon == weapon)
     {
         return true;
     }
     return game.resources.achievements.typeUnlocked.at(static_cast<size_t>(weapon));
+}
+
+auto isEvolutionUnlocked(const Game& game, WeaponType weapon) -> bool
+{
+    return game.sandbox ||
+           game.resources.achievements.evolutionUnlocked.at(static_cast<size_t>(weapon));
+}
+
+auto weaponSlotCap(const Game& game) -> int32_t
+{
+    return game.sandbox ? maxWeaponSlotCap : game.resources.achievements.slotCap;
 }
 
 void recordWeaponKill(Game& game, WeaponType weapon)

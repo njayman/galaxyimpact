@@ -1243,8 +1243,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
     {
         const Color color = w.evolved ? Palette::Crit : Palette::Shield;
         const auto typeIndex = static_cast<size_t>(w.type);
-        const bool evolutionReady = weaponEvolves.at(typeIndex) && !w.evolved &&
-                                    game.resources.achievements.evolutionUnlocked.at(typeIndex);
+        const bool evolutionReady = weaponEvolves.at(typeIndex) && !w.evolved && isEvolutionUnlocked(game, w.type);
         const bool stolen =
             game.run.weaponDowngrade.has_value() && game.run.weaponDowngrade->type == w.type;
         slots.push_back(Slot{.id = weaponGrantSkill.at(typeIndex),
@@ -1274,7 +1273,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
     std::optional<SkillType> hovered;
     Vector2 hoveredBoxPos{};
 
-    for (int32_t i = 0; i < game.resources.achievements.slotCap; i++)
+    for (int32_t i = 0; i < weaponSlotCap(game); i++)
     {
         const float bx = static_cast<float>(x) + static_cast<float>(i) * gap;
         const auto by = static_cast<float>(y);

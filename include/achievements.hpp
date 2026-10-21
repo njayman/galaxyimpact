@@ -25,4 +25,5 @@ auto weaponDisplayName(WeaponType weapon) -> std::string_view;
 auto effectiveWeaponName(const Weapon& weapon) -> std::string_view;
 
 constexpr int32_t evolutionKillThreshold = 500;
+constexpr int32_t maxWeaponSlotCap = 6;
 constexpr int32_t flakCannonUnlockKillCount = 200;

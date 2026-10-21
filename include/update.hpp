@@ -398,6 +398,8 @@ void spawnPickup(Game& game, Vector2 position, int value, PickupType type,
                  ElementMechanism mechanism = ElementMechanism::Infusion);
 
 auto isWeaponTypeUnlocked(const Game& game, WeaponType weapon) -> bool;
+auto isEvolutionUnlocked(const Game& game, WeaponType weapon) -> bool;
+auto weaponSlotCap(const Game& game) -> int32_t;
 void recordWeaponKill(Game& game, WeaponType weapon);
 void recordSkillMaxed(Game& game, SkillType id);
 void recordDashKill(Game& game, int32_t enemyKindIndex);
