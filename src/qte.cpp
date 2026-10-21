@@ -63,6 +63,7 @@ void bossQteBegin(Game& game, int32_t bossId)
     game.run.qteStickDir = 0;
     game.run.qteMashCount = 0;
     game.run.qteMashTarget = 0;
+    game.run.qteChainLive = false;
     clearQtePlayerPose(game.run.player);
 }
 
@@ -142,8 +143,18 @@ auto qtePromptForThreat(const Game& game, Vector2 threatDir, int32_t parryChance
     return qteCardinal(qteSidestep(threatDir));
 }
 
+auto qteReadRawInput(Game& game, QtePrompt prompt) -> int32_t;
+
 // 1 = the asked input was pressed this frame, -1 = a different input was, 0 = nothing yet.
+// Until the chain is live (first correct answer) a wrong press reads as 0: the player is
+// usually mid-fight on other controls when a QTE pops, so only the timer can fail it.
 auto qteReadInput(Game& game, QtePrompt prompt) -> int32_t
+{
+    const int32_t answer = qteReadRawInput(game, prompt);
+    return answer < 0 && !game.run.qteChainLive ? 0 : answer;
+}
+
+auto qteReadRawInput(Game& game, QtePrompt prompt) -> int32_t
 {
     // Touch: flicking the move stick past 0.6 counts as one directional press.
     QtePrompt stickDir = QtePrompt::None;
@@ -255,6 +266,7 @@ void qteStartAction(Game& game, QtePrompt prompt, Vector2 threatDir)
     {
         player.nerve = std::min(UpdateConstants::nerveMax, player.nerve + UpdateConstants::qteNerveGain);
     }
+    game.run.qteChainLive = true; // from here a wrong press breaks the chain
     game.run.qteActionTimer = UpdateConstants::qteActionDuration;
     game.run.qteActionVelocity = Vector2Scale(move, 1.0F / UpdateConstants::qteActionDuration);
 }

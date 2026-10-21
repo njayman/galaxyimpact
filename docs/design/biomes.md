@@ -31,7 +31,7 @@ From [Biome rework scope: what is open to change](https://github.com/njayman/gal
 
 From [Shared Boss QTE rules](https://github.com/njayman/galaxyimpact/issues/3).
 
-- **Cutscene contract:** HUD hidden with letterbox bars, world at 4% speed, player immune. One Prompt at a time from the shared input set: four directions, Shield, Dash, Parry (shield + dash), Nerve, and Mash. A wrong or late answer ends the cutscene and the threat lands live, still dodgeable. Only the threat and its choreography differ per Biome Boss.
+- **Cutscene contract:** HUD hidden with letterbox bars, world at 4% speed, player immune. One Prompt at a time from the shared input set: four directions, Shield, Dash, Parry (shield + dash), Nerve, and Mash. A late answer, or a wrong one once the chain is live, ends the cutscene and the threat lands live, still dodgeable. The chain goes live on the first correct answer: until then wrong presses are ignored, since the player is usually mid-fight on other controls when a QTE pops. Only the threat and its choreography differ per Biome Boss.
 - **Trigger:** a beat the Biome Boss already has and that recurs. Skipped while the player is grabbed or launched, or another cutscene runs. At least 20 s between Boss QTEs.
 - **Damage:** every hit on an enemy or boss while a Boss QTE runs deals 3x damage, prompt strikes included.
 - **Flawless clear:** a 3 s Punish Window; the boss is dazed, cannot attack and takes +50% damage.
