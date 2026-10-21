@@ -21,6 +21,18 @@ auto enemyDamage(const Game& game, int32_t base) -> int32_t
     return static_cast<int32_t>(static_cast<float>(base) * enemyDamageMult * waveEnemyScale(game));
 }
 
+auto isDasher(const EnemyKind& kind) -> bool
+{
+    return kind.pattern == EnemyPattern::Charge || kind.rollCharge;
+}
+
+auto activeDasherCount(const Game& game) -> int
+{
+    return static_cast<int>(std::ranges::count_if(
+        game.run.enemies, [](const Enemy& enemy)
+        { return enemy.active && isDasher(enemyKinds.at(static_cast<size_t>(enemy.kind))); }));
+}
+
 auto activeRangedEnemyCount(const Game& game) -> int
 {
     int count = 0;
@@ -40,13 +52,15 @@ void spawnEnemy(Game& game)
     constexpr int biomeExclusiveWeight = 4;
     const Biome biome = currentBiome(game.run.waveNumber);
     const bool rangedSlotAvailable = activeRangedEnemyCount(game) < maxActiveRangedEnemies;
+    const bool dasherSlotAvailable =
+        game.run.dasherSpawnCooldown <= 0 && activeDasherCount(game) < maxActiveDashers;
 
     std::vector<int> eligible;
     eligible.reserve(enemyKinds.size() * static_cast<size_t>(biomeExclusiveWeight));
     for (size_t i = 0; i < enemyKinds.size(); i++)
     {
         if ((enemyKinds.at(i).pattern == EnemyPattern::Turret && !rangedSlotAvailable) ||
-            i == enemyKindRicochetStrafer)
+            (isDasher(enemyKinds.at(i)) && !dasherSlotAvailable) || i == enemyKindRicochetStrafer)
         {
             continue; // Ricochet Strafers come from updateRicochetRelay
         }
@@ -79,6 +93,10 @@ void spawnEnemy(Game& game)
 
     const int kindIndex =
         eligible.at(static_cast<size_t>(GetRandomValue(0, static_cast<int>(eligible.size()) - 1)));
+    if (isDasher(enemyKinds.at(static_cast<size_t>(kindIndex))))
+    {
+        game.run.dasherSpawnCooldown = dasherSpawnCooldown;
+    }
     spawnEnemyAt(game, kindIndex, spawnRingPosition(game));
 }
 
@@ -614,6 +632,7 @@ void updateRicochetRelay(Game& game, float deltaTime)
 
 void updateEnemies(Game& game, float deltaTime)
 {
+    game.run.dasherSpawnCooldown = std::max(0.0F, game.run.dasherSpawnCooldown - deltaTime);
     game.run.sniperEventCooldown = std::max(0.0F, game.run.sniperEventCooldown - deltaTime);
     if (game.run.sniperEventPhase != 0 &&
         std::ranges::none_of(game.run.enemies, [&](const Enemy& enemy)

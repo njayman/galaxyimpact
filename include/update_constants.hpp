@@ -529,6 +529,8 @@ constexpr float krakenLimbSizeMult = 2.0F;
 constexpr int hiveNodeDeathSpawnCount = 5;
 
 constexpr int maxActiveRangedEnemies = 2;
+constexpr int maxActiveDashers = 2;          // Charger, Boarder, Rockhide
+constexpr float dasherSpawnCooldown = 6.0F; // at least this long between dasher spawns
 // Ricochet Strafers: spawned one at a time round the player; a bullet relays between them.
 constexpr float ricochetStraferSpawnInterval = 6.0F;
 constexpr float ricochetStraferSpawnDistMin = 300.0F;
