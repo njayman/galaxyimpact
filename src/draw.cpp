@@ -2951,6 +2951,16 @@ void drawGameplayWorld(const Game& game)
         {
             drawSporeProjectile(p);
         }
+        else if (p.relayTargetId != 0)
+        {
+            // Ricochet relay: an amber slug with a streak behind it.
+            const Vector2 back = Vector2Scale(Vector2Normalize(p.velocity), -1.0F);
+            DrawLineEx(p.position, Vector2Add(p.position, Vector2Scale(back, p.radius * 6.0F)), p.radius * 1.2F,
+                       Fade(Palette::ShatteredBeltAccent, 0.3F));
+            DrawCircleV(p.position, p.radius * 1.5F, Fade(Palette::ShatteredBeltAccent, 0.35F));
+            DrawCircleV(p.position, p.radius, Palette::ShatteredBeltAccent);
+            DrawCircleV(p.position, p.radius * 0.45F, WHITE);
+        }
         else if (p.isShard)
         {
             const Vector2 tail = Vector2Subtract(p.position, Vector2Scale(Vector2Normalize(p.velocity), p.radius * 3));

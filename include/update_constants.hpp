@@ -526,6 +526,18 @@ constexpr float krakenLimbSizeMult = 2.0F;
 constexpr int hiveNodeDeathSpawnCount = 5;
 
 constexpr int maxActiveRangedEnemies = 2;
+// Ricochet Strafers: spawned one at a time round the player; a bullet relays between them.
+constexpr float ricochetStraferSpawnInterval = 6.0F;
+constexpr float ricochetStraferSpawnDistMin = 300.0F;
+constexpr float ricochetStraferSpawnDistMax = 520.0F;
+constexpr float ricochetRelaySpeed = 9.0F;   // px per frame
+constexpr float ricochetRelayRestart = 1.0F; // a lost relay bullet relaunches after this
+// round(wave * 2 / 10), but 2 while that is under 10.
+constexpr auto ricochetStraferMax(int32_t wave) -> int32_t
+{
+    const int32_t n = (wave * 2 + 5) / 10;
+    return n < 10 ? 2 : n;
+}
 
 constexpr float banishedSize = 640.0F;
 

@@ -45,9 +45,10 @@ void spawnEnemy(Game& game)
     eligible.reserve(enemyKinds.size() * static_cast<size_t>(biomeExclusiveWeight));
     for (size_t i = 0; i < enemyKinds.size(); i++)
     {
-        if (enemyKinds.at(i).pattern == EnemyPattern::Turret && !rangedSlotAvailable)
+        if ((enemyKinds.at(i).pattern == EnemyPattern::Turret && !rangedSlotAvailable) ||
+            i == enemyKindRicochetStrafer)
         {
-            continue;
+            continue; // Ricochet Strafers come from updateRicochetRelay
         }
         const auto& candidate = enemyKinds.at(i);
         if (candidate.minWave > game.run.waveNumber)
@@ -491,6 +492,123 @@ void updateSniperQte(Game& game, float deltaTime)
     {
         bossQteEnd(game);
         run.sniperEventTimer = std::min(run.sniperEventTimer, sniperQteFailTell);
+    }
+}
+
+// --- Ricochet Strafers --------------------------------------------------------
+//
+// Strafers spawn one at a time on a ring round the player, up to ricochetStraferMax.
+// While two or more live, one bullet relays between them across the screen, each
+// arrival sending it on to another strafer, until they are down to one. It passes
+// through enemies; hitting the player or being lost relaunches it after a beat.
+// --------------------------------------------------------------------------
+
+void updateRicochetRelay(Game& game, float deltaTime)
+{
+    auto& run = game.run;
+    const auto& kind = enemyKinds.at(enemyKindRicochetStrafer);
+    std::vector<size_t> strafers;
+    for (size_t i = 0; i < run.enemies.size(); i++)
+    {
+        if (run.enemies.at(i).active && run.enemies.at(i).kind == enemyKindRicochetStrafer)
+        {
+            strafers.push_back(i);
+        }
+    }
+
+    if ((!game.sandbox || game.sandboxNaturalSpawnEnabled) && currentBiome(run.waveNumber) == kind.biome &&
+        run.waveNumber >= kind.minWave &&
+        std::ssize(strafers) < ricochetStraferMax(run.waveNumber))
+    {
+        run.ricochetSpawnTimer -= deltaTime;
+        if (run.ricochetSpawnTimer <= 0)
+        {
+            run.ricochetSpawnTimer = ricochetStraferSpawnInterval;
+            const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+            const auto dist = static_cast<float>(GetRandomValue(static_cast<int32_t>(ricochetStraferSpawnDistMin),
+                                                                static_cast<int32_t>(ricochetStraferSpawnDistMax)));
+            spawnEnemyAt(game, enemyKindRicochetStrafer,
+                         Vector2Add(run.player.position,
+                                    Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist}));
+            return; // spawning may have moved the enemy list
+        }
+    }
+
+    const auto pickOther = [&](uint32_t exceptId) -> const Enemy*
+    {
+        std::vector<const Enemy*> others;
+        for (const size_t i : strafers)
+        {
+            if (run.enemies.at(i).id != exceptId)
+            {
+                others.push_back(&run.enemies.at(i));
+            }
+        }
+        return others.empty() ? nullptr
+                              : others.at(static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(others.size()) - 1)));
+    };
+    const auto aim = [&](BossProjectile& bullet, const Enemy& target)
+    {
+        bullet.relayTargetId = target.id;
+        bullet.velocity =
+            Vector2Scale(Vector2Normalize(Vector2Subtract(target.position, bullet.position)), ricochetRelaySpeed);
+    };
+
+    const auto relay = std::ranges::find_if(run.bossProjectiles, [](const BossProjectile& p)
+                                            { return p.active && p.relayTargetId != 0; });
+    if (relay == run.bossProjectiles.end())
+    {
+        run.ricochetRelayDelay -= deltaTime;
+        if (strafers.size() < 2 || run.ricochetRelayDelay > 0)
+        {
+            return;
+        }
+        run.ricochetRelayDelay = ricochetRelayRestart;
+        const Enemy& from = run.enemies.at(strafers.at(static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(strafers.size()) - 1))));
+        const Enemy* to = pickOther(from.id);
+        BossProjectile bullet{.position = from.position,
+                              .velocity = Vector2{},
+                              .radius = 7,
+                              .homing = false,
+                              .active = true,
+                              .fromPlayer = false,
+                              .damage = crossfireProjectileDamage,
+                              .health = 1};
+        aim(bullet, *to);
+        bullet.position = Vector2Add(from.position, Vector2Scale(Vector2Normalize(bullet.velocity), kind.radius + 8.0F));
+        run.bossProjectiles.push_back(bullet);
+        playSFX(game, game.resources.sounds.spreadBurst);
+        return;
+    }
+
+    const auto target = std::ranges::find_if(strafers, [&](size_t i) { return run.enemies.at(i).id == relay->relayTargetId; });
+    if (target == strafers.end())
+    {
+        // Its target died: on to another, or the relay ends with fewer than one left to reach.
+        if (const Enemy* next = pickOther(0); next != nullptr && strafers.size() >= 2)
+        {
+            aim(*relay, *next);
+        }
+        else
+        {
+            relay->active = false;
+        }
+        return;
+    }
+    const Enemy& at = run.enemies.at(*target);
+    if (Vector2Distance(relay->position, at.position) > kind.radius)
+    {
+        aim(*relay, at); // keep homing on the (static) target
+        return;
+    }
+    if (const Enemy* next = pickOther(at.id); next != nullptr)
+    {
+        aim(*relay, *next);
+        playSFX(game, game.resources.sounds.menuMove);
+    }
+    else
+    {
+        relay->active = false;
     }
 }
 

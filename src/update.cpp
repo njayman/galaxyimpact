@@ -1110,6 +1110,7 @@ void updateGameplay(Game& game, float deltaTime)
     updateBullets(game, deltaTime);
     updateAsteroids(game, deltaTime);
     updateSolarForgeHeat(game, deltaTime);
+    updateRicochetRelay(game, deltaTime);
     updatePunctumThunder(game, deltaTime);
     updateDebrisSquall(game, deltaTime);
     updateRustPatches(game, deltaTime);
@@ -5299,7 +5300,7 @@ void updateProjectiles(Game& game, float deltaTime)
         for (size_t j = 0; j < game.run.enemies.size(); j++)
         {
             auto& enemy = game.run.enemies.at(j);
-            if (!projectile.active || !enemy.active || enemy.phased ||
+            if (!projectile.active || !enemy.active || enemy.phased || projectile.relayTargetId != 0 ||
                 (projectile.ricochetLastHit != 0 && enemy.id == projectile.ricochetLastHit) ||
                 !CheckCollisionCircles(projectile.position, projectile.radius, enemy.position,
                                        enemyCollisionRadius(enemy)))

@@ -176,6 +176,7 @@ struct EnemyKind
 constexpr int enemyKindSwarmling = 1;
 
 constexpr int enemyKindRockDebris = 18;
+constexpr int enemyKindRicochetStrafer = 20;
 constexpr int enemyKindSporeSwarmling = 22;
 constexpr int enemyKindHuskSentinel = 23;
 constexpr int enemyKindHiveNode = 24;
@@ -426,7 +427,7 @@ constexpr std::array<EnemyKind, 35> enemyKinds{
               .speed = 0,
               .contactDamage = 1,
               .score = 16,
-              .pattern = EnemyPattern::Turret,
+              .pattern = EnemyPattern::Stationary, // spawned and fed by updateRicochetRelay
               .color = Palette::BossHoming,
               .shape = EnemyShape::Pentagon,
               .minWave = 3,

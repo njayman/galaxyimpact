@@ -291,6 +291,7 @@ void updateSafePathSegments(Game& game, float deltaTime);
 void updateFluidHazardContact(Game& game);
 void updateGasHazards(Game& game, float deltaTime);
 void updateSolarForgeHeat(Game& game, float deltaTime);
+void updateRicochetRelay(Game& game, float deltaTime);
 void updatePunctumThunder(Game& game, float deltaTime);
 void updateDebrisSquall(Game& game, float deltaTime);
 void updateRustPatches(Game& game, float deltaTime);

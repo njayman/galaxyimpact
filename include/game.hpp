@@ -236,6 +236,8 @@ struct GameplayState
     float enemySpawnTimer;
     float solarForgeHeatMeter;
     float solarForgeHeatTickTimer;
+    float ricochetSpawnTimer = 0;
+    float ricochetRelayDelay = 0;
     Vector2 solarForgeGelWobble{};    // offset of the gel round the ship (spring)
     Vector2 solarForgeGelWobbleVel{};
     float solarForgeGelPocket = 0;    // 0..1, how far the gel has parted round the ship

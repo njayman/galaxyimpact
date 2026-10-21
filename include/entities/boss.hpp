@@ -446,6 +446,7 @@ class BossProjectile
 {
   public:
     float life = 0; // > 0: expires after this many seconds; 0: lives until out of range
+    uint32_t relayTargetId = 0; // Ricochet Strafer relay: the strafer it flies to (0: not a relay)
     Vector2 accel{}; // added to velocity each second (boomerang blades)
     bool isBlade = false;
     // Cage blades orbit a fixed center, tightening, then fling outward when orbitTime runs out.
