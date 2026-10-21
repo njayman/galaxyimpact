@@ -1646,7 +1646,8 @@ auto estimatePlayerDps(const Game& game) -> float
         case WeaponType::LaserShots:
         {
             // dmg here is the raw weaponDamage; mirror the fire code's per-shot multipliers.
-            const int32_t streaks = (3 + w.level / 4) * (w.evolved ? laserVolleyCountMult : 1);
+            const int32_t streaks = w.evolved ? (3 + w.level / 4) * laserVolleyCountMult + laserVolleyExtraBolts
+                                        : 3 + w.level / 4;
             hitsPerCooldown = static_cast<float>(streaks) * laserShotDamageMult *
                               (w.evolved ? laserVolleyDamageMult : 1.0F);
             break;
@@ -2077,7 +2078,8 @@ void updateWeapons(Game& game, float deltaTime)
             // A loose barrage: a few thin streaks scattered across a wide field in angle,
             // side offset, start position and length, so it reads as a volley, not one line.
             // Evolved: the same volley as bigger, faster, harder chevrons.
-            const int32_t streaks = (3 + w.level / 4) * (w.evolved ? laserVolleyCountMult : 1);
+            const int32_t streaks = w.evolved ? (3 + w.level / 4) * laserVolleyCountMult + laserVolleyExtraBolts
+                                        : 3 + w.level / 4;
             const float evoDamage = w.evolved ? laserVolleyDamageMult : 1.0F;
             const float evoSpeed = w.evolved ? laserVolleySpeedMult : 1.0F;
             const float halfWidth = w.evolved ? laserVolleyHalfWidth : laserShotHalfWidth;
