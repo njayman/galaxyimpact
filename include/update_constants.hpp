@@ -447,7 +447,11 @@ constexpr float sniperLineLength = 2000.0F;
 constexpr float sniperLineFlashDuration = 0.2F;
 constexpr float sniperDodgeTellDuration = 0.9F;
 constexpr float sniperLiveLineDuration = 0.35F;
-constexpr float sniperCounterDuration = 0.7F;
+// Sniper shot QTE: one prompt against the line; answered, a counter-shot kills the Sniper.
+constexpr float sniperQtePromptWindow = 0.9F;
+constexpr int32_t sniperQteParryChance = 20;
+constexpr float sniperQteFailTell = 0.3F;    // missed: the line goes live this soon, still dodgeable
+constexpr float sniperQteGap = 8.0F;         // at least this long between Sniper shots
 constexpr float sniperLineWidth = 14.0F;
 constexpr int32_t sniperLineDamage = 2;
 constexpr float krakenCoreExposureDuration = 8.0F;

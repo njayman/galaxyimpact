@@ -342,6 +342,7 @@ void resetRun(Game& game)
                                    10.0F;
     game.run.punctumThunderFlashTimer = 0;
     game.run.qteBossId = -1; // a run that ended mid-cutscene must not carry it over
+    game.run.qteEnemyId = -1;
     game.run.qtePrompt = QtePrompt::None;
     game.run.qteCooldown = 0;
     game.run.backdropSeed = static_cast<float>(GetRandomValue(0, 9999)) * 10.0F;

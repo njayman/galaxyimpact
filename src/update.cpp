@@ -4203,26 +4203,6 @@ auto bulletTouchesCircle(const Bullet& bullet, Vector2 center, float radius) -> 
     return false;
 }
 
-auto bulletTouchesLine(const Bullet& bullet, Vector2 from, Vector2 to, float halfWidth) -> bool
-{
-    if (bullet.streak <= 0)
-    {
-        return CheckCollisionCircleLine(bullet.position, bullet.radius + halfWidth, from, to);
-    }
-    const LaserShape shape = laserShape(bullet);
-    for (int k = 0; k + 1 < shape.count; k++)
-    {
-        if (CheckCollisionLines(shape.points.at(static_cast<size_t>(k)),
-                                shape.points.at(static_cast<size_t>(k) + 1), from, to, nullptr) ||
-            CheckCollisionCircleLine(shape.points.at(static_cast<size_t>(k)), bullet.halfWidth + halfWidth,
-                                     from, to))
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
 auto bulletTouchesRect(const Bullet& bullet, Rectangle rect) -> bool
 {
     if (bullet.streak <= 0)
@@ -4264,34 +4244,6 @@ void updateBullets(Game& game, float deltaTime)
             Vector2Add(bullet.position, Vector2Scale(bullet.velocity, deltaTime * frameScale));
         bullet.traveled += Vector2Length(bullet.velocity) * deltaTime * frameScale;
         applyWormholeTransit(game, bullet.position, bullet.velocity, bullet.radius);
-
-        if (game.run.sniperEventPhase == 3 &&
-            bulletTouchesLine(bullet, game.run.sniperEventStart, game.run.sniperEventEnd,
-                              sniperLineWidth / 2.0F))
-        {
-            bullet.active = false;
-            game.run.sniperEventPhase = 0;
-            game.run.sniperEventCooldown = 1.2F;
-            if (game.run.sniperEventEnemyId >= 0)
-            {
-                for (auto& sniper : game.run.enemies)
-                {
-                    if (sniper.active && sniper.id ==
-                                             static_cast<uint32_t>(game.run.sniperEventEnemyId))
-                    {
-                        sniper.sniperPhase = 0;
-                        sniper.sniperLineHitPlayer = false;
-                        sniper.stateTimer = enemyKinds.at(static_cast<size_t>(sniper.kind)).fireInterval;
-                        break;
-                    }
-                }
-            }
-            game.run.sniperEventEnemyId = -1;
-            game.run.player.nerve =
-                std::min(UpdateConstants::nerveMax, game.run.player.nerve + 18.0F);
-            playSFX(game, game.resources.sounds.critical);
-            continue;
-        }
 
         for (auto& boss : game.run.bosses)
         {

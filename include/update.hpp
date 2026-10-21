@@ -253,6 +253,9 @@ auto bossQteSlowdown(const Game& game) -> float;
 void bossQteBegin(Game& game, int32_t bossId);
 void bossQteEnd(Game& game);
 auto bossQteCanStart(const Game& game) -> bool;
+auto qteSlotFree(const Game& game) -> bool;
+void sniperQteBegin(Game& game, int32_t enemyId, Vector2 aim);
+void updateSniperQte(Game& game, float deltaTime);
 auto qtePromptForThreat(const Game& game, Vector2 threatDir,
                         int32_t parryChance = UpdateConstants::qteParryChance) -> QtePrompt;
 auto qteReadInput(Game& game, QtePrompt prompt) -> int32_t;

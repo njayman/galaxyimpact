@@ -15,13 +15,22 @@
 // trigger, including the shared minimum gap between Boss QTEs.
 // -------------------------------------------------------------------------------
 
-auto bossQteActive(const Game& game) -> bool { return game.run.qteBossId >= 0; }
+auto bossQteActive(const Game& game) -> bool
+{
+    return game.run.qteBossId >= 0 || game.run.qteEnemyId >= 0;
+}
+
+// No cutscene running or blocking one; the 20 s gap is checked separately.
+auto qteSlotFree(const Game& game) -> bool
+{
+    const auto& run = game.run;
+    return !bossQteActive(game) && run.player.health > 0 && !run.player.grabbed &&
+           !run.player.launched && run.bossCutscenePhase == 0;
+}
 
 auto bossQteCanStart(const Game& game) -> bool
 {
-    const auto& run = game.run;
-    return !bossQteActive(game) && run.qteCooldown <= 0 && run.player.health > 0 &&
-           !run.player.grabbed && !run.player.launched && run.bossCutscenePhase == 0;
+    return qteSlotFree(game) && game.run.qteCooldown <= 0;
 }
 
 auto bossQteSlowdown(const Game& game) -> float
@@ -59,13 +68,17 @@ void bossQteBegin(Game& game, int32_t bossId)
 
 void bossQteEnd(Game& game)
 {
+    if (game.run.qteBossId >= 0)
+    {
+        game.run.qteCooldown = UpdateConstants::qteMinGap; // the gap is between Boss QTEs only
+    }
     game.run.qteBossId = -1;
+    game.run.qteEnemyId = -1;
     game.run.qtePrompt = QtePrompt::None;
     game.run.qteTimer = 0;
     game.run.qteTimerMax = 0;
     game.run.qteActionTimer = 0;
     game.run.qteActionVelocity = Vector2{};
-    game.run.qteCooldown = UpdateConstants::qteMinGap;
     clearQtePlayerPose(game.run.player);
 }
 
@@ -270,6 +283,11 @@ void updateBossQte(Game& game, float deltaTime)
         }
     }
 
+    if (run.qteEnemyId >= 0)
+    {
+        updateSniperQte(game, deltaTime);
+        return;
+    }
     // Dispatch to the boss running the cutscene (add other bosses' QTEs here).
     if (Boss* core = findBeltbreakerById(game, run.qteBossId); core != nullptr)
     {

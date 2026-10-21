@@ -2893,10 +2893,8 @@ void drawGameplayWorld(const Game& game)
 
     for (const auto& shot : game.run.sniperShots)
     {
-        const float totalDuration =
-            sniperDodgeTellDuration + sniperLiveLineDuration + sniperCounterDuration;
-        const float fade = std::clamp(shot.timer / totalDuration, 0.0F, 1.0F);
-        const Color lineColor = game.run.sniperEventPhase == 3 ? Palette::Charge : Palette::Crit;
+        const float fade = std::clamp(shot.timer / sniperLineFlashDuration, 0.0F, 1.0F);
+        const Color lineColor = Palette::Crit;
         const float width = game.run.sniperEventPhase == 2 ? sniperLineWidth : 4.0F;
         DrawLineEx(shot.from, shot.to, width + 4.0F, Fade(lineColor, 0.2F * fade));
         DrawLineEx(shot.from, shot.to, width, Fade(lineColor, 0.75F * fade));
@@ -5715,19 +5713,6 @@ void drawHUD(const Game& game)
             : "Move: WASD | Dash: L-Click | Shield: R-Click | Burst: Space | Pause: Esc | F11: "
               "Fullscreen";
     drawText(game, controlHint, 10, scaledScreenHeight - 28, 18, Palette::StructMid);
-
-    if (game.run.sniperEventPhase != 0)
-    {
-        const char* qteText = game.run.sniperEventPhase == 1
-                                  ? "DODGE THE LINE!"
-                                  : game.run.sniperEventPhase == 2
-                                        ? "SNIPER FIRE!"
-                                        : "COUNTER-FIRE! SHOOT THE LINE!";
-        const int32_t textWidth = static_cast<int32_t>(
-            MeasureTextEx(game.resources.font, qteText, 26, 1).x);
-        const Color qteColor = game.run.sniperEventPhase == 3 ? Palette::Charge : Palette::Crit;
-        drawText(game, qteText, (scaledScreenWidth - textWidth) / 2, 130, 26, qteColor);
-    }
 
     if (game.run.achievementToastTimer > 0)
     {

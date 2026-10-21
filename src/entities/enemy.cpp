@@ -368,6 +368,73 @@ void killEnemyForBossAttack(Game& game, size_t index, bool alwaysLoot)
     }
 }
 
+// --- Sniper shot QTE (cutscene) ---------------------------------------------
+//
+// A Sniper lining up its shot starts a short QTE: one prompt against the line.
+// Answered, the ship slips the line and kills the Sniper with a counter-shot.
+// Wrong or late, the line goes live after a short beat, still dodgeable.
+// --------------------------------------------------------------------------
+
+void sniperQteBegin(Game& game, int32_t enemyId, Vector2 aim)
+{
+    bossQteBegin(game, -1);
+    game.run.qteEnemyId = enemyId;
+    game.run.qteThreatDir = aim;
+    game.run.qtePrompt = qtePromptForThreat(game, aim, sniperQteParryChance);
+    game.run.qteTimer = sniperQtePromptWindow;
+    game.run.qteTimerMax = sniperQtePromptWindow;
+    playSFX(game, game.resources.sounds.bossWindUp);
+}
+
+void updateSniperQte(Game& game, float /*deltaTime*/)
+{
+    auto& run = game.run;
+    const auto sniper = std::ranges::find_if(run.enemies, [&](const Enemy& enemy)
+                                             { return enemy.active && static_cast<int32_t>(enemy.id) == run.qteEnemyId; });
+    if (sniper == run.enemies.end() || run.qtePrompt == QtePrompt::None)
+    {
+        // Sniper gone, or the counter-shot beat has played out.
+        if (run.qteTimer <= 0 || sniper == run.enemies.end())
+        {
+            bossQteEnd(game);
+        }
+        return;
+    }
+
+    const int32_t answer = qteReadInput(game, run.qtePrompt);
+    if (answer > 0)
+    {
+        qteStartAction(game, run.qtePrompt, run.qteThreatDir);
+        // The shot never fires: its tell fades, and the counter-shot flashes back.
+        for (auto& shot : run.sniperShots)
+        {
+            if (Vector2Equals(shot.from, run.sniperEventStart) != 0)
+            {
+                shot.timer = 0;
+            }
+        }
+        run.sniperShots.push_back(ChainLightningBolt{
+            .from = run.player.position, .to = sniper->position, .timer = sniperLineFlashDuration});
+        run.sniperEventPhase = 0;
+        run.sniperEventEnemyId = -1;
+        run.sniperEventCooldown = sniperQteGap;
+        sniper->sniperPhase = 0;
+        sniper->sniperLineHitPlayer = false;
+        sniper->stateTimer = std::max(enemyKinds.at(static_cast<size_t>(sniper->kind)).fireInterval, sniperQteGap);
+        // The counter-shot is a kill shot.
+        damageEnemy(game, static_cast<size_t>(std::distance(run.enemies.begin(), sniper)), sniper->health);
+        playSFX(game, game.resources.sounds.critical);
+        run.qtePrompt = QtePrompt::None;
+        run.qteTimer = UpdateConstants::qteActionDuration + 0.15F;
+        run.qteTimerMax = 0;
+    }
+    else if (answer < 0 || run.qteTimer <= 0)
+    {
+        bossQteEnd(game);
+        run.sniperEventTimer = std::min(run.sniperEventTimer, sniperQteFailTell);
+    }
+}
+
 void updateEnemies(Game& game, float deltaTime)
 {
     game.run.sniperEventCooldown = std::max(0.0F, game.run.sniperEventCooldown - deltaTime);
@@ -394,11 +461,6 @@ void updateEnemies(Game& game, float deltaTime)
         if (enemy.hitFlashTimer > 0)
         {
             enemy.hitFlashTimer -= deltaTime;
-        }
-        if (enemy.sniperPhase != 0 &&
-            game.run.sniperEventEnemyId == static_cast<int32_t>(enemy.id))
-        {
-            continue;
         }
 
         if (enemy.burnDps > 0)
@@ -600,7 +662,7 @@ void updateEnemies(Game& game, float deltaTime)
                     {
                         enemy.stateTimer -= deltaTime;
                         if (enemy.stateTimer <= 0 && game.run.sniperEventPhase == 0 &&
-                            game.run.sniperEventCooldown <= 0)
+                            game.run.sniperEventCooldown <= 0 && qteSlotFree(game))
                         {
                             const Vector2 predictedPlayer =
                                 Vector2Add(game.run.player.position,
@@ -620,11 +682,10 @@ void updateEnemies(Game& game, float deltaTime)
                             game.run.sniperShots.push_back(ChainLightningBolt{
                                 .from = game.run.sniperEventStart,
                                 .to = game.run.sniperEventEnd,
-                                .timer = sniperDodgeTellDuration + sniperLiveLineDuration +
-                                         sniperCounterDuration});
+                                .timer = sniperDodgeTellDuration + sniperLiveLineDuration});
                             enemy.sniperLineHitPlayer = false;
                             enemy.sniperPhase = 1;
-                            playSFX(game, game.resources.sounds.bossWindUp);
+                            sniperQteBegin(game, static_cast<int32_t>(enemy.id), aim);
                         }
                         break;
                     }
@@ -658,15 +719,9 @@ void updateEnemies(Game& game, float deltaTime)
                     }
                     else if (game.run.sniperEventPhase == 2 && game.run.sniperEventTimer <= 0)
                     {
-                        game.run.sniperEventPhase = 3;
-                        game.run.sniperEventTimer = sniperCounterDuration;
-                        enemy.sniperPhase = 3;
-                    }
-                    else if (game.run.sniperEventPhase == 3 && game.run.sniperEventTimer <= 0)
-                    {
                         game.run.sniperEventPhase = 0;
                         game.run.sniperEventEnemyId = -1;
-                        game.run.sniperEventCooldown = kind.fireInterval;
+                        game.run.sniperEventCooldown = std::max(kind.fireInterval, sniperQteGap);
                         enemy.sniperPhase = 0;
                         enemy.sniperLineHitPlayer = false;
                         enemy.stateTimer = kind.fireInterval;
