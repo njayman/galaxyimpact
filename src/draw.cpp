@@ -148,7 +148,7 @@ void drawLaserBolt(const Bullet& b);
 void drawPickupIcon(PickupType type, ElementType element, Vector2 position, float alpha);
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius, Color rim);
 
-// Laser bolt: a comet streak, faint thin tail to a bright head. Evolved: a glowing magenta ">"
+// Laser bolt: a comet streak, faint thin tail to a bright head. Evolved: a glowing magenta 110 degree ">"
 // with a white-hot core, trailing a soft violet body that fades out.
 void drawLaserBolt(const Bullet& b)
 {
@@ -193,15 +193,26 @@ void drawLaserBolt(const Bullet& b)
             float width;
             Color color;
         };
+        // One mitred ">" (110 degrees): both arms share the apex edge, so it is a single angle,
+        // and each tapers from full width at the apex to a point.
+        constexpr float halfAngle = 55.0F * DEG2RAD;
+        const float armLength = len * 0.75F;
         for (const Pass pass : {Pass{.width = 2.4F, .color = Fade(violet, 0.22F)},
                                 Pass{.width = 1.3F, .color = Fade(magenta, 0.75F)},
                                 Pass{.width = 0.5F, .color = hot}})
         {
+            const float miter = h * pass.width * 0.5F / std::sin(halfAngle);
+            const Vector2 outer = Vector2Add(tip, Vector2Scale(fwd, miter));
+            const Vector2 inner = Vector2Subtract(tip, Vector2Scale(fwd, miter));
             for (const float sign : {1.0F, -1.0F})
             {
-                bar(at(0, 0), at(0.55F, 1.7F * sign), h * pass.width, pass.color);
+                const Vector2 arm = Vector2Add(Vector2Scale(fwd, -std::cos(halfAngle) * armLength),
+                                               Vector2Scale(side, sign * std::sin(halfAngle) * armLength));
+                // Tapers to a point at the arm's end: thick only at the apex.
+                const Vector2 end = Vector2Add(tip, arm);
+                DrawTriangle(outer, end, inner, pass.color);
+                DrawTriangle(outer, inner, end, pass.color);
             }
-            DrawCircleV(tip, h * pass.width / 2, pass.color);
         }
         return;
     }
