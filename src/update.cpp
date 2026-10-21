@@ -3077,6 +3077,27 @@ void updateSolarForgeHeat(Game& game, float deltaTime)
     const bool inSolarForge = currentBiome(game.run.waveNumber) == Biome::SolarForge;
     const bool onSafePath = !inSolarForge || isSolarForgeCaveOpen(game.run.player.position);
 
+    // Gel wobble: a spring dragged along by the ship while inside, kicked on entry.
+    auto& run = game.run;
+    const bool inGel = !onSafePath;
+    if (inGel && !run.solarForgeInGel)
+    {
+        run.solarForgeGelWobbleVel = Vector2Add(
+            run.solarForgeGelWobbleVel,
+            Vector2Scale(Vector2Normalize(run.player.velocity), solarForgeGelSplash));
+    }
+    run.solarForgeInGel = inGel;
+    const Vector2 target = inGel ? Vector2Scale(run.player.velocity, solarForgeGelDrag) : Vector2{};
+    const Vector2 accel = Vector2Subtract(
+        Vector2Scale(Vector2Subtract(target, run.solarForgeGelWobble), solarForgeGelStiffness),
+        Vector2Scale(run.solarForgeGelWobbleVel, solarForgeGelDamping));
+    run.solarForgeGelWobbleVel = Vector2Add(run.solarForgeGelWobbleVel, Vector2Scale(accel, deltaTime));
+    run.solarForgeGelWobble = Vector2ClampValue(
+        Vector2Add(run.solarForgeGelWobble, Vector2Scale(run.solarForgeGelWobbleVel, deltaTime)), 0.0F,
+        solarForgeGelMaxWobble);
+    run.solarForgeGelPocket =
+        std::clamp(run.solarForgeGelPocket + (inGel ? 4.0F : -4.0F) * deltaTime, 0.0F, 1.0F);
+
     if (onSafePath)
     {
         game.run.solarForgeHeatMeter =

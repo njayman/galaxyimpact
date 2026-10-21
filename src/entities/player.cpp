@@ -292,11 +292,15 @@ void updatePlayerMovement(Game& game, float deltaTime)
     {
         game.run.player.slowTimer -= deltaTime;
     }
+    // Solar Forge rock is a dense gel that drags the ship.
+    const bool inGel = currentBiome(game.run.waveNumber) == Biome::SolarForge &&
+                       !isSolarForgeCaveOpen(game.run.player.position);
     if (game.run.player.dashing)
     {
-        game.run.player.position =
-            Vector2Add(game.run.player.position,
-                       Vector2Scale(game.run.player.dashVelocity, deltaTime * frameScale));
+        game.run.player.position = Vector2Add(
+            game.run.player.position,
+            Vector2Scale(game.run.player.dashVelocity,
+                         deltaTime * frameScale * (inGel ? solarForgeGelDashMult : 1.0F)));
     }
     else
     {
@@ -308,6 +312,10 @@ void updatePlayerMovement(Game& game, float deltaTime)
         if (game.run.player.slowTimer > 0)
         {
             effectiveSpeed *= 0.5F;
+        }
+        if (inGel)
+        {
+            effectiveSpeed *= solarForgeGelSpeedMult;
         }
         if (effectiveSpeed < 1)
         {

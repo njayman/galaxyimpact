@@ -1537,6 +1537,7 @@ void drawSolarForgeCaveBackground(const Game& game)
     const float halfW = static_cast<float>(game.resources.screenWidth) / 2 + cellSize;
     const float halfH = static_cast<float>(game.resources.screenHeight) / 2 + cellSize;
     const Vector2 center = game.run.player.position;
+    const auto t = static_cast<float>(GetTime());
     const float startX = std::floor((center.x - halfW) / cellSize) * cellSize;
     const float startY = std::floor((center.y - halfH) / cellSize) * cellSize;
 
@@ -1555,11 +1556,27 @@ void drawSolarForgeCaveBackground(const Game& game)
 
             const float jx = (hashNoise(x * 0.071F + y * 0.019F + 4.1F) - 0.5F) * cellSize * 0.6F;
             const float jy = (hashNoise(x * 0.019F + y * 0.071F + 8.3F) - 0.5F) * cellSize * 0.6F;
-            const Vector2 blobCenter{.x = cellCenter.x + jx, .y = cellCenter.y + jy};
-            const float blobRadius =
+            const Vector2 restCenter{.x = cellCenter.x + jx, .y = cellCenter.y + jy};
+            Vector2 blobCenter = restCenter;
+            float blobRadius =
                 cellSize * (0.74F + (hashNoise(x * 0.037F + y * 0.053F + 1.7F) - 0.5F) * 0.3F);
 
-            DrawCircleV(blobCenter, blobRadius, Fade(rock, 0.38F));
+            // Gel near the ship lags behind its movement, parts round it, and ripples.
+            const float dist = Vector2Distance(blobCenter, center);
+            if (const float fall = 1.0F - dist / solarForgeGelReach; fall > 0)
+            {
+                const float f2 = fall * fall;
+                const Vector2 away = dist > 1.0F ? Vector2Scale(Vector2Subtract(blobCenter, center), 1.0F / dist)
+                                                 : Vector2{};
+                blobCenter = Vector2Add(blobCenter, Vector2Scale(game.run.solarForgeGelWobble, f2));
+                blobCenter = Vector2Add(blobCenter, Vector2Scale(away, 34.0F * f2 * game.run.solarForgeGelPocket));
+                const float jiggle = std::min(1.0F, Vector2Length(game.run.solarForgeGelWobbleVel) / 300.0F);
+                blobRadius *= 1.0F + 0.16F * std::sin(dist * 0.04F - t * 12.0F) * f2 * jiggle;
+            }
+
+            DrawCircleV(blobCenter, blobRadius, Fade(rock, 0.62F));
+            DrawCircleV(Vector2Add(blobCenter, Vector2{.x = -blobRadius * 0.28F, .y = -blobRadius * 0.28F}),
+                        blobRadius * 0.42F, Fade(ColorLerp(rock, WHITE, 0.3F), 0.14F));
             DrawCircleLines(static_cast<int32_t>(blobCenter.x), static_cast<int32_t>(blobCenter.y),
                             blobRadius, Fade(ColorLerp(rock, WHITE, 0.2F), 0.2F));
             if (shade > 0.78F)
@@ -1572,7 +1589,8 @@ void drawSolarForgeCaveBackground(const Game& game)
                 const float glowPulse =
                     0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 1.3F + shade * 30.0F);
                 const Color emberColor = ColorLerp(Palette::ElementBurn, YELLOW, glowPulse * 0.5F);
-                DrawCircleV(Vector2{.x = cellCenter.x + ex, .y = cellCenter.y + ey},
+                DrawCircleV(Vector2Add(Vector2{.x = cellCenter.x + ex, .y = cellCenter.y + ey},
+                                       Vector2Subtract(blobCenter, restCenter)),
                             cellSize * 0.16F, Fade(emberColor, 0.5F + glowPulse * 0.3F));
             }
         }

@@ -318,6 +318,15 @@ constexpr float solarForgeMeltThreshold = 10.0F;
 constexpr float solarForgeHeatDecayRate = 2.5F;
 constexpr float solarForgeMeltTickInterval = 0.5F;
 constexpr int32_t solarForgeMeltDamage = 2;
+// Rock is a dense gel: it drags the ship and wobbles with its movement.
+constexpr float solarForgeGelSpeedMult = 0.3F;
+constexpr float solarForgeGelDashMult = 0.6F;
+constexpr float solarForgeGelReach = 340.0F;     // blobs this close to the ship wobble
+constexpr float solarForgeGelDrag = 10.0F;       // wobble offset per unit of ship speed (px/frame)
+constexpr float solarForgeGelSplash = 300.0F;    // wobble kick on entering
+constexpr float solarForgeGelMaxWobble = 60.0F;
+constexpr float solarForgeGelStiffness = 90.0F;
+constexpr float solarForgeGelDamping = 7.0F;     // low: it overshoots and jiggles
 
 constexpr float solarForgeFluidBurnDps = 6.0F;
 constexpr float solarForgeFluidBurnRefreshDuration = 1.0F;

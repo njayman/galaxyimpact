@@ -231,6 +231,10 @@ struct GameplayState
     float enemySpawnTimer;
     float solarForgeHeatMeter;
     float solarForgeHeatTickTimer;
+    Vector2 solarForgeGelWobble{};    // offset of the gel round the ship (spring)
+    Vector2 solarForgeGelWobbleVel{};
+    float solarForgeGelPocket = 0;    // 0..1, how far the gel has parted round the ship
+    bool solarForgeInGel = false;
     float organicMergeTimer;
     int xp;
     int level;

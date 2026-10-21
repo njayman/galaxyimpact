@@ -315,6 +315,10 @@ void resetRun(Game& game)
     game.run.enemySpawnTimer = 1.0F;
     game.run.solarForgeHeatMeter = 0;
     game.run.solarForgeHeatTickTimer = 0;
+    game.run.solarForgeGelWobble = Vector2{};
+    game.run.solarForgeGelWobbleVel = Vector2{};
+    game.run.solarForgeGelPocket = 0;
+    game.run.solarForgeInGel = false;
     game.run.player.burnDps = 0;
     game.run.player.burnDamageAccum = 0;
     game.run.player.burnRefreshTimer = 0;
