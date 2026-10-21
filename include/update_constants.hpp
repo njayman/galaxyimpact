@@ -433,11 +433,11 @@ constexpr float laserShotSpreadDeg = 7.0F;      // each streak's random angle of
 constexpr float laserShotFieldHalfWidth = 18.0F; // random side offset at the nose, +-
 // Evolved Laser Shots: the same barrage of chevron bolts, faster, bigger and harder hitting.
 constexpr float laserVolleySpeedMult = 1.6F;  // x the base laser shot speed
-constexpr float laserVolleyDamageMult = 1.5F; // x the base per-streak damage
-constexpr int32_t laserVolleyCountMult = 2;    // x the base barrage's bolts
+constexpr float laserVolleyDamageMult = 1.0F; // x the base per-streak damage (count carries the evolution)
+constexpr int32_t laserVolleyCountMult = 3;    // x the base barrage's bolts
 constexpr float laserVolleyScatterMult = 1.8F; // x the base spread angle and field width
-constexpr float laserVolleyHalfWidth = 7.0F;
-constexpr float laserVolleyLength = 30.0F;    // chevron length, also the hit segment
+constexpr float laserVolleyHalfWidth = 5.8F;
+constexpr float laserVolleyLength = 25.0F;    // chevron length, also the hit segment
 constexpr float mineDamageMult = 0.7F;
 constexpr float shockDamageMult = 1.5F;
 constexpr float shockKnockbackBase = 20.0F;
