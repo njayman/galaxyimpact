@@ -3561,15 +3561,45 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
         DrawTriangle(left, tip, right, Palette::Accent);
     }
 
+    const auto t = static_cast<float>(GetTime());
     if (kind.pattern == EnemyPattern::Charge && enemy.telegraphing)
     {
-        const Vector2 dir = Vector2Normalize(enemy.velocity);
-        const float blink = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 14.0F);
-
-        const float dashDistance = Vector2Length(enemy.velocity) * UpdateConstants::frameScale *
-                                   UpdateConstants::enemyChargeDashDuration;
-        const Vector2 lineEnd = Vector2Add(enemy.position, Vector2Scale(dir, dashDistance));
-        DrawLineEx(enemy.position, lineEnd, 3, Fade(Palette::Crit, blink));
+        // Sniper-style aim: a line through the player that thickens and blinks faster to the lock.
+        const float lock = 1.0F - std::clamp(enemy.stateTimer / chargeTelegraphDuration, 0.0F, 1.0F);
+        const Vector2 toPlayer = Vector2Subtract(game.run.player.position, enemy.position);
+        const Vector2 lineEnd = Vector2Add(
+            enemy.position, Vector2Scale(Vector2Normalize(toPlayer),
+                                         Vector2Length(toPlayer) + UpdateConstants::enemyChargeOvershoot));
+        const float blink = 0.5F + 0.5F * std::sin(t * (10.0F + 30.0F * lock));
+        DrawLineEx(enemy.position, lineEnd, 1.0F + 4.0F * lock, Fade(Palette::Accent, 0.25F + 0.5F * blink));
+        DrawCircleLines(static_cast<int32_t>(lineEnd.x), static_cast<int32_t>(lineEnd.y),
+                        6.0F + 10.0F * (1.0F - lock), Fade(Palette::Accent, 0.6F));
+    }
+    if (kind.pattern == EnemyPattern::Charge && enemy.charging)
+    {
+        // Afterimages and a tapering streak behind the charge.
+        const Vector2 back = Vector2Scale(Vector2Normalize(enemy.velocity), -1.0F);
+        DrawLineEx(enemy.position, Vector2Add(enemy.position, Vector2Scale(back, kind.radius * 7.0F)),
+                   kind.radius * 0.8F, Fade(color, 0.18F));
+        for (int32_t k = 1; k <= 4; k++)
+        {
+            const float f = static_cast<float>(k);
+            drawEnemyShape(kind.shape, Vector2Add(enemy.position, Vector2Scale(back, f * kind.radius * 1.3F)),
+                           kind.radius * (1.0F - f * 0.12F), std::atan2(-back.y, -back.x) * RAD2DEG,
+                           Fade(color, 0.35F - f * 0.07F));
+        }
+    }
+    if (kind.fuseRadius > 0 && enemy.telegraphing)
+    {
+        // Lit fuse: the blast radius fills in while a countdown arc runs out round the body.
+        const float p = 1.0F - std::clamp(enemy.stateTimer / kind.fuseTime, 0.0F, 1.0F);
+        DrawCircleV(enemy.position, kind.explodeRadius * p, Fade(Palette::Accent, 0.12F));
+        DrawCircleLines(static_cast<int32_t>(enemy.position.x), static_cast<int32_t>(enemy.position.y),
+                        kind.explodeRadius, Fade(Palette::Accent, 0.3F + 0.5F * p));
+        DrawRing(enemy.position, kind.radius + 4.0F, kind.radius + 7.0F, -90.0F,
+                 -90.0F + 360.0F * (1.0F - p), 32, Palette::Crit);
+        const float blink = std::sin(t * (8.0F + 40.0F * p)) > 0 ? 1.0F : 0.0F;
+        color = ColorLerp(color, WHITE, 0.7F * blink);
     }
 
     const bool rollTell = kind.rollCharge && enemy.telegraphing;
@@ -3583,6 +3613,11 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
         DrawLineEx(enemy.position, lineEnd, 3, Fade(Palette::ShatteredBeltAccent, 0.6F * rollGlow));
     }
 
+    if (kind.pulseInsteadOfSpawn)
+    {
+        DrawCircleLines(static_cast<int32_t>(enemy.position.x), static_cast<int32_t>(enemy.position.y),
+                        kind.pulseRadius, Fade(Palette::PunctumAccent, 0.12F)); // its reach, always
+    }
     if (kind.pulseInsteadOfSpawn && enemy.stateTimer < 0.6F)
     {
         const float warn = 1.0F - enemy.stateTimer / 0.6F;

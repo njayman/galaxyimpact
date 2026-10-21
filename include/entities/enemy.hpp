@@ -162,12 +162,15 @@ struct EnemyKind
     bool biomeExclusive = false;
     Biome biome = Biome::ShatteredBelt;
     bool orbitsNearestAsteroid = false;
-    bool projectileBouncesOffAsteroids = false;
     bool pulseInsteadOfSpawn = false;
     int pulseDamage = 0;
     float pulseRadius = 0;
     bool burnImmune = false;
     bool rollCharge = false; // Chase plus a telegraphed straight roll (Rockhide)
+    // Proximity fuse: the player coming this close arms it; it blows fuseTime later
+    // (explodeDamage within explodeRadius). Bomber, Mine.
+    float fuseRadius = 0;
+    float fuseTime = 0;
 };
 
 constexpr int enemyKindSwarmling = 1;
@@ -214,7 +217,7 @@ constexpr std::array<EnemyKind, 35> enemyKinds{
     EnemyKind{.name = "Zigzagger",
               .radius = 12,
               .health = 12,
-              .speed = 1.4,
+              .speed = 1.8,
               .contactDamage = 1,
               .score = 8,
               .pattern = EnemyPattern::Zigzag,
@@ -300,7 +303,9 @@ constexpr std::array<EnemyKind, 35> enemyKinds{
               .minWave = 4,
               .explodesOnDeath = true,
               .explodeDamage = 2,
-              .explodeRadius = 50},
+              .explodeRadius = 90,
+              .fuseRadius = 110,
+              .fuseTime = 1.2F},
     EnemyKind{.name = "Leech",
               .radius = 12,
               .health = 10,
@@ -340,12 +345,17 @@ constexpr std::array<EnemyKind, 35> enemyKinds{
               .radius = 18,
               .health = 5,
               .speed = 0,
-              .contactDamage = 4,
+              .contactDamage = 0,
               .score = 10,
               .pattern = EnemyPattern::Stationary,
               .color = Color{.r = 190, .g = 225, .b = 245, .a = 255},
               .shape = EnemyShape::Star,
-              .minWave = 3},
+              .minWave = 3,
+              .explodesOnDeath = true,
+              .explodeDamage = 4,
+              .explodeRadius = 100,
+              .fuseRadius = 130,
+              .fuseTime = 0.9F},
     EnemyKind{.name = "Laser Fence",
               .radius = 26,
               .health = 30,
@@ -423,8 +433,7 @@ constexpr std::array<EnemyKind, 35> enemyKinds{
               .fireInterval = 3.0,
               .projectileSpeed = 6,
               .biomeExclusive = true,
-              .biome = Biome::ShatteredBelt,
-              .projectileBouncesOffAsteroids = true},
+              .biome = Biome::ShatteredBelt},
     EnemyKind{.name = "Beltcrawler",
               .radius = 12,
               .health = 10,
@@ -589,7 +598,7 @@ constexpr std::array<EnemyKind, 35> enemyKinds{
               .biome = Biome::Punctum,
               .pulseInsteadOfSpawn = true,
               .pulseDamage = 3,
-              .pulseRadius = 90},
+              .pulseRadius = 200},
     EnemyKind{.name = "Meteor Chunk",
               .radius = 22,
               .health = 26,

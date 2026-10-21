@@ -5,6 +5,7 @@
 #include "update_constants.hpp"
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <cstddef>
 #include <vector>
 
@@ -356,6 +357,22 @@ void damageEnemy(Game& game, size_t index, int32_t amount)
     }
 }
 
+// A lit fuse runs out: the blast hurts the player inside it; no score or loot.
+void detonateFuseEnemy(Game& game, size_t index)
+{
+    Enemy& enemy = game.run.enemies.at(index);
+    const auto& kind = enemyKinds.at(static_cast<size_t>(enemy.kind));
+    if (Vector2Distance(game.run.player.position, enemy.position) <=
+        kind.explodeRadius + game.run.player.radius)
+    {
+        damagePlayer(game, enemyDamage(game, kind.explodeDamage));
+    }
+    spawnKillExplosion(game, enemy.position, kind.color, 22, 1.4F);
+    playSFX(game, game.resources.sounds.rockBreak);
+    triggerShake(game, 4, 0.2F);
+    enemy.active = false;
+}
+
 void killEnemyForBossAttack(Game& game, size_t index, bool alwaysLoot)
 {
     if (alwaysLoot)
@@ -503,6 +520,10 @@ void updateEnemies(Game& game, float deltaTime)
             {
             case EnemyPattern::Chase:
             {
+                if (kind.fuseRadius > 0 && enemy.telegraphing)
+                {
+                    break; // fuse lit: it stops and waits to blow
+                }
                 // Roll charge: stateTimer counts down the chase gap, then the tell, then (while
                 // charging) the distance left to roll.
                 if (kind.rollCharge)
@@ -557,8 +578,10 @@ void updateEnemies(Game& game, float deltaTime)
                 {
                     dir = Vector2Normalize(dir);
                     const Vector2 perp{.x = -dir.y, .y = dir.x};
+                    // Triangle wave: hard, wide cuts side to side.
                     const float wobble =
-                        std::sin(static_cast<float>(GetTime()) * 5 + static_cast<float>(i)) * 1.5F;
+                        std::asin(std::sin(static_cast<float>(GetTime()) * 4.0F + static_cast<float>(i))) *
+                        (2.0F / std::numbers::pi_v<float>) * 4.5F;
                     const Vector2 move = Vector2Add(Vector2Scale(dir, kind.speed * speedMod),
                                                     Vector2Scale(perp, wobble));
                     enemy.position =
@@ -567,41 +590,52 @@ void updateEnemies(Game& game, float deltaTime)
                 break;
             }
             case EnemyPattern::Charge:
-                enemy.stateTimer -= deltaTime;
-                if (enemy.telegraphing)
+            {
+                // Creep in, aim at the player like a sniper (the line tracks them), lock, then
+                // charge through where they stood. While charging stateTimer is distance left.
+                const Vector2 toPlayer = Vector2Subtract(game.run.player.position, enemy.position);
+                const float chargeSpeed =
+                    kind.speed * speedMod * UpdateConstants::enemyChargeDashSpeedMult;
+                if (enemy.charging)
                 {
-
-                    if (enemy.stateTimer <= 0)
-                    {
-                        enemy.telegraphing = false;
-                        enemy.charging = true;
-                        enemy.stateTimer = enemyChargeDashDuration;
-                    }
-                }
-                else if (!enemy.charging)
-                {
-                    if (enemy.stateTimer <= 0)
-                    {
-                        enemy.telegraphing = true;
-                        enemy.stateTimer = chargeTelegraphDuration;
-                        const Vector2 dir = Vector2Normalize(
-                            Vector2Subtract(game.run.player.position, enemy.position));
-                        enemy.velocity = Vector2Scale(
-                            dir, kind.speed * speedMod * UpdateConstants::enemyChargeDashSpeedMult);
-                    }
-                }
-                else
-                {
-                    enemy.position = Vector2Add(
-                        enemy.position, Vector2Scale(enemy.velocity, deltaTime * frameScale));
+                    const Vector2 step = Vector2Scale(enemy.velocity, deltaTime * frameScale);
+                    enemy.position = Vector2Add(enemy.position, step);
+                    enemy.stateTimer -= Vector2Length(step);
                     if (enemy.stateTimer <= 0)
                     {
                         enemy.charging = false;
                         enemy.stateTimer = 1.2F;
                         enemy.velocity = Vector2{};
                     }
+                    break;
+                }
+                enemy.stateTimer -= deltaTime;
+                if (enemy.telegraphing)
+                {
+                    enemy.velocity = Vector2Scale(Vector2Normalize(toPlayer), chargeSpeed);
+                    if (enemy.stateTimer <= 0)
+                    {
+                        enemy.telegraphing = false;
+                        enemy.charging = true;
+                        enemy.stateTimer = Vector2Length(toPlayer) + UpdateConstants::enemyChargeOvershoot;
+                        spawnKillExplosion(game, enemy.position, kind.color, 8, 0.6F);
+                    }
+                    break;
+                }
+                if (Vector2Length(toPlayer) > 0)
+                {
+                    enemy.position = Vector2Add(
+                        enemy.position, Vector2Scale(Vector2Normalize(toPlayer),
+                                                     kind.speed * speedMod * deltaTime * frameScale));
+                }
+                if (enemy.stateTimer <= 0)
+                {
+                    enemy.telegraphing = true;
+                    enemy.stateTimer = chargeTelegraphDuration;
+                    enemy.velocity = Vector2Scale(Vector2Normalize(toPlayer), chargeSpeed);
                 }
                 break;
+            }
             case EnemyPattern::Orbit:
             {
                 enemy.orbitAngle += 1.5F * speedMod * deltaTime;
@@ -656,121 +690,75 @@ void updateEnemies(Game& game, float deltaTime)
             }
             case EnemyPattern::Turret:
             {
-                if (kind.name == "Sniper")
+                // Every turret-type enemy fires the shot QTE (see sniperQteBegin).
+                if (game.run.sniperEventEnemyId != static_cast<int32_t>(enemy.id))
                 {
-                    if (game.run.sniperEventEnemyId != static_cast<int32_t>(enemy.id))
+                    enemy.stateTimer -= deltaTime;
+                    if (enemy.stateTimer <= 0 && game.run.sniperEventPhase == 0 &&
+                        game.run.sniperEventCooldown <= 0 && qteSlotFree(game) &&
+                        Vector2Distance(enemy.position, game.run.player.position) < turretFireRange)
                     {
-                        enemy.stateTimer -= deltaTime;
-                        if (enemy.stateTimer <= 0 && game.run.sniperEventPhase == 0 &&
-                            game.run.sniperEventCooldown <= 0 && qteSlotFree(game))
-                        {
-                            const Vector2 predictedPlayer =
-                                Vector2Add(game.run.player.position,
-                                           Vector2Scale(game.run.player.velocity, 12.0F));
-                            const Vector2 aim =
-                                Vector2Normalize(Vector2Subtract(predictedPlayer, enemy.position));
-                            game.run.sniperEventStart = enemy.position;
-                            game.run.sniperEventEnd =
-                                Vector2Add(enemy.position, Vector2Scale(aim, sniperLineLength));
-                            game.run.sniperEventPlayerStart = game.run.player.position;
-                            game.run.sniperEventEnemyId = static_cast<int32_t>(enemy.id);
-                            game.run.sniperEventPhase = 1;
-                            game.run.sniperEventTimer = sniperDodgeTellDuration;
-                            game.run.sniperEventStart = enemy.position;
-                            game.run.sniperEventEnd = Vector2Add(
-                                enemy.position, Vector2Scale(aim, sniperLineLength));
-                            game.run.sniperShots.push_back(ChainLightningBolt{
-                                .from = game.run.sniperEventStart,
-                                .to = game.run.sniperEventEnd,
-                                .timer = sniperDodgeTellDuration + sniperLiveLineDuration});
-                            enemy.sniperLineHitPlayer = false;
-                            enemy.sniperPhase = 1;
-                            sniperQteBegin(game, static_cast<int32_t>(enemy.id), aim);
-                        }
-                        break;
-                    }
-
-                    game.run.sniperEventTimer -= deltaTime;
-                    enemy.sniperPhase = game.run.sniperEventPhase;
-                    if (game.run.sniperEventPhase == 1 && game.run.sniperEventTimer <= 0)
-                    {
-                        game.run.sniperEventPhase = 2;
-                        game.run.sniperEventTimer = sniperLiveLineDuration;
-                        enemy.sniperPhase = 2;
-                        if (!enemy.sniperLineHitPlayer && game.run.player.health > 0 &&
-                            CheckCollisionCircleLine(game.run.player.position,
-                                                     game.run.player.radius + sniperLineWidth / 2,
-                                                     game.run.sniperEventStart,
-                                                     game.run.sniperEventEnd))
-                        {
-                            enemy.sniperLineHitPlayer = true;
-                            damagePlayer(game, enemyDamage(game, sniperLineDamage));
-                        }
-                    }
-                    else if (game.run.sniperEventPhase == 2 && !enemy.sniperLineHitPlayer &&
-                             game.run.player.health > 0 && game.run.player.immunityTimer <= 0 &&
-                             CheckCollisionCircleLine(game.run.player.position,
-                                                      game.run.player.radius + sniperLineWidth / 2,
-                                                      game.run.sniperEventStart,
-                                                      game.run.sniperEventEnd))
-                    {
-                        enemy.sniperLineHitPlayer = true;
-                        damagePlayer(game, enemyDamage(game, sniperLineDamage));
-                    }
-                    else if (game.run.sniperEventPhase == 2 && game.run.sniperEventTimer <= 0)
-                    {
-                        game.run.sniperEventPhase = 0;
-                        game.run.sniperEventEnemyId = -1;
-                        game.run.sniperEventCooldown = std::max(kind.fireInterval, sniperQteGap);
-                        enemy.sniperPhase = 0;
+                        const Vector2 predictedPlayer =
+                            Vector2Add(game.run.player.position,
+                                       Vector2Scale(game.run.player.velocity, 12.0F));
+                        const Vector2 aim =
+                            Vector2Normalize(Vector2Subtract(predictedPlayer, enemy.position));
+                        game.run.sniperEventStart = enemy.position;
+                        game.run.sniperEventEnd =
+                            Vector2Add(enemy.position, Vector2Scale(aim, sniperLineLength));
+                        game.run.sniperEventPlayerStart = game.run.player.position;
+                        game.run.sniperEventEnemyId = static_cast<int32_t>(enemy.id);
+                        game.run.sniperEventPhase = 1;
+                        game.run.sniperEventTimer = sniperDodgeTellDuration;
+                        game.run.sniperEventStart = enemy.position;
+                        game.run.sniperEventEnd = Vector2Add(
+                            enemy.position, Vector2Scale(aim, sniperLineLength));
+                        game.run.sniperShots.push_back(ChainLightningBolt{
+                            .from = game.run.sniperEventStart,
+                            .to = game.run.sniperEventEnd,
+                            .timer = sniperDodgeTellDuration + sniperLiveLineDuration});
                         enemy.sniperLineHitPlayer = false;
-                        enemy.stateTimer = kind.fireInterval;
+                        enemy.sniperPhase = 1;
+                        sniperQteBegin(game, static_cast<int32_t>(enemy.id), aim);
                     }
                     break;
                 }
 
-                const Vector2 toPlayer = Vector2Subtract(game.run.player.position, enemy.position);
-                const float playerDist = Vector2Length(toPlayer);
-                constexpr float kiteDistance = turretFireRange * 0.55F;
-                if (playerDist > 1.0F)
+                game.run.sniperEventTimer -= deltaTime;
+                enemy.sniperPhase = game.run.sniperEventPhase;
+                if (game.run.sniperEventPhase == 1 && game.run.sniperEventTimer <= 0)
                 {
-                    const Vector2 dirToPlayer = Vector2Scale(toPlayer, 1.0F / playerDist);
-                    const Vector2 perp{.x = -dirToPlayer.y, .y = dirToPlayer.x};
-                    const float strafe =
-                        std::sin(static_cast<float>(GetTime()) * 0.8F + static_cast<float>(i)) *
-                        0.6F;
-                    const float radial = playerDist < kiteDistance
-                                             ? -1.0F
-                                             : (playerDist > turretFireRange ? 1.0F : 0.0F);
-                    Vector2 move =
-                        Vector2Add(Vector2Scale(dirToPlayer, radial), Vector2Scale(perp, strafe));
-                    if (Vector2Length(move) > 0)
+                    game.run.sniperEventPhase = 2;
+                    game.run.sniperEventTimer = sniperLiveLineDuration;
+                    enemy.sniperPhase = 2;
+                    if (!enemy.sniperLineHitPlayer && game.run.player.health > 0 &&
+                        CheckCollisionCircleLine(game.run.player.position,
+                                                 game.run.player.radius + sniperLineWidth / 2,
+                                                 game.run.sniperEventStart,
+                                                 game.run.sniperEventEnd))
                     {
-                        move = Vector2Scale(Vector2Normalize(move), kind.speed * speedMod);
-                        enemy.position =
-                            Vector2Add(enemy.position, Vector2Scale(move, deltaTime * frameScale));
+                        enemy.sniperLineHitPlayer = true;
+                        damagePlayer(game, enemyDamage(game, sniperLineDamage));
                     }
                 }
-
-                enemy.stateTimer -= deltaTime;
-                if (enemy.stateTimer <= 0 && playerDist < turretFireRange)
+                else if (game.run.sniperEventPhase == 2 && !enemy.sniperLineHitPlayer &&
+                         game.run.player.health > 0 && game.run.player.immunityTimer <= 0 &&
+                         CheckCollisionCircleLine(game.run.player.position,
+                                                  game.run.player.radius + sniperLineWidth / 2,
+                                                  game.run.sniperEventStart,
+                                                  game.run.sniperEventEnd))
                 {
-                    enemy.stateTimer = kind.fireInterval / speedMod;
-                    const Vector2 dir =
-                        Vector2Normalize(Vector2Subtract(game.run.player.position, enemy.position));
-                    const auto turretProjectileHealth = static_cast<int32_t>(
-                        std::max(1.0F, static_cast<float>(baseProjectileHealth) * enemyHealthMult *
-                                           enemyHealthScale(game)));
-                    game.run.bossProjectiles.push_back(BossProjectile{
-                        .position = enemy.position,
-                        .velocity = Vector2Scale(dir, kind.projectileSpeed),
-                        .radius = 6,
-                        .homing = false,
-                        .active = true,
-                        .fromPlayer = false,
-                        .damage = crossfireProjectileDamage,
-                        .health = turretProjectileHealth,
-                        .ricochetRemaining = kind.projectileBouncesOffAsteroids ? 1 : 0});
+                    enemy.sniperLineHitPlayer = true;
+                    damagePlayer(game, enemyDamage(game, sniperLineDamage));
+                }
+                else if (game.run.sniperEventPhase == 2 && game.run.sniperEventTimer <= 0)
+                {
+                    game.run.sniperEventPhase = 0;
+                    game.run.sniperEventEnemyId = -1;
+                    game.run.sniperEventCooldown = std::max(kind.fireInterval, sniperQteGap);
+                    enemy.sniperPhase = 0;
+                    enemy.sniperLineHitPlayer = false;
+                    enemy.stateTimer = kind.fireInterval;
                 }
                 break;
             }
@@ -812,6 +800,28 @@ void updateEnemies(Game& game, float deltaTime)
         if (kind.pattern != EnemyPattern::Stationary)
         {
             applyWormholeTransit(game, enemy.position, enemy.velocity, kind.radius);
+        }
+
+        if (kind.fuseRadius > 0)
+        {
+            if (!enemy.telegraphing)
+            {
+                if (Vector2Distance(enemy.position, game.run.player.position) < kind.fuseRadius)
+                {
+                    enemy.telegraphing = true;
+                    enemy.stateTimer = kind.fuseTime;
+                    playSFX(game, game.resources.sounds.bossWindUp);
+                }
+            }
+            else
+            {
+                enemy.stateTimer -= deltaTime;
+                if (enemy.stateTimer <= 0)
+                {
+                    detonateFuseEnemy(game, i);
+                    continue;
+                }
+            }
         }
 
         if (kind.phaseCycle)

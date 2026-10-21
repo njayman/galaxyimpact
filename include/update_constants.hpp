@@ -94,7 +94,7 @@ constexpr float blackHoleDustInwardSpeedMax = 0.22F;
 constexpr float bossBodyLingerLimit = 1.0F;
 constexpr float damageMeterHoldDuration = 1.5F;
 
-constexpr float chargeTelegraphDuration = 0.5F;
+constexpr float chargeTelegraphDuration = 0.8F; // aim line tracks the player, then locks
 constexpr float rockhideRollInterval = 4.0F;
 constexpr float rockhideRollTell = 0.6F;
 constexpr float rockhideRollSpeedMult = 2.5F;
