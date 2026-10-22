@@ -209,6 +209,8 @@ struct GameplayState
     std::vector<Particle> dashBlasts; // markers along the dash path; life is the fuse
     std::vector<Particle> enemyBombs; // Bomber drops; life is the fuse
     std::vector<Particle> flameParticles;
+    float flamethrowerCycle = 0; // time into the Flamethrower's burst + charge cycle
+    float flamethrowerEmit = 0;  // fractional jet particles owed
     std::vector<DamageNumber> damageNumbers;
     std::optional<WeaponDowngrade> weaponDowngrade;
     std::vector<FollowerDrone> followerDrones;

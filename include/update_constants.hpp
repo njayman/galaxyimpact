@@ -434,6 +434,11 @@ constexpr float flamethrowerRaySplayDeg = 7.0F; // each ray off the aim, at rest
 constexpr float flamethrowerRaySwayDeg = 4.0F;  // the splay breathes by this much
 constexpr float flamethrowerRayHalfWidthBase = 6.0F;
 constexpr float flamethrowerRayHalfWidthPerLevel = 1.5F;
+// It fires in bursts: a jet of flame, then a charge-up while the nozzle reheats, then again.
+constexpr float flamethrowerBurstDuration = 1.8F;
+constexpr float flamethrowerChargeDuration = 1.0F;
+constexpr float flamethrowerJetLife = 0.45F;       // a flame particle crosses the jet's length in this
+constexpr float flamethrowerJetParticleRate = 220.0F; // per jet per second
 // Chain Lightning: long crackling arcs from the ship, jumping far between targets.
 constexpr float chainLightningRange = 700.0F;     // ship to the first target
 constexpr float chainLightningJumpRange = 400.0F; // between targets

@@ -4792,6 +4792,11 @@ auto flamethrowerRayDirs(const Game& game) -> std::array<Vector2, 2>
     return {Vector2Rotate(aim, splay), Vector2Rotate(aim, -splay)};
 }
 
+auto flamethrowerFiring(const Game& game) -> bool
+{
+    return game.run.flamethrowerCycle < flamethrowerBurstDuration;
+}
+
 auto flamethrowerRayHalfWidth(int32_t level) -> float
 {
     return flamethrowerRayHalfWidthBase + flamethrowerRayHalfWidthPerLevel * static_cast<float>(level);
@@ -4817,21 +4822,37 @@ void updateFlamethrower(Game& game, float deltaTime)
     const float halfWidth = flamethrowerRayHalfWidth(w.level);
     const Vector2 start = game.run.player.position;
 
+    // Burst, then reheat: only the burst part of the cycle burns.
+    game.run.flamethrowerCycle =
+        std::fmod(game.run.flamethrowerCycle + deltaTime, flamethrowerBurstDuration + flamethrowerChargeDuration);
+    if (!flamethrowerFiring(game))
+    {
+        game.run.flamethrowerEmit = 0;
+        return;
+    }
+    game.run.flamethrowerEmit += flamethrowerJetParticleRate * deltaTime;
+    const auto emit = static_cast<int32_t>(game.run.flamethrowerEmit);
+    game.run.flamethrowerEmit -= static_cast<float>(emit);
+
     for (const Vector2& dir : flamethrowerRayDirs(game))
     {
         const Vector2 end = Vector2Add(start, Vector2Scale(dir, flamethrowerRayLength));
-        // Embers shed along the ray, drifting off sideways.
-        for (int32_t i = 0; i < 2; i++)
+        // The jet: flame particles pour out of the nozzle and race the length of the jet,
+        // spreading and cooling from white-gold to red as they go (velocity is per frame).
+        const float perFrame = flamethrowerRayLength / flamethrowerJetLife * deltaTime;
+        for (int32_t i = 0; i < emit; i++)
         {
-            const float along = static_cast<float>(GetRandomValue(5, 100)) / 100.0F;
-            const float drift = static_cast<float>(GetRandomValue(-100, 100)) / 100.0F;
+            const float spread = static_cast<float>(GetRandomValue(-100, 100)) / 100.0F * 2.5F * DEG2RAD;
+            const float pace = static_cast<float>(GetRandomValue(80, 105)) / 100.0F;
+            const int32_t heat = GetRandomValue(0, 2);
             game.run.flameParticles.push_back(Particle{
-                .position = Vector2Lerp(start, end, along),
-                .velocity = Vector2Scale(Vector2{.x = -dir.y, .y = dir.x}, drift * 1.5F),
-                .radius = 3.0F + 3.0F * (1.0F - along),
-                .life = flameParticleLife,
-                .maxLife = flameParticleLife,
-                .color = GetRandomValue(0, 1) == 0 ? Palette::Accent : Palette::Charge});
+                .position = Vector2Add(start, Vector2Scale(dir, game.run.player.radius)),
+                .velocity = Vector2Add(Vector2Scale(Vector2Rotate(dir, spread), perFrame * pace),
+                                       Vector2Scale(game.run.player.velocity, deltaTime)),
+                .radius = halfWidth * (1.6F + static_cast<float>(GetRandomValue(0, 100)) / 100.0F * 1.4F),
+                .life = flamethrowerJetLife,
+                .maxLife = flamethrowerJetLife,
+                .color = heat == 0 ? Palette::Crit : heat == 1 ? Palette::Charge : Palette::Accent});
         }
 
         for (size_t j = 0; j < game.run.enemies.size(); j++)

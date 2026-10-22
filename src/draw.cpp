@@ -3295,6 +3295,15 @@ void drawGameplayWorld(const Game& game)
         const float fade = p.life / p.maxLife;
         const float flicker = 0.75F + 0.25F * std::sin(static_cast<float>(GetTime()) * 24.0F +
                                                        p.position.x * 0.1F + p.position.y * 0.1F);
+        if (p.maxLife == flamethrowerJetLife)
+        {
+            // Flamethrower jet: small and hot at the nozzle, billowing wider and redder as it goes.
+            const float age = 1.0F - fade;
+            const float radius = p.radius * (0.35F + 0.9F * age);
+            DrawCircleV(p.position, radius, Fade(ColorLerp(p.color, Palette::Accent, age * 0.8F), 0.45F * fade * flicker));
+            DrawCircleV(p.position, radius * 0.45F, Fade(ColorLerp(WHITE, Palette::Charge, age), 0.6F * fade));
+            continue;
+        }
 
         DrawCircleV(p.position, p.radius * fade, Fade(p.color, 0.22F * fade * flicker));
         DrawCircleV(p.position, p.radius * fade * 0.5F, Fade(Palette::Accent, 0.35F * fade));
@@ -5064,35 +5073,33 @@ void drawOrbitBlades(const Game& game)
         }
         case WeaponType::Flamethrower:
         {
-            // Twin heat rays: a dark red band, a gold body that flickers, a pale core, all fading
-            // out toward the tip; bright heat pulses run outward along each so direction reads.
+            // The jets themselves are flame particles (drawn with the rest); here only the nozzle:
+            // a white-hot flare while firing, and while it reheats a glow that swells as embers are
+            // drawn in toward it.
             const float t = static_cast<float>(GetTime());
-            const float hw = flamethrowerRayHalfWidth(w.level) * (0.9F + 0.1F * std::sin(t * 31.0F));
-            const Vector2 start = game.run.player.position;
-            for (const Vector2& dir : flamethrowerRayDirs(game))
+            const Vector2 nozzle = game.run.player.position;
+            const float hw = flamethrowerRayHalfWidth(w.level);
+            if (flamethrowerFiring(game))
             {
-                constexpr int32_t segments = 10;
-                for (int32_t i = 0; i < segments; i++)
+                DrawCircleV(nozzle, hw * (2.2F + 0.3F * std::sin(t * 40.0F)), Fade(Palette::Crit, 0.5F));
+                for (const Vector2& dir : flamethrowerRayDirs(game))
                 {
-                    const float f0 = static_cast<float>(i) / segments;
-                    const float f1 = static_cast<float>(i + 1) / segments;
-                    const Vector2 a = Vector2Add(start, Vector2Scale(dir, flamethrowerRayLength * f0));
-                    const Vector2 b = Vector2Add(start, Vector2Scale(dir, flamethrowerRayLength * f1));
-                    const float fade = f0 < 0.7F ? 1.0F : 1.0F - (f0 - 0.7F) / 0.3F;
-                    const float taper = 1.0F - 0.35F * f0;
-                    DrawLineEx(a, b, hw * 3.0F * taper, Fade(Palette::Accent, 0.25F * fade));
-                    DrawLineEx(a, b, hw * 1.6F * taper, Fade(Palette::Charge, 0.85F * fade));
-                    DrawLineEx(a, b, hw * 0.5F * taper, Fade(Palette::Crit, fade));
-                }
-                for (int32_t k = 0; k < 3; k++)
-                {
-                    const float along = std::fmod(t * 1.6F + static_cast<float>(k) / 3.0F, 1.0F);
-                    const Vector2 p = Vector2Add(start, Vector2Scale(dir, flamethrowerRayLength * along));
-                    DrawLineEx(p, Vector2Add(p, Vector2Scale(dir, 30.0F)), hw * 0.9F,
-                               Fade(WHITE, 0.6F * (1.0F - along)));
+                    DrawLineEx(nozzle, Vector2Add(nozzle, Vector2Scale(dir, flamethrowerRayLength)), 1.0F,
+                               Fade(Palette::Charge, 0.18F));
                 }
             }
-            DrawCircleV(start, hw * 1.4F, Fade(Palette::Crit, 0.8F)); // the muzzle
+            else
+            {
+                const float charge = (game.run.flamethrowerCycle - flamethrowerBurstDuration) / flamethrowerChargeDuration;
+                DrawCircleV(nozzle, hw * (0.6F + 1.8F * charge), Fade(Palette::Accent, 0.25F + 0.35F * charge));
+                for (int32_t k = 0; k < 8; k++)
+                {
+                    const float a = static_cast<float>(k) * 0.785F + t * 1.5F;
+                    const float d = hw * 7.0F * (1.0F - std::fmod(charge * 2.0F + static_cast<float>(k) * 0.125F, 1.0F));
+                    DrawCircleV(Vector2Add(nozzle, Vector2{.x = std::cos(a) * d, .y = std::sin(a) * d}), 2.0F,
+                                Fade(Palette::Charge, 0.4F + 0.5F * charge));
+                }
+            }
             break;
         }
         case WeaponType::Shock:
