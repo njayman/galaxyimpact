@@ -3377,16 +3377,49 @@ void drawShip(const Game& game)
         return;
     }
 
-    if (game.run.player.dashing)
+    if (game.run.player.dashing && !game.run.player.shieldActive &&
+        Vector2Length(game.run.player.dashVelocity) > 0.01F)
     {
-        const Vector2 dashDir = Vector2Normalize(game.run.player.dashVelocity);
-        const Color trailColor = Palette::Crit;
-        for (int i = 1; i <= 3; i++)
+        // Dash bow-wave: nested pointed arches wrapped round the ship, open at the back, with
+        // streaks running off behind. Matte gold layers; only the leading edge is bright.
+        const Vector2 fwd = Vector2Normalize(game.run.player.dashVelocity);
+        const Vector2 side{.x = -fwd.y, .y = fwd.x};
+        const float t = static_cast<float>(GetTime());
+        const auto archPoint = [&](float s, float scale)
         {
-            const Vector2 trailPos =
-                Vector2Subtract(p, Vector2Scale(dashDir, static_cast<float>(i) * 10));
-            DrawCircleV(trailPos, r * (1 - static_cast<float>(i) * 0.2F),
-                        Fade(trailColor, 0.35F / static_cast<float>(i)));
+            // s in [-1, 1] across; |s|^1.6 bends the sides into a pointed arch.
+            const float size = r * 1.6F * scale;
+            const float ahead = (2.6F - 4.6F * std::pow(std::fabs(s), 1.6F)) * size;
+            return Vector2Add(p, Vector2Add(Vector2Scale(fwd, ahead), Vector2Scale(side, s * 1.7F * size)));
+        };
+        constexpr int32_t steps = 16;
+        for (const auto& [scale, alpha] : {std::pair{1.15F, 0.2F}, std::pair{0.95F, 0.26F}, std::pair{0.75F, 0.34F}})
+        {
+            for (int32_t i = 0; i < steps; i++)
+            {
+                const float s0 = -1.0F + 2.0F * static_cast<float>(i) / steps;
+                const float s1 = -1.0F + 2.0F * static_cast<float>(i + 1) / steps;
+                const Vector2 a = archPoint(s0, scale);
+                const Vector2 b = archPoint(s1, scale);
+                DrawTriangle(p, a, b, Fade(Palette::Charge, alpha));
+                DrawTriangle(p, b, a, Fade(Palette::Charge, alpha));
+            }
+        }
+        for (int32_t i = 0; i < steps; i++)
+        {
+            // The leading edge, brightest at the apex.
+            const float s0 = -1.0F + 2.0F * static_cast<float>(i) / steps;
+            const float s1 = -1.0F + 2.0F * static_cast<float>(i + 1) / steps;
+            const float bright = 1.0F - std::fabs(s0 + s1) * 0.5F;
+            DrawLineEx(archPoint(s0, 1.15F), archPoint(s1, 1.15F), 1.5F, Fade(Palette::Crit, 0.25F + 0.6F * bright));
+        }
+        for (int32_t k = 0; k < 5; k++)
+        {
+            // Streaks off the back, flickering in length.
+            const float across = (-1.0F + 0.5F * static_cast<float>(k)) * 1.3F * r;
+            const float len = r * (2.0F + 1.5F * std::fabs(std::sin(t * 23.0F + static_cast<float>(k) * 1.7F)));
+            const Vector2 start = Vector2Add(Vector2Subtract(p, Vector2Scale(fwd, r * 1.2F)), Vector2Scale(side, across));
+            DrawLineEx(start, Vector2Subtract(start, Vector2Scale(fwd, len)), 1.5F, Fade(Palette::Charge, 0.45F));
         }
     }
 
