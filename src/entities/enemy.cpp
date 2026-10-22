@@ -624,6 +624,52 @@ void updateRicochetRelay(Game& game, float deltaTime)
     }
 }
 
+// Swarm chaser: steers toward the player at a limited turn rate along its own curve, pushed
+// apart from close neighbours, at a speed that varies per enemy and surges a little.
+// ponytail: O(n^2) separation over at most maxEnemies; a spatial grid if the cap ever grows.
+void steerSwarmEnemy(Game& game, size_t index, float baseSpeed, float deltaTime)
+{
+    Enemy& enemy = game.run.enemies.at(index);
+    const Vector2 toPlayer = Vector2Subtract(game.run.player.position, enemy.position);
+    const float dist = Vector2Length(toPlayer);
+    if (dist < 0.01F)
+    {
+        return;
+    }
+    const float side = std::fmod(enemy.organicSeed, 2.0F) < 1.0F ? 1.0F : -1.0F;
+    const float curve = side * swarmCurveDeg * DEG2RAD * std::clamp(dist / swarmCurveFadeDist, 0.0F, 1.0F);
+    Vector2 desired = Vector2Rotate(Vector2Scale(toPlayer, 1.0F / dist), curve);
+
+    const float myRadius = enemyCollisionRadius(enemy);
+    Vector2 push{};
+    for (size_t j = 0; j < game.run.enemies.size(); j++)
+    {
+        const Enemy& other = game.run.enemies.at(j);
+        if (j == index || !other.active)
+        {
+            continue;
+        }
+        const Vector2 away = Vector2Subtract(enemy.position, other.position);
+        const float gap = Vector2Length(away) - myRadius - enemyCollisionRadius(other);
+        if (gap < swarmSeparationDist && Vector2LengthSqr(away) > 0.01F)
+        {
+            push = Vector2Add(push, Vector2Scale(Vector2Normalize(away), 1.0F - std::max(0.0F, gap) / swarmSeparationDist));
+        }
+    }
+    desired = Vector2Normalize(Vector2Add(desired, Vector2Scale(push, swarmSeparationWeight)));
+
+    // Turn the heading toward the desired direction, no faster than the turn rate.
+    Vector2 heading = Vector2LengthSqr(enemy.velocity) > 0.0001F ? Vector2Normalize(enemy.velocity) : desired;
+    const float turn = std::atan2(heading.x * desired.y - heading.y * desired.x, Vector2DotProduct(heading, desired));
+    const float maxTurn = swarmTurnRate * deltaTime;
+    heading = Vector2Rotate(heading, std::clamp(turn, -maxTurn, maxTurn));
+
+    const float variance = 0.85F + 0.3F * std::fmod(enemy.organicSeed * 7.13F, 1.0F);
+    const float surge = 1.0F + 0.15F * std::sin(static_cast<float>(GetTime()) * 2.0F + enemy.organicSeed * 3.0F);
+    enemy.velocity = Vector2Scale(heading, baseSpeed * variance * surge);
+    enemy.position = Vector2Add(enemy.position, Vector2Scale(enemy.velocity, deltaTime * frameScale));
+}
+
 // Turret (not the Sniper): rests a random 2.5-4.5 s, flashes a 0.4 s tell, then fires a burst of
 // either a turning four-armed spiral or gapped rings, so the safe lanes keep moving. Its shots fly
 // through other enemies. While bursting `charging` is set.
@@ -890,14 +936,7 @@ void updateEnemies(Game& game, float deltaTime)
                         break;
                     }
                 }
-                const Vector2 dir = Vector2Subtract(game.run.player.position, enemy.position);
-                if (Vector2Length(dir) > 0)
-                {
-                    enemy.position =
-                        Vector2Add(enemy.position,
-                                   Vector2Scale(Vector2Normalize(dir),
-                                                kind.speed * speedMod * deltaTime * frameScale));
-                }
+                steerSwarmEnemy(game, i, kind.speed * speedMod, deltaTime);
                 break;
             }
             case EnemyPattern::Zigzag:

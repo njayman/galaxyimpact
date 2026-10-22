@@ -592,6 +592,13 @@ constexpr float bomberBombRadius = 64.0F;
 constexpr int32_t bomberBombDamage = 2;
 // Sniper: glides to a new spot 450-600 from the player between shots.
 constexpr float sniperRepositionSpeed = 2.4F;
+// Swarm steering: chasers turn at a limited rate, come in on their own curve (straightening as
+// they close in), push apart from neighbours and vary their speed, so they flow in streams.
+constexpr float swarmTurnRate = 3.2F;       // radians a second
+constexpr float swarmCurveDeg = 40.0F;      // approach angle off the player, far out
+constexpr float swarmCurveFadeDist = 500.0F; // the curve straightens inside this distance
+constexpr float swarmSeparationDist = 34.0F; // beyond touching
+constexpr float swarmSeparationWeight = 1.4F;
 constexpr float dasherSpawnCooldown = 6.0F; // at least this long between dasher spawns
 // Ricochet Strafers: spawned one at a time round the player; a bullet relays between them.
 constexpr float ricochetStraferSpawnInterval = 6.0F;
