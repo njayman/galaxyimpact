@@ -421,10 +421,8 @@ auto orbitBladePosition(const Game& game, Vector2 center, float radius, int32_t 
 auto shockwaveRadius(int32_t level, bool evolved) -> float;
 auto beamAimDirection(const Game& game, bool evolved) -> Vector2;
 auto beamLength(const Game& game, int32_t level, bool evolved) -> float;
-auto flamethrowerConeDirs(const Game& game, int32_t level) -> std::vector<Vector2>;
-auto flamethrowerRangeFor(int32_t level) -> float;
-auto flamethrowerHalfAngleRad() -> float;
-auto flamethrowerActive(int32_t level) -> bool;
+auto flamethrowerRayDirs(const Game& game) -> std::array<Vector2, 2>;
+auto flamethrowerRayHalfWidth(int32_t level) -> float;
 auto waveEnemyScale(const Game& game) -> float;
 auto playerConstant(const Game& game) -> float;
 auto organicVertexRadius(float baseRadius, int32_t vertexIndex, float seed) -> float;

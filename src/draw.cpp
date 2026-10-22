@@ -4675,8 +4675,38 @@ void drawOrbitBlades(const Game& game)
             break;
         }
         case WeaponType::Flamethrower:
-
+        {
+            // Twin heat rays: a dark red band, a gold body that flickers, a pale core, all fading
+            // out toward the tip; bright heat pulses run outward along each so direction reads.
+            const float t = static_cast<float>(GetTime());
+            const float hw = flamethrowerRayHalfWidth(w.level) * (0.9F + 0.1F * std::sin(t * 31.0F));
+            const Vector2 start = game.run.player.position;
+            for (const Vector2& dir : flamethrowerRayDirs(game))
+            {
+                constexpr int32_t segments = 10;
+                for (int32_t i = 0; i < segments; i++)
+                {
+                    const float f0 = static_cast<float>(i) / segments;
+                    const float f1 = static_cast<float>(i + 1) / segments;
+                    const Vector2 a = Vector2Add(start, Vector2Scale(dir, flamethrowerRayLength * f0));
+                    const Vector2 b = Vector2Add(start, Vector2Scale(dir, flamethrowerRayLength * f1));
+                    const float fade = f0 < 0.7F ? 1.0F : 1.0F - (f0 - 0.7F) / 0.3F;
+                    const float taper = 1.0F - 0.35F * f0;
+                    DrawLineEx(a, b, hw * 3.0F * taper, Fade(Palette::Accent, 0.25F * fade));
+                    DrawLineEx(a, b, hw * 1.6F * taper, Fade(Palette::Charge, 0.85F * fade));
+                    DrawLineEx(a, b, hw * 0.5F * taper, Fade(Palette::Crit, fade));
+                }
+                for (int32_t k = 0; k < 3; k++)
+                {
+                    const float along = std::fmod(t * 1.6F + static_cast<float>(k) / 3.0F, 1.0F);
+                    const Vector2 p = Vector2Add(start, Vector2Scale(dir, flamethrowerRayLength * along));
+                    DrawLineEx(p, Vector2Add(p, Vector2Scale(dir, 30.0F)), hw * 0.9F,
+                               Fade(WHITE, 0.6F * (1.0F - along)));
+                }
+            }
+            DrawCircleV(start, hw * 1.4F, Fade(Palette::Crit, 0.8F)); // the muzzle
             break;
+        }
         case WeaponType::Shock:
         {
             const float maxRadius = shockwaveRadius(w.level, w.evolved);

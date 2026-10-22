@@ -4817,45 +4817,19 @@ void updateTurrets(Game& game, float deltaTime)
     std::erase_if(game.run.turrets, [](const Turret& turret) { return turret.life <= 0; });
 }
 
-auto flamethrowerRangeFor(int32_t level) -> float
-{
-    return flamethrowerRange + (level >= 2 ? flamethrowerLevel2RangeBonus : 0.0F);
-}
-
-auto flamethrowerHalfAngleRad() -> float { return flamethrowerHalfAngle; }
-
-// Level 1-2: forward cone only (level 2 just reaches further, via
-// flamethrowerRangeFor). Level 3: keeps the forward cone and adds two side
-// streams.
-auto flamethrowerConeDirs(const Game& game, int32_t level) -> std::vector<Vector2>
+// Flamethrower: two long heat rays from the nose that scissor slowly around the aim, burning
+// everything they cross.
+auto flamethrowerRayDirs(const Game& game) -> std::array<Vector2, 2>
 {
     const Vector2 aim = aimAtMouse(game);
-    std::vector<Vector2> coneDirs{aim};
-    if (level >= 3)
-    {
-        const float aimAngle = std::atan2(aim.y, aim.x);
-        coneDirs.push_back(Vector2{.x = std::cos(aimAngle + flamethrowerOffAngle),
-                                   .y = std::sin(aimAngle + flamethrowerOffAngle)});
-        coneDirs.push_back(Vector2{.x = std::cos(aimAngle - flamethrowerOffAngle),
-                                   .y = std::sin(aimAngle - flamethrowerOffAngle)});
-    }
-    return coneDirs;
+    const float splay = (flamethrowerRaySplayDeg + flamethrowerRaySwayDeg * std::sin(static_cast<float>(GetTime()) * 3.0F)) *
+                        DEG2RAD;
+    return {Vector2Rotate(aim, splay), Vector2Rotate(aim, -splay)};
 }
 
-// 1.0 at the nozzle, fading to flamethrowerFarDamageMult at the trail's tip.
-auto flamethrowerFalloff(float dist, float range) -> float
+auto flamethrowerRayHalfWidth(int32_t level) -> float
 {
-    const float t = std::clamp(dist / range, 0.0F, 1.0F);
-    return flamethrowerNearDamageMult + (flamethrowerFarDamageMult - flamethrowerNearDamageMult) * t;
-}
-
-auto flamethrowerActive(int32_t level) -> bool
-{
-    if (level < 3)
-    {
-        return true;
-    }
-    return std::fmod(static_cast<float>(GetTime()), 4.0F) <= 3.0F;
+    return flamethrowerRayHalfWidthBase + flamethrowerRayHalfWidthPerLevel * static_cast<float>(level);
 }
 
 void updateFlamethrower(Game& game, float deltaTime)
@@ -4874,106 +4848,57 @@ void updateFlamethrower(Game& game, float deltaTime)
         return;
     }
     const Weapon& w = *it;
-
-    if (!flamethrowerActive(w.level))
-    {
-        return;
-    }
-
-    const float range = flamethrowerRangeFor(w.level);
     const auto dps = static_cast<float>(weaponDamage(game, w.level)) * flamethrowerDamageMult;
-    const auto coneDirs = flamethrowerConeDirs(game, w.level);
+    const float halfWidth = flamethrowerRayHalfWidth(w.level);
+    const Vector2 start = game.run.player.position;
 
-    const auto particlesPerConeThisFrame = std::max(
-        1, static_cast<int32_t>(static_cast<float>(flameParticlesPerConePerSecond) * deltaTime));
-
-    const float particleSpeed = (range / flameParticleLife) * deltaTime;
-    for (const auto& dir : coneDirs)
+    for (const Vector2& dir : flamethrowerRayDirs(game))
     {
-        const float baseAngle = std::atan2(dir.y, dir.x);
-        for (int32_t i = 0; i < particlesPerConeThisFrame; i++)
+        const Vector2 end = Vector2Add(start, Vector2Scale(dir, flamethrowerRayLength));
+        // Embers shed along the ray, drifting off sideways.
+        for (int32_t i = 0; i < 2; i++)
         {
-            const float spreadAngle =
-                baseAngle + (static_cast<float>(GetRandomValue(-100, 100)) / 100.0F) *
-                                flamethrowerHalfAngle;
-            const float speedJitter = static_cast<float>(GetRandomValue(70, 100)) / 100.0F;
-
-            const Vector2 outward{.x = std::cos(spreadAngle) * particleSpeed * speedJitter,
-                                  .y = std::sin(spreadAngle) * particleSpeed * speedJitter};
-            game.run.flameParticles.push_back(
-                Particle{.position = game.run.player.position,
-                         .velocity = Vector2Add(outward, game.run.player.velocity),
-                         .radius = flameParticleRadius,
-                         .life = flameParticleLife,
-                         .maxLife = flameParticleLife,
-                         .color = GetRandomValue(0, 1) == 0 ? Palette::Accent : Palette::Crit});
-        }
-    }
-
-    for (size_t j = 0; j < game.run.enemies.size(); j++)
-    {
-        auto& enemy = game.run.enemies.at(j);
-        if (!enemy.active || enemy.phased)
-        {
-            continue;
-        }
-        const Vector2 toEnemy = Vector2Subtract(enemy.position, game.run.player.position);
-        const float dist = Vector2Length(toEnemy);
-        if (dist > range || dist <= 0.01F)
-        {
-            continue;
-        }
-        const Vector2 dirToEnemy = Vector2Scale(toEnemy, 1.0F / dist);
-        const bool inCone = std::ranges::any_of(
-            coneDirs, [&](const Vector2& dir)
-            { return Vector2DotProduct(dir, dirToEnemy) >= std::cos(flamethrowerHalfAngle); });
-        if (!inCone)
-        {
-            continue;
-        }
-        const auto tick = static_cast<int32_t>(dps * flamethrowerFalloff(dist, range) * deltaTime);
-        if (tick <= 0)
-        {
-            continue;
-        }
-        damageEnemy(game, j, tick);
-        recordDamage(game, DamageSource::Flamethrower, tick);
-        if (!enemy.active)
-        {
-            recordWeaponKill(game, WeaponType::Flamethrower);
-        }
-    }
-
-    for (auto& boss : game.run.bosses)
-    {
-        if (boss.health <= 0)
-        {
-            continue;
-        }
-        const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
-                                 .y = boss.position.y + boss.size.y / 2};
-        const Vector2 toBoss = Vector2Subtract(bossCenter, game.run.player.position);
-        const float dist = Vector2Length(toBoss);
-        if (dist > range || dist <= 0.01F)
-        {
-            continue;
-        }
-        const Vector2 dirToBoss = Vector2Scale(toBoss, 1.0F / dist);
-        const bool inCone = std::ranges::any_of(
-            coneDirs, [&](const Vector2& dir)
-            { return Vector2DotProduct(dir, dirToBoss) >= std::cos(flamethrowerHalfAngle); });
-        if (!inCone)
-        {
-            continue;
-        }
-        const auto tick = static_cast<int32_t>(dps * flamethrowerFalloff(dist, range) * deltaTime);
-        if (tick <= 0)
-        {
-            continue;
+            const float along = static_cast<float>(GetRandomValue(5, 100)) / 100.0F;
+            const float drift = static_cast<float>(GetRandomValue(-100, 100)) / 100.0F;
+            game.run.flameParticles.push_back(Particle{
+                .position = Vector2Lerp(start, end, along),
+                .velocity = Vector2Scale(Vector2{.x = -dir.y, .y = dir.x}, drift * 1.5F),
+                .radius = 3.0F + 3.0F * (1.0F - along),
+                .life = flameParticleLife,
+                .maxLife = flameParticleLife,
+                .color = GetRandomValue(0, 1) == 0 ? Palette::Accent : Palette::Charge});
         }
 
-        damageBoss(game, boss, tick, false);
-        recordDamage(game, DamageSource::Flamethrower, tick);
+        for (size_t j = 0; j < game.run.enemies.size(); j++)
+        {
+            auto& enemy = game.run.enemies.at(j);
+            if (!enemy.active || enemy.phased ||
+                !CheckCollisionCircleLine(enemy.position, enemyCollisionRadius(enemy) + halfWidth, start, end))
+            {
+                continue;
+            }
+            // ponytail: int ticks lose fractions at high frame rates; accumulate if low levels read weak.
+            const auto tick = std::max(1, static_cast<int32_t>(dps * deltaTime));
+            damageEnemy(game, j, tick);
+            recordDamage(game, DamageSource::Flamethrower, tick);
+            if (!enemy.active)
+            {
+                recordWeaponKill(game, WeaponType::Flamethrower);
+            }
+        }
+
+        for (auto& boss : game.run.bosses)
+        {
+            const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
+                                     .y = boss.position.y + boss.size.y / 2};
+            if (boss.health <= 0 || !CheckCollisionCircleLine(bossCenter, boss.size.x / 2 + halfWidth, start, end))
+            {
+                continue;
+            }
+            const auto tick = std::max(1, static_cast<int32_t>(dps * deltaTime));
+            damageBoss(game, boss, tick, false);
+            recordDamage(game, DamageSource::Flamethrower, tick);
+        }
     }
 }
 

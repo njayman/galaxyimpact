@@ -422,14 +422,12 @@ constexpr float turretLife = 8.0F;
 
 constexpr float turretFireInterval = 0.7F;
 constexpr float flakSplashRadius = 40.0F;
-constexpr float flamethrowerRange = 340.0F;
-constexpr float flamethrowerLevel2RangeBonus = 120.0F; // level 2+: reaches further
-constexpr float flamethrowerHalfAngle = 20.0F * DEG2RAD;
-constexpr float flamethrowerOffAngle = 45.0F * DEG2RAD;
-// Damage falls off along the trail - hottest right at the nozzle, weakest at
-// the tip - instead of a flat DPS regardless of distance.
-constexpr float flamethrowerNearDamageMult = 1.4F;
-constexpr float flamethrowerFarDamageMult = 0.6F;
+// Flamethrower: twin heat rays, long enough to cross the screen, scissoring around the aim.
+constexpr float flamethrowerRayLength = 900.0F;
+constexpr float flamethrowerRaySplayDeg = 7.0F; // each ray off the aim, at rest
+constexpr float flamethrowerRaySwayDeg = 4.0F;  // the splay breathes by this much
+constexpr float flamethrowerRayHalfWidthBase = 6.0F;
+constexpr float flamethrowerRayHalfWidthPerLevel = 1.5F;
 constexpr float chainLightningRange = 260.0F;
 constexpr float chainLightningBoltLife = 0.2F;
 
