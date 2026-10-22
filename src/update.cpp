@@ -2682,7 +2682,7 @@ void updateNerveSpiralProjectiles(Game& game, float deltaTime)
                 {
                     continue;
                 }
-                if (boss.isKraken && boss.krakenCoreExposedTimer <= 0)
+                if (boss.isKraken && boss.krakenCoreExposedTimer <= 0 && boss.qteStunTimer <= 0)
                 {
                     continue;
                 }

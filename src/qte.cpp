@@ -1,4 +1,5 @@
 #include "update.hpp"
+#include "update_constants.hpp"
 #include "raymath.h"
 #include <algorithm>
 #include <cmath>
@@ -371,9 +372,17 @@ void updateBossQte(Game& game, float deltaTime)
             }
             spawnKillExplosion(game, center, Palette::Crit, 40, 2.0F);
             playSFX(game, game.resources.sounds.explosion);
-            damageBoss(game, *owner,
-                       std::max(1, static_cast<int32_t>(static_cast<float>(owner->maxHealth) * run.qteFinisherCharge)),
-                       true, false, false);
+            if (owner->isBanished)
+            {
+                damageBanishedEyeBurst(game, *owner, banishedEyeBurstDamageDivisor); // only bursts hurt it
+            }
+            else
+            {
+                // The Kraken's core takes the shot, like a staggered tentacle's hit.
+                damageBoss(game, *owner,
+                           std::max(1, static_cast<int32_t>(static_cast<float>(owner->maxHealth) * run.qteFinisherCharge)),
+                           true, false, owner->isKraken);
+            }
             if (owner->health > 0)
             {
                 endBossQteClean(game, *owner);
@@ -401,6 +410,12 @@ void updateBossQte(Game& game, float deltaTime)
             return;
         case QteKind::Swallowed:
             updateSlagmawSwallowed(game, *owner, deltaTime);
+            return;
+        case QteKind::DraggedUnder:
+            updateKrakenDraggedUnder(game, *owner, deltaTime);
+            return;
+        case QteKind::Juggled:
+            updateBanishedJuggled(game, *owner, deltaTime);
             return;
         }
     }

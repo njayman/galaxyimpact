@@ -116,6 +116,7 @@ void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bo
                        float seed, float thicknessScale, float waveScale, bool calm, Color color,
                        Color tipColor);
 void drawKrakenTentacle(const Boss& boss, int32_t slot);
+void drawKrakenSnatch(const Boss& boss);
 void drawBossQteHud(const Game& game);
 void drawKrakenStaggeredTentacle(const Boss& boss, int32_t slot);
 void drawKrakenLimb(const Boss& boss, int32_t slot);
@@ -4401,6 +4402,7 @@ void drawBoss(const Game& game, const Boss& boss)
             }
             drawKrakenLimb(boss, slot);
         }
+        drawKrakenSnatch(boss);
     }
     if (boss.isBanished)
     {
@@ -4408,16 +4410,11 @@ void drawBoss(const Game& game, const Boss& boss)
         {
             drawBanishedTentacle(bossCenter, boss, slot);
         }
-        if (boss.banishedStage == 1 || boss.banishedStage == 2)
+        // The eye also snaps open for a clean Juggled's finisher.
+        if (boss.banishedStage == 1 || boss.banishedStage == 2 ||
+            (game.run.qteBossId == boss.instanceId && game.run.qteFinisherPhase > 0))
         {
             drawBanishedEye(boss);
-        }
-        if (game.run.player.launched && game.run.player.launchTargetTentacle >= 0 &&
-            game.run.player.launchTargetTentacle < Boss::banishedTentacleCount)
-        {
-            const Vector2 catcherTip =
-                boss.banishedTip[static_cast<size_t>(game.run.player.launchTargetTentacle)];
-            DrawLineEx(game.run.player.position, catcherTip, 2.0F, Fade(Palette::Crit, 0.35F));
         }
     }
 
@@ -5337,17 +5334,77 @@ void drawKrakenStaggeredTentacle(const Boss& boss, int32_t slot)
                     krakenTentacleHitRadius, Fade(WHITE, 0.5F + flash * 0.3F));
 }
 
-void drawKrakenTentacle(const Boss& boss, int32_t slot)
+void drawKrakenPortal(Vector2 portal, float t)
 {
-    const Vector2 portal = boss.tentaclePortalPos[static_cast<size_t>(slot)];
-    const auto t = static_cast<float>(GetTime());
     const float ringPulse = 0.7F + 0.3F * std::sin(t * 6.0F);
     DrawCircleV(portal, krakenTentaclePortalRadius * ringPulse, Fade(Palette::Void, 0.7F));
     DrawCircleLines(static_cast<int32_t>(portal.x), static_cast<int32_t>(portal.y),
                     krakenTentaclePortalRadius * ringPulse, Fade(Palette::PunctumAccent, 0.8F));
     DrawCircleLines(static_cast<int32_t>(portal.x), static_cast<int32_t>(portal.y),
-                    krakenTentaclePortalRadius * ringPulse * 0.6F,
-                    Fade(Palette::PunctumHaze, 0.6F));
+                    krakenTentaclePortalRadius * ringPulse * 0.6F, Fade(Palette::PunctumHaze, 0.6F));
+}
+
+// Snatch: the ring tell under the player, then the gripping tentacle coiled round the ship.
+void drawKrakenSnatch(const Boss& boss)
+{
+    const auto t = static_cast<float>(GetTime());
+    const Vector2 c = boss.snatchPos;
+    if (boss.snatchPhase == 1)
+    {
+        const float r = UpdateConstants::krakenSnatchRadius;
+        const float fill = 1.0F - std::clamp(boss.snatchStateTimer / UpdateConstants::krakenSnatchTell, 0.0F, 1.0F);
+        DrawCircleV(c, r * fill, Fade(Palette::ElementFreeze, 0.12F + 0.1F * fill));
+        DrawRing(c, r - 2.0F, r, 0, 360, 48, Fade(Palette::ElementFreeze, 0.5F + 0.4F * fill));
+        DrawRing(c, r * fill - 1.0F, r * fill, 0, 360, 48, Fade(Palette::PunctumHaze, 0.5F));
+        for (int32_t k = 0; k < 6; k++)
+        {
+            // Six ticks close in on the centre as the grab nears.
+            const float a = t * 1.5F + static_cast<float>(k) * 60.0F * DEG2RAD;
+            const Vector2 dir{.x = std::cos(a), .y = std::sin(a)};
+            const float inner = r + 4.0F + 10.0F * (1.0F - fill);
+            DrawLineEx(Vector2Add(c, Vector2Scale(dir, inner)), Vector2Add(c, Vector2Scale(dir, inner + 8.0F)), 2.0F,
+                       Fade(Palette::ElementFreeze, 0.8F));
+        }
+        return;
+    }
+    if (boss.snatchSlot < 0 || boss.tentaclePhase.at(static_cast<size_t>(boss.snatchSlot)) != 5)
+    {
+        return;
+    }
+    const Vector2 portal = boss.tentaclePortalPos.at(static_cast<size_t>(boss.snatchSlot));
+    const Vector2 bodyCenter{.x = boss.position.x + boss.size.x / 2, .y = boss.position.y + boss.size.y / 2};
+    drawKrakenPortal(portal, t);
+    drawBendyTentacle(portal, c, bodyCenter, boss.size.x / 2, static_cast<float>(boss.instanceId) + 3.0F,
+                      krakenLimbSizeMult, 10.0F, false, Palette::PunctumHaze, Palette::PunctumHaze);
+    for (int32_t k = 0; k < 2; k++)
+    {
+        // Two coils wound round the ship, turning against each other.
+        const float spin = t * (k == 0 ? 220.0F : -160.0F);
+        const float radius = 20.0F + static_cast<float>(k) * 6.0F;
+        DrawRing(c, radius - 4.0F, radius, spin, spin + 230.0F, 24, Fade(Palette::PunctumHaze, 0.85F));
+    }
+    // Cyan crackle along the coil.
+    const float seed = std::floor(t * 14.0F);
+    Vector2 prev = Vector2Add(c, Vector2{.x = 26.0F, .y = 0});
+    for (int32_t k = 1; k <= 6; k++)
+    {
+        const float a = static_cast<float>(k) * 60.0F * DEG2RAD;
+        const float jitter = 22.0F + 8.0F * hashNoise(seed + static_cast<float>(k));
+        const Vector2 next = Vector2Add(c, Vector2{.x = std::cos(a) * jitter, .y = std::sin(a) * jitter});
+        DrawLineEx(prev, next, 1.5F, Fade(Palette::ElementFreeze, 0.8F));
+        prev = next;
+    }
+}
+
+void drawKrakenTentacle(const Boss& boss, int32_t slot)
+{
+    if (boss.tentaclePhase[static_cast<size_t>(slot)] == 5)
+    {
+        return; // the Snatch grip, drawn by drawKrakenSnatch
+    }
+    const Vector2 portal = boss.tentaclePortalPos[static_cast<size_t>(slot)];
+    const auto t = static_cast<float>(GetTime());
+    drawKrakenPortal(portal, t);
 
     const int32_t phase = boss.tentaclePhase[static_cast<size_t>(slot)];
     const float stateTimer = boss.tentacleStateTimer[static_cast<size_t>(slot)];

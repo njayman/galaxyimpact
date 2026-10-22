@@ -245,6 +245,15 @@ class Boss
     std::array<Vector2, krakenLimbSlots> tentacleStaggerPos{};
     float krakenCoreExposedTimer = 0;
     bool krakenCoreExposureUsed = false;
+    // Snatch: 1 = ring tell under the player, 2 = plain grab hold. The gripping tentacle
+    // sits in tentaclePhase 5 with its tip at snatchPos (the ship, once caught).
+    int32_t snatchPhase = 0;
+    float snatchTimer = 9.0F; // until the next Snatch try
+    float snatchStateTimer = 0;
+    Vector2 snatchPos{};
+    int32_t snatchSlot = -1;
+    int32_t grabPromptsLeft = 0; // Dragged Under / Juggled prompts still to pose
+    Vector2 grabDragTarget{};    // where the grip hauls the ship between prompts
 
     std::array<int32_t, krakenLimbSlots> limbPod{-1, -1, -1, -1};
     std::array<int32_t, krakenLimbSlots> limbPhase{0, 0, 0, 0};

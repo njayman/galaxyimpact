@@ -35,7 +35,7 @@ From [Shared Boss QTE rules](https://github.com/njayman/galaxyimpact/issues/3).
 - **Trigger:** a beat the Biome Boss already has and that recurs. Skipped while the player is grabbed or launched, or another cutscene runs. At least 20 s before the same Boss QTE can start again (per QTE, so a boss's Rush does not lock out its Constrict).
 - **Damage:** every hit on an enemy or boss while a Boss QTE runs deals 3x damage.
 - **Finisher:** a clean chain ends with controls locked while the ship turns on the boss, gathers a charge and fires one heavy shot. Each answer charges it by 2% of the boss's max health (5% Parry, 10% Nerve, 3% for a completed Mash), tripled by the damage rule. Only then does the boss's own clean-clear payoff (Punish Window and the like) follow. Answers no longer strike the boss one by one.
-- **Every boss:** any boss's ChargeDash while it is enraged (25% health or less) starts the Rush QTE (3 prompts as it passes); a clean clear ends in the finisher and stuns it 3 s (no moves, +50% damage). Kraken, the Banished and the Storm Serpent keep their own systems.
+- **Every boss:** any boss's ChargeDash while it is enraged (25% health or less) starts the Rush QTE (3 prompts as it passes); a clean clear ends in the finisher and stuns it 3 s (no moves, +50% damage). The Kraken (Dragged Under) and the Banished (Juggled) have their own QTEs; the Storm Serpent has none.
 - **Flawless clear:** a 3 s Punish Window; the boss is dazed, cannot attack and takes +50% damage.
 - **Fail:** the live hit only; damage already dealt sticks.
 - **Difficulty by Biome order** (Prompt window / Prompt count / Parry share), exact values per Biome Boss:
@@ -485,6 +485,8 @@ Waves 80, 90, 100 (encounters 1, 2, 3). Skeleton kept; new look: lavender body w
 - **Clean clear:** the player severs the gripping tentacle: 3 s Punish Window (+50%) with the core exposed as a weak point. Does not use up the once-per-fight 8 s core exposure.
 - **Fail:** flung out of a portal at a random nearby spot; one tentacle hit (2 damage).
 
+As built: Snatch tries every 8 to 10 s (rolled) when an active tentacle slot is idle and unstaggered; its ring is 70 px and the plain grab holds 0.8 s. A caught ship is gripped by a tentacle from a portal 180 px away; after the Mash it is hauled toward that portal and, after every 4 answers, pulled through to a new spot beside the Kraken with a visual-only thunder flash. A clean clear ends in the finisher into the core (its charge damage, tripled), then the grip is severed and the Punish Window is the shared 3 s QTE stun (`qteStunTimer`): the core takes weapon damage at +50% and no new tentacle swipes start.
+
 ### Open for build
 
 - Snatch ring radius, cadence and the plain-grab hold length; core weak-point multiplier.
@@ -565,6 +567,8 @@ Skeleton kept. Look: black body with an ash-bone rim and seal-chain marks so it 
 - **Prompts:** 14 total (1 Mash + 13), 0.5 s window, 35% Parry share.
 - **Clean clear:** in place of the +50% Punish Window (only eye bursts hurt Banished), the eye snaps open for 3 s: one free burst, skipping a stagger cycle. Tentacles keep their stagger state; a burst counts toward the three.
 - **Fail:** thrown clear, one Chain Lash hit (7 damage).
+
+As built: the clean clear ends in the finisher: the eye snaps open and the beam lands one full eye burst (1/3 health), counted toward the three; there is no extra 3 s window. Throws start at 13, 9 and 5 prompts left (4, 4, 5 per flight); each throw hands the ship to another unstaggered tentacle, which swings it 90 to 150 degrees round the body. Other tentacles hold still while Juggled runs. Inside the gap, Bind is a 0.8 s plain hold, then the fail outcome. The old live juggle (aim-cancel launches) is removed.
 
 ### Open for build
 

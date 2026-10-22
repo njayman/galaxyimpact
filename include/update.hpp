@@ -100,6 +100,30 @@ constexpr int32_t slagmawSwallowParryChance = 25;
 constexpr int32_t slagmawSwallowBurnDamage = 2; // fail: spat out with one burn hit
 constexpr float slagmawPunishWindow = 3.0F;     // clean clear: Slagmaw chokes
 constexpr float slagmawPunishDamageMult = 1.5F;
+// Kraken Snatch and Dragged Under
+constexpr float krakenSnatchRadius = 70.0F;
+constexpr float krakenSnatchTell = 1.0F;
+constexpr int32_t krakenSnatchCooldownMin = 8; // seconds, rolled per Snatch
+constexpr int32_t krakenSnatchCooldownMax = 10;
+constexpr float krakenSnatchHold = 0.8F; // plain grab inside the QTE gap
+constexpr float krakenDragMashDuration = 1.6F;
+constexpr int32_t krakenDragMashPresses = 8;
+constexpr float krakenDragMashBeat = 0.5F;
+constexpr int32_t krakenDragPrompts = 11;
+constexpr int32_t krakenDragPromptsPerPortal = 4; // the ship is hauled through a new portal this often
+constexpr float krakenDragPromptWindow = 0.6F;
+constexpr float krakenDragBeat = 0.3F;
+constexpr int32_t krakenDragParryChance = 30;
+// Banished Juggled: Bind's catch, three throws between tentacles
+constexpr float banishedJuggleMashDuration = 1.4F;
+constexpr int32_t banishedJuggleMashPresses = 9;
+constexpr float banishedJuggleMashBeat = 0.5F;
+constexpr int32_t banishedJugglePrompts = 13;
+constexpr int32_t banishedJugglePromptsPerThrow = 4; // throws start at 13, 9 and 5 left (4, 4, 5)
+constexpr float banishedJugglePromptWindow = 0.5F;
+constexpr float banishedJuggleBeat = 0.25F;
+constexpr int32_t banishedJuggleParryChance = 35;
+constexpr float banishedPlainGrabHold = 0.8F;
 // Rush QTE: a dodge chain as a charging boss passes (Wreckworm Burrow Charge and Dash Rush, any
 // other boss's ChargeDash while enraged)
 constexpr float rushQteTriggerDist = 340.0F; // head this close and closing starts it
@@ -275,7 +299,9 @@ enum class QteKind : std::uint8_t
     PlateRush,
     Constrict,
     Rush,
-    Swallowed
+    Swallowed,
+    DraggedUnder,
+    Juggled
 };
 void bossQteBegin(Game& game, int32_t bossId, QteKind kind);
 void bossQteEnd(Game& game);
@@ -298,6 +324,9 @@ void updateWreckwormConstrict(Game& game, Boss& head, float deltaTime);
 void tryBeginRushQte(Game& game, Boss& boss, Vector2 bossCenter);
 void updateRushQte(Game& game, Boss& boss, float deltaTime);
 void endBossQteClean(Game& game, Boss& boss);
+void updateKrakenSnatch(Game& game, Boss& kraken, float deltaTime);
+void updateKrakenDraggedUnder(Game& game, Boss& kraken, float deltaTime);
+void updateBanishedJuggled(Game& game, Boss& banished, float deltaTime);
 auto findBossById(Game& game, int32_t instanceId) -> Boss*;
 auto findSlagmawById(Game& game, int32_t instanceId) -> Boss*;
 void updateSlagmawSwallowed(Game& game, Boss& slagmaw, float deltaTime);

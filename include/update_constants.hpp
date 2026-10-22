@@ -571,13 +571,6 @@ constexpr int32_t banishedTentacleDamage = 4;
 constexpr float banishedThrashArcDegrees = 110.0F;
 constexpr int32_t banishedThrashDamage = 7;
 
-constexpr float banishedCoilDuration = 0.35F;
-constexpr float banishedLaunchDistanceMin = 700.0F;
-constexpr float banishedLaunchDistanceMax = 1100.0F;
-constexpr float banishedLaunchDuration = 1.1F;
-constexpr float banishedCatchRadius = 50.0F;
-constexpr float banishedJuggleCancelDot = -0.4F;
-constexpr int32_t banishedJuggleMaxRounds = 3;
 constexpr float banishedGrabAttackChance = 0.15F;
 
 constexpr float banishedEyeChargeDuration = 5.0F;

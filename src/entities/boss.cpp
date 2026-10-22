@@ -15,6 +15,7 @@
 void seedWreckwormTrail(Boss& head, Vector2 headCenter, Vector2 trailDir);
 void beginWreckwormConstrict(Game& game, Boss& head);
 void updateSlagmawDevour(Game& game, Boss& slagmaw, float deltaTime);
+void endKrakenDraggedUnder(Game& game, Boss& kraken, bool clean);
 auto wreckwormCoilSegmentDeg(const Boss& head, int32_t segmentIndex) -> float;
 
 auto isGenericMovesetAttack(BossAttack attack) -> bool
@@ -700,7 +701,7 @@ void beginBanishedCoil(Boss& boss, Player& player, int32_t idx, Vector2 contactP
 {
     boss.banishedGrabbing[static_cast<size_t>(idx)] = true;
     boss.banishedPhase[static_cast<size_t>(idx)] = 6;
-    boss.banishedTimer[static_cast<size_t>(idx)] = banishedCoilDuration;
+    boss.banishedTimer[static_cast<size_t>(idx)] = UpdateConstants::banishedPlainGrabHold;
     boss.banishedTip[static_cast<size_t>(idx)] = contactPoint;
     player.grabbed = true;
     player.grabbingTentacle = idx;
@@ -709,113 +710,176 @@ void beginBanishedCoil(Boss& boss, Player& player, int32_t idx, Vector2 contactP
     player.position = contactPoint;
 }
 
+// A plain grab (Bind inside the QTE gap): the short hold ends with the ship thrown clear.
 void resolveBanishedCoil(Game& game, Boss& boss, int32_t idx)
 {
     Player& player = game.run.player;
-    const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
-                             .y = boss.position.y + boss.size.y / 2};
-
     player.grabbed = false;
     player.grabbingTentacle = -1;
-
-    if (player.launchRound >= banishedJuggleMaxRounds)
-    {
-        damagePlayer(game, enemyDamage(game, banishedThrashDamage));
-        player.launchRound = 0;
-        boss.banishedGrabbing[static_cast<size_t>(idx)] = false;
-        boss.banishedPhase[static_cast<size_t>(idx)] = 3;
-        boss.banishedTimer[static_cast<size_t>(idx)] = banishedTentacleRetreat;
-        return;
-    }
-
-    std::array<int32_t, Boss::banishedTentacleCount> availableCatchers{};
-    int32_t availableCatcherCount = 0;
-    for (int32_t candidate = 0; candidate < Boss::banishedTentacleCount; candidate++)
-    {
-        if (candidate != idx && !boss.banishedStaggered[static_cast<size_t>(candidate)] &&
-            !boss.banishedGrabbing[static_cast<size_t>(candidate)])
-        {
-            availableCatchers[static_cast<size_t>(availableCatcherCount++)] = candidate;
-        }
-    }
-    const int32_t catcher = availableCatcherCount > 0
-                                ? availableCatchers[static_cast<size_t>(
-                                      GetRandomValue(0, availableCatcherCount - 1))]
-                                : -1;
-
-    if (catcher < 0)
-    {
-        damagePlayer(game, enemyDamage(game, banishedThrashDamage));
-        player.launchRound = 0;
-        boss.banishedGrabbing[static_cast<size_t>(idx)] = false;
-        boss.banishedPhase[static_cast<size_t>(idx)] = 3;
-        boss.banishedTimer[static_cast<size_t>(idx)] = banishedTentacleRetreat;
-        return;
-    }
-
-    player.launchRound++;
-
-    const float away = std::atan2(player.position.y - bossCenter.y, player.position.x - bossCenter.x);
-    const float jitter = (static_cast<float>(GetRandomValue(-60, 60))) * DEG2RAD;
-    const float angle = away + jitter;
-    const float distance = static_cast<float>(
-        GetRandomValue(static_cast<int32_t>(banishedLaunchDistanceMin),
-                       static_cast<int32_t>(banishedLaunchDistanceMax)));
-    const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
-    player.launched = true;
-    player.launchVelocity = Vector2Scale(dir, distance / banishedLaunchDuration);
-    player.launchTargetTentacle = catcher;
-
-    boss.banishedGrabbing[static_cast<size_t>(catcher)] = true;
-    boss.banishedPhase[static_cast<size_t>(catcher)] = 5;
-    boss.banishedTip[static_cast<size_t>(catcher)] = boss.banishedTip[static_cast<size_t>(idx)];
-    boss.banishedAnchor[static_cast<size_t>(catcher)] = boss.banishedTip[static_cast<size_t>(catcher)];
-
+    damagePlayer(game, enemyDamage(game, banishedThrashDamage));
     boss.banishedGrabbing[static_cast<size_t>(idx)] = false;
     boss.banishedPhase[static_cast<size_t>(idx)] = 3;
     boss.banishedTimer[static_cast<size_t>(idx)] = banishedTentacleRetreat;
 }
 
-void updateBanishedLaunch(Game& game, Boss& boss, float deltaTime)
-{
-    Player& player = game.run.player;
-    const int32_t idx = player.launchTargetTentacle;
+// --- Banished Juggled QTE (cutscene) -------------------------------------------
+//
+// Bind's catch: a Mash to break the coil, then prompts across three throws, each throw
+// handing the ship to another tentacle. Clean clear: the eye snaps open and the finisher
+// beam is one eye burst. Fail: thrown clear with one Chain Lash hit.
+// --------------------------------------------------------------------------
 
-    if (idx < 0 || idx >= Boss::banishedTentacleCount || boss.banishedStaggered[static_cast<size_t>(idx)])
+void gripBanishedTentacle(Boss& boss, int32_t slot, Vector2 tip)
+{
+    boss.snatchSlot = slot;
+    boss.banishedGrabbing[static_cast<size_t>(slot)] = true;
+    boss.banishedPhase[static_cast<size_t>(slot)] = 6;
+    boss.banishedTip[static_cast<size_t>(slot)] = tip;
+}
+
+void releaseBanishedTentacle(Boss& boss)
+{
+    if (boss.snatchSlot < 0)
     {
-        player.launched = false;
-        player.launchTargetTentacle = -1;
+        return;
+    }
+    const auto slot = static_cast<size_t>(boss.snatchSlot);
+    boss.banishedGrabbing[slot] = false;
+    boss.banishedPhase[slot] = 3;
+    boss.banishedTimer[slot] = banishedTentacleRetreat;
+    boss.snatchSlot = -1;
+}
+
+void beginBanishedJuggled(Game& game, Boss& boss, int32_t slot)
+{
+    bossQteBegin(game, boss.instanceId, QteKind::Juggled);
+    game.run.qtePrompt = QtePrompt::Mash;
+    game.run.qteTimer = UpdateConstants::banishedJuggleMashDuration;
+    game.run.qteTimerMax = UpdateConstants::banishedJuggleMashDuration;
+    game.run.qteMashTarget = UpdateConstants::banishedJuggleMashPresses;
+    game.run.qteThreatDir = Vector2{};
+    gripBanishedTentacle(boss, slot, game.run.player.position);
+    boss.grabPromptsLeft = UpdateConstants::banishedJugglePrompts;
+    boss.grabDragTarget = game.run.player.position;
+    playSFX(game, game.resources.sounds.slamBoom);
+    triggerShake(game, 12, 0.4F);
+}
+
+void endBanishedJuggled(Game& game, Boss& boss, bool clean)
+{
+    bossQteEnd(game);
+    releaseBanishedTentacle(boss);
+    boss.grabPromptsLeft = 0;
+    const Vector2 center{.x = boss.position.x + boss.size.x / 2, .y = boss.position.y + boss.size.y / 2};
+    const Vector2 away = Vector2Normalize(Vector2Subtract(game.run.player.position, center));
+    game.run.player.position = Vector2Add(game.run.player.position, Vector2Scale(away, 160.0F));
+    triggerShake(game, 12, 0.35F);
+    if (clean)
+    {
+        playSFX(game, game.resources.sounds.critical);
+        return; // the finisher already landed the eye burst
+    }
+    damagePlayer(game, enemyDamage(game, banishedThrashDamage));
+    playSFX(game, game.resources.sounds.nerveFizzle);
+}
+
+void updateBanishedJuggled(Game& game, Boss& boss, float deltaTime)
+{
+    auto& run = game.run;
+    const Vector2 center{.x = boss.position.x + boss.size.x / 2, .y = boss.position.y + boss.size.y / 2};
+    if (run.qteActionTimer <= 0)
+    {
+        run.player.position =
+            Vector2Lerp(run.player.position, boss.grabDragTarget, std::min(1.0F, deltaTime * 2.5F));
+    }
+    if (boss.snatchSlot >= 0)
+    {
+        boss.banishedTip[static_cast<size_t>(boss.snatchSlot)] = run.player.position;
+    }
+
+    if (run.qtePrompt == QtePrompt::Mash)
+    {
+        if (qteReadInput(game, QtePrompt::Mash) > 0)
+        {
+            run.qteMashCount++;
+            triggerShake(game, 3, 0.08F);
+        }
+        if (run.qteMashCount >= run.qteMashTarget)
+        {
+            run.qteFinisherCharge += UpdateConstants::qteFinisherChargeMash;
+            run.qtePrompt = QtePrompt::None;
+            run.qteTimer = UpdateConstants::banishedJuggleMashBeat;
+            run.qteTimerMax = 0;
+            playSFX(game, game.resources.sounds.critical);
+        }
+        else if (run.qteTimer <= 0)
+        {
+            endBanishedJuggled(game, boss, false);
+        }
         return;
     }
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    if (run.qtePrompt != QtePrompt::None)
     {
-        const Vector2 aim = aimAtMouse(game);
-        const Vector2 launchDir = Vector2Normalize(player.launchVelocity);
-        const float dot = aim.x * -launchDir.x + aim.y * -launchDir.y;
-        if (dot <= banishedJuggleCancelDot)
+        const int32_t answer = qteReadInput(game, run.qtePrompt);
+        if (answer > 0)
         {
-            player.launched = false;
-            player.dashing = true;
-            player.dashTimer = dashChunkDuration(game);
-            player.dashVelocity = Vector2Scale(aim, dashSpeed * currentShip(game).dashDistanceMult);
-            player.immunityTimer = std::max(player.immunityTimer, 0.5F);
-
-            boss.banishedGrabbing[static_cast<size_t>(idx)] = false;
-            boss.banishedPhase[static_cast<size_t>(idx)] = 3;
-            boss.banishedTimer[static_cast<size_t>(idx)] = banishedTentacleRetreat;
-            player.launchTargetTentacle = -1;
-            return;
+            qteStartAction(game, run.qtePrompt, run.qteThreatDir);
+            playSFX(game, game.resources.sounds.critical);
+            run.qtePrompt = QtePrompt::None;
+            run.qteTimer = UpdateConstants::banishedJuggleBeat;
+            run.qteTimerMax = 0;
         }
+        else if (answer < 0 || run.qteTimer <= 0)
+        {
+            endBanishedJuggled(game, boss, false);
+        }
+        return;
     }
 
-    player.position = Vector2Add(player.position, Vector2Scale(player.launchVelocity, deltaTime));
-
-    if (Vector2Distance(player.position, boss.banishedTip[static_cast<size_t>(idx)]) <=
-        banishedCatchRadius)
+    if (run.qteTimer > 0)
     {
-        beginBanishedCoil(boss, player, idx, player.position);
+        return; // beat between prompts
     }
+    if (boss.grabPromptsLeft > 0)
+    {
+        const int32_t left = boss.grabPromptsLeft--;
+        const Vector2 fromBody = Vector2Normalize(Vector2Subtract(run.player.position, center));
+        if (left > 1 && (left - 1) % UpdateConstants::banishedJugglePromptsPerThrow == 0)
+        {
+            // A throw: another tentacle takes the ship and hurls it round the body.
+            std::array<int32_t, Boss::banishedTentacleCount> free{};
+            int32_t freeCount = 0;
+            for (int32_t t = 0; t < Boss::banishedTentacleCount; t++)
+            {
+                if (t != boss.snatchSlot && !boss.banishedStaggered[static_cast<size_t>(t)])
+                {
+                    free[static_cast<size_t>(freeCount++)] = t;
+                }
+            }
+            if (freeCount > 0)
+            {
+                releaseBanishedTentacle(boss);
+                gripBanishedTentacle(boss, free[static_cast<size_t>(GetRandomValue(0, freeCount - 1))],
+                                     run.player.position);
+            }
+            const float turn = static_cast<float>(GetRandomValue(90, 150)) * DEG2RAD *
+                               (GetRandomValue(0, 1) == 0 ? 1.0F : -1.0F);
+            boss.grabDragTarget = Vector2Add(center, Vector2Scale(Vector2Rotate(fromBody, turn),
+                                                                  boss.size.x / 2 + banishedNearReach));
+            playSFX(game, game.resources.sounds.slamBoom);
+            triggerShake(game, 8, 0.25F);
+        }
+        // Tentacles lash in from around the body.
+        const float lashTurn = static_cast<float>(GetRandomValue(-50, 50)) * DEG2RAD;
+        run.qteThreatDir = Vector2Rotate(fromBody, lashTurn);
+        run.qtePrompt = qtePromptForThreat(game, run.qteThreatDir, UpdateConstants::banishedJuggleParryChance);
+        run.qteTimer = UpdateConstants::banishedJugglePromptWindow;
+        run.qteTimerMax = UpdateConstants::banishedJugglePromptWindow;
+        playSFX(game, game.resources.sounds.bossWindUp);
+        return;
+    }
+    qteBeginFinisher(game); // every prompt answered
 }
 
 void updateBanished(Game& game, Boss& boss, float deltaTime)
@@ -914,9 +978,9 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
         return;
     }
 
-    if (game.run.player.launched)
+    if (game.run.qteBossId == boss.instanceId)
     {
-        updateBanishedLaunch(game, boss, deltaTime);
+        return; // Juggled owns the tentacles
     }
 
     const bool bossVisible =
@@ -1040,6 +1104,10 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
                     boss.banishedPhase[idx] = 0;
                     boss.banishedTentacleHitFlash[idx] = UpdateConstants::hitFlashDuration;
                     triggerBossShieldDashShake(game);
+                }
+                else if (boss.banishedAttackKind[idx] == 2 && bossQteCanStart(game, QteKind::Juggled))
+                {
+                    beginBanishedJuggled(game, boss, i);
                 }
                 else if (boss.banishedAttackKind[idx] == 2)
                 {
@@ -2434,6 +2502,12 @@ void endBossQteClean(Game& game, Boss& boss)
     case QteKind::Swallowed:
         endSlagmawSwallowed(game, boss, true);
         return;
+    case QteKind::DraggedUnder:
+        endKrakenDraggedUnder(game, boss, true);
+        return;
+    case QteKind::Juggled:
+        endBanishedJuggled(game, boss, true);
+        return;
     }
     bossQteEnd(game);
 }
@@ -2707,6 +2781,8 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
         return;
     }
 
+    updateKrakenSnatch(game, boss, deltaTime);
+
     for (int32_t s = 0; s < activeCount; s++)
     {
         const auto slot = static_cast<size_t>(s);
@@ -2806,7 +2882,7 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
     }
 
     boss.tentacleCheckTimer -= deltaTime;
-    if (boss.tentacleCheckTimer > 0)
+    if (boss.tentacleCheckTimer > 0 || boss.qteStunTimer > 0)
     {
         return;
     }
@@ -2843,6 +2919,238 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
         boss.tentacleHitPlayerThisSwipe[slot] = false;
         playSFX(game, game.resources.sounds.bossWindUp);
     }
+}
+
+// --- Kraken Snatch and Dragged Under QTE (cutscene) ----------------------------
+//
+// Snatch: a cyan ring opens under the player; still inside it after the tell, an idle
+// tentacle grabs the ship from a portal. That starts Dragged Under, or a short plain hold
+// inside the QTE gap. Dragged Under: a Mash to break the grip, then prompts as the
+// tentacle hauls the ship portal to portal while others lash in. Clean clear: the grip is
+// severed, the finisher hits the core, then a Punish Window with the core open
+// (qteStunTimer). Fail: flung out of a portal nearby with one tentacle hit.
+// --------------------------------------------------------------------------
+
+void releaseKrakenGrip(Boss& kraken)
+{
+    if (kraken.snatchSlot < 0)
+    {
+        return;
+    }
+    const auto slot = static_cast<size_t>(kraken.snatchSlot);
+    const Vector2 toTip = Vector2Subtract(kraken.snatchPos, kraken.tentaclePortalPos[slot]);
+    kraken.tentacleSwipeEndAngle[slot] = std::atan2(toTip.y, toTip.x);
+    kraken.tentacleSwipeStartAngle[slot] = kraken.tentacleSwipeEndAngle[slot];
+    kraken.tentaclePhase[slot] = 3;
+    kraken.tentacleStateTimer[slot] = krakenTentacleRetreatDuration;
+    kraken.snatchSlot = -1;
+    kraken.snatchPhase = 0;
+}
+
+void flingFromKrakenGrip(Game& game, Boss& kraken)
+{
+    releaseKrakenGrip(kraken);
+    const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+    const auto dist = static_cast<float>(GetRandomValue(150, 250));
+    auto& player = game.run.player;
+    spawnKillExplosion(game, player.position, Palette::ElementFreeze, 12, 1.0F);
+    player.position = Vector2Add(player.position, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+    spawnKillExplosion(game, player.position, Palette::ElementFreeze, 12, 1.0F);
+    damagePlayer(game, enemyDamage(game, krakenTentaclePlayerDamage));
+    playSFX(game, game.resources.sounds.nerveFizzle);
+}
+
+void beginKrakenDraggedUnder(Game& game, Boss& kraken)
+{
+    bossQteBegin(game, kraken.instanceId, QteKind::DraggedUnder);
+    game.run.qtePrompt = QtePrompt::Mash;
+    game.run.qteTimer = UpdateConstants::krakenDragMashDuration;
+    game.run.qteTimerMax = UpdateConstants::krakenDragMashDuration;
+    game.run.qteMashTarget = UpdateConstants::krakenDragMashPresses;
+    game.run.qteThreatDir = Vector2{};
+    kraken.grabPromptsLeft = UpdateConstants::krakenDragPrompts;
+    kraken.grabDragTarget = kraken.tentaclePortalPos[static_cast<size_t>(kraken.snatchSlot)];
+    playSFX(game, game.resources.sounds.slamBoom);
+    triggerShake(game, 12, 0.4F);
+}
+
+void endKrakenDraggedUnder(Game& game, Boss& kraken, bool clean)
+{
+    bossQteEnd(game);
+    kraken.grabPromptsLeft = 0;
+    if (!clean)
+    {
+        flingFromKrakenGrip(game, kraken);
+        return;
+    }
+    // The ship cuts itself free; the core stays open for the Punish Window.
+    spawnKillExplosion(game, kraken.snatchPos, Palette::ElementFreeze, 24, 1.4F);
+    releaseKrakenGrip(kraken);
+    kraken.qteStunTimer = UpdateConstants::qteStunWindow;
+    kraken.state = BossState::IDLE;
+    kraken.attackTimer = UpdateConstants::qteStunWindow;
+    playSFX(game, game.resources.sounds.critical);
+}
+
+void updateKrakenSnatch(Game& game, Boss& kraken, float deltaTime)
+{
+    auto& player = game.run.player;
+    if (kraken.snatchPhase == 0)
+    {
+        kraken.snatchTimer -= deltaTime;
+        if (kraken.snatchTimer > 0 || kraken.snatchSlot >= 0 || kraken.qteStunTimer > 0 || !qteSlotFree(game))
+        {
+            return;
+        }
+        for (int32_t s = 0; s < krakenActiveTentacleCount(kraken.krakenEncounter); s++)
+        {
+            if (krakenTentacleSlotIdle(kraken, s))
+            {
+                kraken.snatchSlot = s;
+                kraken.tentaclePhase[static_cast<size_t>(s)] = 5; // reserved, drawn once it grabs
+                kraken.snatchPhase = 1;
+                kraken.snatchStateTimer = UpdateConstants::krakenSnatchTell;
+                kraken.snatchPos = player.position;
+                kraken.snatchTimer = static_cast<float>(GetRandomValue(UpdateConstants::krakenSnatchCooldownMin,
+                                                                       UpdateConstants::krakenSnatchCooldownMax));
+                playSFX(game, game.resources.sounds.bossWindUp);
+                return;
+            }
+        }
+        return;
+    }
+
+    kraken.snatchStateTimer -= deltaTime;
+    if (kraken.snatchPhase == 1)
+    {
+        if (kraken.snatchStateTimer > 0)
+        {
+            return;
+        }
+        if (Vector2Distance(player.position, kraken.snatchPos) > UpdateConstants::krakenSnatchRadius + player.radius ||
+            !qteSlotFree(game))
+        {
+            kraken.tentaclePhase[static_cast<size_t>(kraken.snatchSlot)] = 0;
+            kraken.snatchSlot = -1;
+            kraken.snatchPhase = 0;
+            return; // left the ring: no grab
+        }
+        const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+        kraken.tentaclePortalPos[static_cast<size_t>(kraken.snatchSlot)] =
+            Vector2Add(player.position, Vector2{.x = std::cos(angle) * 180.0F, .y = std::sin(angle) * 180.0F});
+        kraken.snatchPos = player.position;
+        triggerShake(game, 8, 0.25F);
+        if (bossQteCanStart(game, QteKind::DraggedUnder))
+        {
+            kraken.snatchPhase = 0;
+            beginKrakenDraggedUnder(game, kraken);
+            return;
+        }
+        kraken.snatchPhase = 2;
+        kraken.snatchStateTimer = UpdateConstants::krakenSnatchHold;
+        playSFX(game, game.resources.sounds.slamBoom);
+        return;
+    }
+    // Plain grab: held fast, then the fail outcome.
+    player.position = kraken.snatchPos;
+    player.velocity = Vector2{};
+    if (kraken.snatchStateTimer <= 0)
+    {
+        flingFromKrakenGrip(game, kraken);
+    }
+}
+
+void updateKrakenDraggedUnder(Game& game, Boss& kraken, float deltaTime)
+{
+    auto& run = game.run;
+    if (kraken.snatchSlot < 0)
+    {
+        endKrakenDraggedUnder(game, kraken, false);
+        return;
+    }
+    const auto slot = static_cast<size_t>(kraken.snatchSlot);
+    if (run.qteActionTimer <= 0)
+    {
+        run.player.position =
+            Vector2Lerp(run.player.position, kraken.grabDragTarget, std::min(1.0F, deltaTime * 0.6F));
+    }
+    kraken.snatchPos = run.player.position;
+
+    if (run.qtePrompt == QtePrompt::Mash)
+    {
+        if (qteReadInput(game, QtePrompt::Mash) > 0)
+        {
+            run.qteMashCount++;
+            triggerShake(game, 3, 0.08F);
+        }
+        if (run.qteMashCount >= run.qteMashTarget)
+        {
+            run.qteFinisherCharge += UpdateConstants::qteFinisherChargeMash;
+            run.qtePrompt = QtePrompt::None;
+            run.qteTimer = UpdateConstants::krakenDragMashBeat;
+            run.qteTimerMax = 0;
+            playSFX(game, game.resources.sounds.critical);
+        }
+        else if (run.qteTimer <= 0)
+        {
+            endKrakenDraggedUnder(game, kraken, false);
+        }
+        return;
+    }
+
+    if (run.qtePrompt != QtePrompt::None)
+    {
+        const int32_t answer = qteReadInput(game, run.qtePrompt);
+        if (answer > 0)
+        {
+            qteStartAction(game, run.qtePrompt, run.qteThreatDir);
+            playSFX(game, game.resources.sounds.critical);
+            run.qtePrompt = QtePrompt::None;
+            run.qteTimer = UpdateConstants::krakenDragBeat;
+            run.qteTimerMax = 0;
+        }
+        else if (answer < 0 || run.qteTimer <= 0)
+        {
+            endKrakenDraggedUnder(game, kraken, false);
+        }
+        return;
+    }
+
+    if (run.qteTimer > 0)
+    {
+        return; // beat between prompts
+    }
+    if (kraken.grabPromptsLeft > 0)
+    {
+        const int32_t done = UpdateConstants::krakenDragPrompts - kraken.grabPromptsLeft--;
+        if (done > 0 && done % UpdateConstants::krakenDragPromptsPerPortal == 0)
+        {
+            // Hauled through the tear: out of a portal by the Kraken, toward the next.
+            const Vector2 center{.x = kraken.position.x + kraken.size.x / 2,
+                                 .y = kraken.position.y + kraken.size.y / 2};
+            const float exitAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+            const Vector2 exitDir{.x = std::cos(exitAngle), .y = std::sin(exitAngle)};
+            spawnKillExplosion(game, run.player.position, Palette::ElementFreeze, 14, 1.0F);
+            run.player.position = Vector2Add(center, Vector2Scale(exitDir, kraken.size.x / 2 + 260.0F));
+            kraken.snatchPos = run.player.position;
+            spawnKillExplosion(game, run.player.position, Palette::ElementFreeze, 14, 1.0F);
+            const Vector2 pullDir = Vector2Rotate(exitDir, static_cast<float>(GetRandomValue(60, 120)) * DEG2RAD);
+            kraken.tentaclePortalPos[slot] = Vector2Add(run.player.position, Vector2Scale(pullDir, 200.0F));
+            kraken.grabDragTarget = kraken.tentaclePortalPos[slot];
+            game.run.punctumThunderFlashTimer = punctumThunderFlashDuration; // visual only
+            playSFX(game, game.resources.sounds.slamBoom);
+            triggerShake(game, 10, 0.3F);
+        }
+        // Other tentacles lash in from any side.
+        const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+        run.qteThreatDir = Vector2{.x = std::cos(angle), .y = std::sin(angle)};
+        run.qtePrompt = qtePromptForThreat(game, run.qteThreatDir, UpdateConstants::krakenDragParryChance);
+        run.qteTimer = UpdateConstants::krakenDragPromptWindow;
+        run.qteTimerMax = UpdateConstants::krakenDragPromptWindow;
+        playSFX(game, game.resources.sounds.bossWindUp);
+        return;
+    }
+    qteBeginFinisher(game); // every prompt answered
 }
 
 auto krakenPodPosition(const Boss& boss, int32_t podIndex) -> Vector2
@@ -3128,7 +3436,8 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake, bool pi
         return;
     }
 
-    if (boss.isKraken && !hitsStaggeredKrakenTentacle && boss.krakenCoreExposedTimer <= 0)
+    if (boss.isKraken && !hitsStaggeredKrakenTentacle && boss.krakenCoreExposedTimer <= 0 &&
+        boss.qteStunTimer <= 0)
     {
         // The core only takes weapon damage during the coordinated tentacle-down exposure.
         boss.hitFlashTimer = UpdateConstants::hitFlashDuration;

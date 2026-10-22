@@ -242,7 +242,7 @@ struct GameplayState
     int32_t qteMashTarget = 0; // presses that fill the Mash bar
     // Minimum gap before the same Boss QTE may start again, per kind (QteKind), so one boss's
     // QTEs don't lock out its others.
-    std::array<float, 4> qteCooldowns{};
+    std::array<float, 6> qteCooldowns{};
     int32_t qteKind = -1; // kind of the running Boss QTE
     float asteroidSpawnTimer;
     float enemySpawnTimer;
