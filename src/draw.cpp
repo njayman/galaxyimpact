@@ -13,6 +13,7 @@
 #include "raygui.h"
 #include "raylib.h"
 #include "raymath.h"
+#include "rlgl.h"
 #include "sandbox.hpp"
 #include "settings.hpp"
 #include "ships/bastion.hpp"
@@ -76,6 +77,10 @@ void drawShipSelect(const Game& game);
 void drawGameOver(const Game& game);
 void drawEnding(const Game& game);
 void drawOverlay(const Game& game);
+auto easeOutBack(float t) -> float;
+auto popScale(const Game& game, int32_t index) -> float;
+void beginPop(Vector2 center, float scale);
+void endPop();
 void drawSettings(const Game& game);
 void drawSkillIcon(SkillType id, Vector2 c, float s, Color color, bool evolved = false);
 void drawWeaponIcon(WeaponType kind, Vector2 c, float s, Color color, bool evolved = false);
@@ -186,9 +191,12 @@ void beginPixelZoom(const Game& game)
                          .zoom = zoom});
 }
 
+constexpr float transitionCameraPush = 0.08F;
+auto transitionPush(const Game& game) -> float;
+
 void beginWorldCamera(const Game& game)
 {
-    const float zoom = game.resources.renderScale;
+    const float zoom = game.resources.renderScale * (1.0F + transitionCameraPush * transitionPush(game));
     const Vector2 center{.x = static_cast<float>(game.resources.screenWidth) / 2,
                          .y = static_cast<float>(game.resources.screenHeight) / 2};
     Vector2 offset = Vector2Scale(center, zoom);
@@ -314,6 +322,7 @@ void drawShipSelect(const Game& game)
     const ShipDef& highlighted = ships.at(static_cast<size_t>(game.menuIndex));
 
     const ShipSelectLayout layout = shipSelectLayout(game);
+    beginPop(layout.previewPos, popScale(game, 0) * easeOutBack(game.menuIndexAge / 0.22F));
     windowText(game, std::string(highlighted.name).c_str(), game.resources.windowWidth / 2,
               layout.nameY, 40, Palette::Accent);
     const Vector2 dir = aimAtMouse(game);
@@ -325,6 +334,7 @@ void drawShipSelect(const Game& game)
     }
     drawShipHull(shipClass, layout.previewPos, layout.previewRadius, previewAngle,
                 highlighted.color);
+    endPop();
 
     const Vector2 mouse = GetMousePosition();
     const auto drawChevron = [&](Vector2 center, bool left, Rectangle tapZone)
@@ -357,14 +367,21 @@ void drawShipSelect(const Game& game)
     {
         GuiSetState(STATE_FOCUSED);
     }
+    beginPop(Vector2{.x = layout.selectRect.x + layout.selectRect.width / 2,
+                     .y = layout.selectRect.y + layout.selectRect.height / 2},
+             popScale(game, 2));
     GuiButton(layout.selectRect, "Select");
+    endPop();
     GuiSetState(STATE_NORMAL);
 }
 
 void drawGameOver(const Game& game)
 {
     applyGuiScale(game);
+    beginPop(Vector2{.x = static_cast<float>(game.resources.windowWidth) / 2, .y = 90.0F * guiUiScale(game)},
+             popScale(game, 0));
     windowText(game, "YOU WERE DEFEATED!", game.resources.windowWidth / 2, 70, 40, Palette::Accent);
+    endPop();
 
     const std::string statsText =
         std::format("Score: {}   Level: {}   Wave: {}   Time: {:.0f}s", game.run.score,
@@ -434,10 +451,178 @@ void drawEnding(const Game& game)
     }
 }
 
+// --- Screen transitions --------------------------------------------------------
+//
+// Opening a screen grows a dark matte iris out of its anchor (the ship when it opens over
+// gameplay, otherwise the pointer), while the world camera pushes in a little; the screen's
+// items then pop in one after another with a slight overshoot. Returning to gameplay shrinks
+// the iris back into the ship.
+// -------------------------------------------------------------------------------
+
+constexpr float irisOpenDuration = 0.32F;
+constexpr float irisCloseDuration = 0.22F;
+
+auto easeOutCubic(float t) -> float
+{
+    const float u = 1.0F - std::clamp(t, 0.0F, 1.0F);
+    return 1.0F - u * u * u;
+}
+
+auto easeOutBack(float t) -> float
+{
+    constexpr float c1 = 1.70158F;
+    constexpr float c3 = c1 + 1.0F;
+    const float u = std::clamp(t, 0.0F, 1.0F) - 1.0F;
+    return 1.0F + c3 * u * u * u + c1 * u * u;
+}
+
+// Screens drawn on top of the running world.
+auto overGameplay(const Game& game, GameState state) -> bool
+{
+    switch (state)
+    {
+    case GameState::PAUSED:
+    case GameState::LEVEL_UP:
+    case GameState::GAME_OVER:
+    case GameState::SANDBOX_MENU:
+        return true;
+    case GameState::SHIP_SELECT:
+    case GameState::SETTINGS:
+    case GameState::ACHIEVEMENTS:
+    case GameState::BESTIARY:
+        return game.settingsReturnState == GameState::PAUSED ||
+               game.settingsReturnState == GameState::GAME_OVER;
+    default:
+        return false;
+    }
+}
+
+auto shipWindowPos(const Game& game) -> Vector2
+{
+    const Rectangle box = letterBoxRect(game);
+    return Vector2{.x = box.x + box.width / 2, .y = box.y + box.height / 2};
+}
+
+void updateTransitions(Game& game)
+{
+    const float dt = GetFrameTime();
+    if (game.state != game.drawnState)
+    {
+        const bool fromGameplay = game.drawnState == GameState::GAMEPLAY;
+        if (game.state == GameState::GAMEPLAY && overGameplay(game, game.drawnState))
+        {
+            game.closeTimer = irisCloseDuration;
+        }
+        game.irisAnchor = fromGameplay || game.state == GameState::GAMEPLAY ? shipWindowPos(game) : GetMousePosition();
+        game.drawnState = game.state;
+        game.stateAge = 0;
+    }
+    else
+    {
+        game.stateAge += dt;
+    }
+    if (game.menuIndex != game.menuIndexDrawn)
+    {
+        game.menuIndexDrawn = game.menuIndex;
+        game.menuIndexAge = 0;
+    }
+    else
+    {
+        game.menuIndexAge += dt;
+    }
+    game.closeTimer = std::max(0.0F, game.closeTimer - dt);
+    game.qteAge = bossQteActive(game) ? game.qteAge + dt : 0;
+}
+
+auto irisMaxRadius(const Game& game, Vector2 anchor) -> float
+{
+    const auto w = static_cast<float>(game.resources.windowWidth);
+    const auto h = static_cast<float>(game.resources.windowHeight);
+    const float dx = std::max(anchor.x, w - anchor.x);
+    const float dy = std::max(anchor.y, h - anchor.y);
+    return std::sqrt(dx * dx + dy * dy) + 4.0F;
+}
+
+// How far the camera has pushed in on the ship (0..1).
+auto transitionPush(const Game& game) -> float
+{
+    if (overGameplay(game, game.state))
+    {
+        return easeOutCubic(game.stateAge / irisOpenDuration);
+    }
+    return game.state == GameState::GAMEPLAY ? easeOutCubic(game.closeTimer / irisCloseDuration) : 0.0F;
+}
+
+void drawIrisRim(Vector2 anchor, float radius, float progress)
+{
+    if (progress < 1.0F)
+    {
+        DrawRing(anchor, radius - 2.0F, radius, 0, 360, 96, Fade(Palette::Haze, 0.5F * (1.0F - progress)));
+    }
+}
+
+// The dimmed backdrop of a screen over gameplay: a dark disc growing out of the ship.
 void drawOverlay(const Game& game)
 {
-    DrawRectangle(0, 0, game.resources.windowWidth, game.resources.windowHeight,
-                  Fade(Palette::Void, 0.75F));
+    const float maxR = irisMaxRadius(game, game.irisAnchor);
+    const float progress = easeOutCubic(game.stateAge / irisOpenDuration);
+    if (progress >= 1.0F)
+    {
+        DrawRectangle(0, 0, game.resources.windowWidth, game.resources.windowHeight, Fade(Palette::Void, 0.75F));
+        return;
+    }
+    DrawCircleV(game.irisAnchor, maxR * progress, Fade(Palette::Void, 0.75F));
+    drawIrisRim(game.irisAnchor, maxR * progress, progress);
+}
+
+// A full screen (not over gameplay) is revealed through the iris: everything outside it stays dark.
+void drawIrisReveal(const Game& game)
+{
+    const float progress = easeOutCubic(game.stateAge / irisOpenDuration);
+    if (progress >= 1.0F || game.state == GameState::GAMEPLAY || game.state == GameState::ENDING ||
+        overGameplay(game, game.state))
+    {
+        return;
+    }
+    const float maxR = irisMaxRadius(game, game.irisAnchor);
+    const float r = maxR * progress;
+    DrawRing(game.irisAnchor, r, maxR + 8.0F, 0, 360, 96, Palette::Void);
+    drawIrisRim(game.irisAnchor, r, progress);
+}
+
+// Back to gameplay: the dark disc shrinks into the ship.
+void drawIrisClose(const Game& game)
+{
+    if (game.state != GameState::GAMEPLAY || game.closeTimer <= 0)
+    {
+        return;
+    }
+    const float progress = easeOutCubic(game.closeTimer / irisCloseDuration);
+    const float r = irisMaxRadius(game, game.irisAnchor) * progress;
+    DrawCircleV(game.irisAnchor, r, Fade(Palette::Void, 0.75F * progress));
+    drawIrisRim(game.irisAnchor, r, 1.0F - progress);
+}
+
+// Item `index` of the current screen pops in after the iris, staggered; 0 until its turn.
+auto popScale(const Game& game, int32_t index) -> float
+{
+    const float t = (game.stateAge - irisOpenDuration * 0.4F - 0.05F * static_cast<float>(index)) / 0.24F;
+    return t <= 0 ? 0.0F : easeOutBack(t);
+}
+
+void beginPop(Vector2 center, float scale)
+{
+    rlDrawRenderBatchActive(); // flush what came before, so only this item is scaled
+    rlPushMatrix();
+    rlTranslatef(center.x, center.y, 0);
+    rlScalef(scale, scale, 1);
+    rlTranslatef(-center.x, -center.y, 0);
+}
+
+void endPop()
+{
+    rlDrawRenderBatchActive();
+    rlPopMatrix();
 }
 
 void drawSettings(const Game& game)
@@ -1295,8 +1480,10 @@ void drawLevelUp(const Game& game)
 {
     applyGuiScale(game);
     const float scale = guiUiScale(game);
+    beginPop(Vector2{.x = static_cast<float>(game.resources.windowWidth) / 2, .y = 117.0F * scale}, popScale(game, 0));
     windowText(game, std::format("LEVEL {}", game.run.level).c_str(),
                game.resources.windowWidth / 2, 100, 34, Palette::Accent);
+    endPop();
 
     const auto count = static_cast<int32_t>(game.run.pendingChoices.size());
     constexpr int32_t nameFontSize = 24;
@@ -1390,6 +1577,7 @@ void drawLevelUp(const Game& game)
             }
         }
 
+        beginPop(Vector2{.x = rect.x + rect.width / 2, .y = rect.y + rect.height / 2}, popScale(game, i + 1));
         const auto nameSize = static_cast<int32_t>(static_cast<float>(nameFontSize) * scale);
         const auto descSize = static_cast<int32_t>(static_cast<float>(descFontSize) * scale);
         const int32_t nameY = static_cast<int32_t>(rect.y + rect.height * 0.28F) - nameSize / 2;
@@ -1409,6 +1597,7 @@ void drawLevelUp(const Game& game)
         windowText(game, desc.c_str(), static_cast<int32_t>(rect.x + rect.width / 2),
                    static_cast<int32_t>(static_cast<float>(descY) / scale), descFontSize,
                    Palette::StructMid);
+        endPop();
     }
 }
 
@@ -1418,8 +1607,12 @@ void drawMenu(const Game& game, const std::string& heading, const std::vector<st
     applyGuiScale(game);
     if (!heading.empty())
     {
+        beginPop(Vector2{.x = static_cast<float>(game.resources.windowWidth) / 2,
+                         .y = static_cast<float>(y - 35) * guiUiScale(game)},
+                 popScale(game, 0));
         windowText(game, heading.c_str(), game.resources.windowWidth / 2, y - 50, 30,
                    Palette::StructLight);
+        endPop();
     }
 
     const auto count = static_cast<int32_t>(options.size());
@@ -1431,7 +1624,9 @@ void drawMenu(const Game& game, const std::string& heading, const std::vector<st
         {
             GuiSetState(STATE_FOCUSED);
         }
+        beginPop(Vector2{.x = rect.x + rect.width / 2, .y = rect.y + rect.height / 2}, popScale(game, i + 1));
         GuiButton(rect, options.at(static_cast<size_t>(i)).c_str());
+        endPop();
         GuiSetState(STATE_NORMAL);
     }
 }
@@ -6053,7 +6248,7 @@ void drawBossQteHud(const Game& game)
 {
     const float width = static_cast<float>(game.resources.screenWidth) / hudScale(game);
     const float height = static_cast<float>(game.resources.screenHeight) / hudScale(game);
-    const float barHeight = height * 0.09F;
+    const float barHeight = height * 0.09F * easeOutCubic(game.qteAge / 0.25F); // letterbox slides in
     DrawRectangleRec(Rectangle{.x = 0, .y = 0, .width = width, .height = barHeight}, BLACK);
     DrawRectangleRec(
         Rectangle{.x = 0, .y = height - barHeight, .width = width, .height = barHeight}, BLACK);
@@ -6081,7 +6276,11 @@ void drawBossQteHud(const Game& game)
     }
 
     const Vector2 center{.x = screenCenter.x, .y = height * 0.3F};
+    // Each new prompt pops in; untimed ones (Mash) pop once with the QTE.
+    const float promptAge = game.run.qteTimerMax > 0 ? game.run.qteTimerMax - game.run.qteTimer : game.qteAge;
+    beginPop(center, easeOutBack(promptAge / 0.16F));
     drawQteButtons(game, prompt, center, press, color);
+    endPop();
 
     if (game.run.qteTimerMax > 0)
     {
@@ -6892,6 +7091,7 @@ void drawSandboxMenu(const Game& game)
 
 auto drawGame(Game& game) -> void
 {
+    updateTransitions(game);
     BeginTextureMode(game.resources.worldTarget);
     ClearBackground(biomeVoidColor(game));
 
@@ -7057,6 +7257,8 @@ auto drawGame(Game& game) -> void
         drawEnding(game);
         break;
     }
+    drawIrisReveal(game);
+    drawIrisClose(game);
 
     EndDrawing();
 }

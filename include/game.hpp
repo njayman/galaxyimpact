@@ -312,6 +312,14 @@ struct Game
 
     GameState state{};
     int menuIndex;
+    // Screen transitions (see updateTransitions in draw.cpp).
+    GameState drawnState{}; // the state the last frame was drawn in
+    float stateAge = 0;     // seconds since the state changed
+    float closeTimer = 0;   // iris closing back into the ship after a menu over gameplay
+    Vector2 irisAnchor{};   // window coords the iris grows from
+    int menuIndexDrawn = 0; // selector change detection
+    float menuIndexAge = 0;
+    float qteAge = 0; // seconds since the current Boss QTE began
     GameState settingsReturnState;
     bool sandbox;
     bool autoplay = false; // --autoplay: a bot plays the sandbox (see updateAutoplayBot)
