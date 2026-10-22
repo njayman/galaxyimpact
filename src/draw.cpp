@@ -5487,6 +5487,17 @@ void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color colo
 void drawKrakenShape(Vector2 center, float radius, float seed, Color color)
 {
     const auto t = static_cast<float>(GetTime());
+    // Eight thin resting tentacles, many body-lengths long, writhing slowly around the small body.
+    for (int32_t i = 0; i < 8; i++)
+    {
+        const float sway = 0.3F * std::sin(t * 0.6F + static_cast<float>(i) * 1.3F + seed);
+        const float angle = static_cast<float>(i) * 45.0F * DEG2RAD + seed * 0.7F + sway;
+        const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
+        const float length = radius * (6.0F + 1.2F * std::sin(t * 0.9F + static_cast<float>(i) * 2.1F));
+        drawBendyTentacle(Vector2Add(center, Vector2Scale(dir, radius * 0.7F)), Vector2Add(center, Vector2Scale(dir, length)),
+                          center, radius, seed + static_cast<float>(i) * 3.0F, 0.22F, radius * 0.45F, false,
+                          ColorLerp(color, Palette::Void, 0.35F), Palette::ElementFreeze);
+    }
     drawPanelShape(center, radius, 8, seed * 12.0F, ColorLerp(color, Palette::Void, 0.15F), seed);
 
     constexpr int32_t podCount = 4;
@@ -5563,7 +5574,7 @@ void drawKrakenStaggeredTentacle(const Boss& boss, int32_t slot)
     const float flash = 0.5F + 0.5F * std::sin(t * 10.0F);
     const Color hangColor = ColorLerp(Palette::Crit, WHITE, flash * 0.4F);
     drawBendyTentacle(gate, tip, bodyCenter, boss.size.x / 2,
-                      static_cast<float>(boss.instanceId) + 7.0F, krakenLimbSizeMult, 20.0F, true,
+                      static_cast<float>(boss.instanceId) + 7.0F, krakenTentacleThickness, 34.0F, true,
                       hangColor, hangColor);
     DrawCircleLines(static_cast<int32_t>(tip.x), static_cast<int32_t>(tip.y),
                     krakenTentacleHitRadius, Fade(WHITE, 0.5F + flash * 0.3F));
@@ -5610,7 +5621,7 @@ void drawKrakenSnatch(const Boss& boss)
     const Vector2 bodyCenter{.x = boss.position.x + boss.size.x / 2, .y = boss.position.y + boss.size.y / 2};
     drawKrakenPortal(portal, t);
     drawBendyTentacle(portal, c, bodyCenter, boss.size.x / 2, static_cast<float>(boss.instanceId) + 3.0F,
-                      krakenLimbSizeMult, 10.0F, false, Palette::PunctumHaze, Palette::PunctumHaze);
+                      krakenTentacleThickness, 16.0F, false, Palette::PunctumHaze, Palette::PunctumHaze);
     for (int32_t k = 0; k < 2; k++)
     {
         // Two coils wound round the ship, turning against each other.
@@ -5686,7 +5697,7 @@ void drawKrakenTentacle(const Boss& boss, int32_t slot)
     const Vector2 bodyCenter{.x = boss.position.x + boss.size.x / 2,
                              .y = boss.position.y + boss.size.y / 2};
     drawBendyTentacle(portal, tip, bodyCenter, boss.size.x / 2, static_cast<float>(boss.instanceId),
-                      krakenLimbSizeMult, 20.0F, false, Palette::PunctumHaze, Palette::Crit);
+                      krakenTentacleThickness, 34.0F, false, Palette::PunctumHaze, Palette::Crit);
 }
 
 void drawKrakenGrabbedEnemy(Vector2 pos, int32_t kindIndex, float scale, float facingAngle)
@@ -5813,7 +5824,7 @@ void drawKrakenLimb(const Boss& boss, int32_t slot)
                         30.0F * krakenLimbSizeMult * grabPulse, Fade(Palette::PunctumAccent, 0.8F));
     }
 
-    drawBendyTentacle(podPos, tip, center, bodyRadius, seed, krakenLimbSizeMult, 14.0F, grabbing,
+    drawBendyTentacle(podPos, tip, center, bodyRadius, seed, krakenTentacleThickness, 24.0F, grabbing,
                       Palette::PunctumHaze, Palette::Crit);
 
     if (grabbedEnemyScale > 0.0F)

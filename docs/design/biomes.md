@@ -457,6 +457,8 @@ Mini Wave Bosses at waves 85 and 95. Pool: Void Herald, Nullpoint Marauder, Stor
 
 Waves 80, 90, 100 (encounters 1, 2, 3). Skeleton kept; new look: lavender body with cyan lightning veins, staggered tentacles crackle cyan.
 
+As built (2026-10-22 rework): the body is a third of its old size (175 across) and the silhouette is carried by the tentacles: eight thin resting tentacles, six to seven body-lengths long, writhe slowly around it. Swipe tentacles are thin and 640 long, open from portals 260 to 380 from the player and sweep 110 degrees; their whole length hits, not just the tip. Staggered tentacles hang 260 out from the body. The Snatch grip reaches from a portal 320 away.
+
 **Phases**
 
 1. **Storm:** attacks from the table below. Tentacles (1 / 2 / 4 active by encounter) emerge from portals near the player and swipe; shielding a swipe staggers that tentacle; staggering every active tentacle exposes the core for 8 s, once per fight. Snatch gives the recurring QTE beat.

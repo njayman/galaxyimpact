@@ -2509,7 +2509,7 @@ void sandboxForceBossQte(Game& game, Boss& boss, BossAttack attack)
         boss.snatchSlot = 0;
         boss.snatchPhase = 0;
         boss.tentaclePhase[0] = 5;
-        boss.tentaclePortalPos[0] = Vector2Add(player, Vector2{.x = 180.0F, .y = 0});
+        boss.tentaclePortalPos[0] = Vector2Add(player, Vector2{.x = 320.0F, .y = 0});
         boss.snatchPos = player;
         beginKrakenDraggedUnder(game, boss);
     }
@@ -2878,8 +2878,9 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
                                   .y = std::sin(angle) * krakenTentacleReach});
 
             if (!boss.tentacleHitPlayerThisSwipe[slot] && game.run.player.health > 0 &&
-                Vector2Distance(tip, game.run.player.position) <=
-                    krakenTentacleHitRadius + game.run.player.radius)
+                CheckCollisionCircleLine(game.run.player.position,
+                                         game.run.player.radius + krakenTentacleLineHalfWidth,
+                                         boss.tentaclePortalPos[slot], tip))
             {
                 const bool blocking = game.run.player.shieldActive;
                 if (blocking)
@@ -2954,7 +2955,7 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
         }
 
         const float portalAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-        const auto portalDist = static_cast<float>(GetRandomValue(90, 160));
+        const auto portalDist = static_cast<float>(GetRandomValue(260, 380));
         boss.tentaclePortalPos[slot] = Vector2Add(
             game.run.player.position,
             Vector2{.x = std::cos(portalAngle) * portalDist, .y = std::sin(portalAngle) * portalDist});
@@ -3088,7 +3089,7 @@ void updateKrakenSnatch(Game& game, Boss& kraken, float deltaTime)
         }
         const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
         kraken.tentaclePortalPos[static_cast<size_t>(kraken.snatchSlot)] =
-            Vector2Add(player.position, Vector2{.x = std::cos(angle) * 180.0F, .y = std::sin(angle) * 180.0F});
+            Vector2Add(player.position, Vector2{.x = std::cos(angle) * 320.0F, .y = std::sin(angle) * 320.0F});
         kraken.snatchPos = player.position;
         triggerShake(game, 8, 0.25F);
         if (bossQteCanStart(game, QteKind::DraggedUnder))
@@ -3186,7 +3187,7 @@ void updateKrakenDraggedUnder(Game& game, Boss& kraken, float deltaTime)
             kraken.snatchPos = run.player.position;
             spawnKillExplosion(game, run.player.position, Palette::ElementFreeze, 14, 1.0F);
             const Vector2 pullDir = Vector2Rotate(exitDir, static_cast<float>(GetRandomValue(60, 120)) * DEG2RAD);
-            kraken.tentaclePortalPos[slot] = Vector2Add(run.player.position, Vector2Scale(pullDir, 200.0F));
+            kraken.tentaclePortalPos[slot] = Vector2Add(run.player.position, Vector2Scale(pullDir, 320.0F));
             kraken.grabDragTarget = kraken.tentaclePortalPos[slot];
             game.run.punctumThunderFlashTimer = punctumThunderFlashDuration; // visual only
             playSFX(game, game.resources.sounds.slamBoom);
