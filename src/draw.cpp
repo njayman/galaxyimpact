@@ -3482,32 +3482,89 @@ void drawShip(const Game& game)
     }
     drawShipHull(shipClass, p, r, angle, shipColor);
 
-    // QTE finisher: a charge gathers at the nose, then a heavy shot hits the target.
+    const auto t = static_cast<float>(GetTime());
+    // A ray of energy: a wide soft band, a gold body, a white core, and crackling filaments
+    // writhing along both edges. `w` is the body's half width.
+    const auto drawFinisherBeam = [&](Vector2 from, Vector2 to, float w, float alpha)
+    {
+        DrawLineEx(from, to, w * 5.0F, Fade(Palette::Charge, 0.18F * alpha));
+        DrawLineEx(from, to, w * 2.0F, Fade(Palette::Charge, 0.85F * alpha));
+        DrawLineEx(from, to, w * 1.1F, Fade(Palette::Crit, alpha));
+        DrawLineEx(from, to, w * 0.45F, Fade(WHITE, alpha));
+        const Vector2 span = Vector2Subtract(to, from);
+        const float length = Vector2Length(span);
+        if (length < 1.0F)
+        {
+            return;
+        }
+        const Vector2 dir = Vector2Scale(span, 1.0F / length);
+        const Vector2 side{.x = -dir.y, .y = dir.x};
+        for (const float sgn : {1.0F, -1.0F})
+        {
+            Vector2 prev = Vector2Add(from, Vector2Scale(side, sgn * w));
+            constexpr int32_t steps = 18;
+            for (int32_t i = 1; i <= steps; i++)
+            {
+                const float f = static_cast<float>(i) / steps;
+                const float wave = std::sin(f * 40.0F + t * 50.0F * sgn) * w * 0.7F;
+                const Vector2 next = Vector2Add(Vector2Add(from, Vector2Scale(span, f)), Vector2Scale(side, sgn * (w * 1.3F + wave)));
+                DrawLineEx(prev, next, 1.5F, Fade(WHITE, 0.7F * alpha));
+                prev = next;
+            }
+        }
+    };
+
+    // QTE finisher: energy streams into the nose and a swelling orb, then a huge beam fires.
     const Vector2 nose = Vector2Add(p, Vector2Scale(dir, r * 1.4F));
     if (game.run.qteFinisherPhase == 2)
     {
         const float c = 1.0F - std::clamp(game.run.qteFinisherTimer / UpdateConstants::qteFinisherCharge, 0.0F, 1.0F);
-        const auto t = static_cast<float>(GetTime());
-        for (int32_t i = 0; i < 6; i++)
+        for (int32_t i = 0; i < 14; i++)
         {
-            const float a = t * 6.0F + static_cast<float>(i) * 1.047F;
-            const float d = r * 3.0F * (1.0F - c);
-            DrawCircleV(Vector2Add(nose, Vector2{.x = std::cos(a) * d, .y = std::sin(a) * d}), r * 0.12F,
-                        Fade(Palette::Charge, 0.4F + 0.6F * c));
+            // Streaks rushing in from all round, faster as the charge fills.
+            const float a = static_cast<float>(i) * 0.449F + t * 2.0F;
+            const float run = std::fmod(t * (2.0F + 4.0F * c) + static_cast<float>(i) * 0.37F, 1.0F);
+            const float d0 = r * 9.0F * (1.0F - run);
+            const Vector2 dirIn{.x = std::cos(a), .y = std::sin(a)};
+            DrawLineEx(Vector2Add(nose, Vector2Scale(dirIn, d0 + r * 2.5F)), Vector2Add(nose, Vector2Scale(dirIn, d0)), 2.0F,
+                       Fade(Palette::Charge, 0.3F + 0.6F * c));
         }
-        DrawCircleV(nose, r * (0.25F + 0.55F * c), Fade(Palette::Charge, 0.35F + 0.4F * c));
-        DrawCircleV(nose, r * (0.12F + 0.3F * c), Fade(WHITE, 0.6F + 0.4F * c));
-        DrawRing(nose, r * (0.9F + 0.4F * c), r * (1.0F + 0.4F * c), 0, 360, 24, Fade(Palette::Crit, 0.5F * c));
+        const float throb = 1.0F + 0.12F * std::sin(t * 40.0F);
+        DrawCircleV(nose, r * (0.6F + 1.6F * c) * throb, Fade(Palette::Charge, 0.25F + 0.35F * c));
+        DrawCircleV(nose, r * (0.3F + 0.9F * c) * throb, Fade(Palette::Crit, 0.6F + 0.4F * c));
+        DrawCircleV(nose, r * (0.15F + 0.45F * c), WHITE);
+        for (int32_t k = 0; k < 2; k++)
+        {
+            const float ring = r * (2.6F - 1.6F * std::fmod(c * 3.0F + static_cast<float>(k) * 0.5F, 1.0F));
+            DrawRing(nose, ring - 2.0F, ring, 0, 360, 32, Fade(Palette::Crit, 0.6F * c));
+        }
     }
     else if (game.run.qteFinisherPhase == 3)
     {
         const float f = std::clamp(game.run.qteFinisherTimer / UpdateConstants::qteFinisherShot, 0.0F, 1.0F);
-        const Vector2 target = game.run.qteFinisherTarget;
-        DrawLineEx(nose, target, r * 1.1F * f + 2.0F, Fade(Palette::Charge, 0.45F));
-        DrawLineEx(nose, target, r * 0.5F * f + 1.0F, Fade(Palette::Crit, 0.9F));
-        DrawLineEx(nose, target, r * 0.18F * f + 1.0F, WHITE);
-        DrawCircleV(target, r * (1.6F - f), Fade(WHITE, 0.8F));
-        DrawCircleV(nose, r * 0.5F * f, WHITE);
+        const float grow = std::min(1.0F, (1.0F - f) * 4.0F); // snaps to full width in the first quarter
+        drawFinisherBeam(nose, game.run.qteFinisherTarget, r * (0.6F + 1.6F * grow), 1.0F);
+        DrawCircleV(nose, r * 2.2F * grow, Fade(WHITE, 0.85F));
+        DrawCircleV(game.run.qteFinisherTarget, r * (1.5F + 2.5F * grow), Fade(WHITE, 0.8F));
+        DrawCircleV(p, 4000.0F, Fade(WHITE, 0.08F * grow)); // the whole view flares
+    }
+    if (game.run.finisherFxTimer > 0)
+    {
+        // The shot has landed: the beam thins away, the hit point flashes, shockwaves spread.
+        const float k = game.run.finisherFxTimer / UpdateConstants::qteFinisherFx;
+        drawFinisherBeam(game.run.finisherFxFrom, game.run.finisherFxTo, r * 2.2F * k * k, k);
+        const Vector2 hit = game.run.finisherFxTo;
+        DrawCircleV(hit, r * 4.0F * k, Fade(WHITE, 0.9F * k));
+        for (int32_t w = 0; w < 3; w++)
+        {
+            const float spread = std::clamp((1.0F - k) * 1.4F - static_cast<float>(w) * 0.15F, 0.0F, 1.0F);
+            const float ring = r * 16.0F * spread;
+            if (ring > 2.0F)
+            {
+                DrawRing(hit, ring - 3.0F * (1.0F - spread) - 1.0F, ring, 0, 360, 64,
+                         Fade(w == 0 ? WHITE : Palette::Charge, 0.8F * (1.0F - spread)));
+            }
+        }
     }
 
     if (game.run.player.nerveCharging)

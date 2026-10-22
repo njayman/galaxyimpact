@@ -49,7 +49,8 @@ constexpr float qteMinGap = 20.0F; // shared rule: at least this long between Bo
 constexpr float qteDamageMult = 3.0F; // shared rule: every hit on an enemy or boss during a QTE
 constexpr float qteFinisherTurn = 0.22F;
 constexpr float qteFinisherCharge = 0.5F;
-constexpr float qteFinisherShot = 0.12F;
+constexpr float qteFinisherShot = 0.32F;
+constexpr float qteFinisherFx = 0.6F; // afterglow once the shot lands
 // A clean Boss QTE chain ends in the finisher shot; each answer charges it by this share of the
 // boss's max health (then tripled by qteDamageMult): that shot is the QTE's big payoff.
 constexpr float qteFinisherChargeAnswer = 0.02F;

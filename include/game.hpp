@@ -233,6 +233,9 @@ struct GameplayState
     float qteFinisherTimer = 0;
     Vector2 qteAimDir{}; // ship facing while the finisher runs
     Vector2 qteFinisherTarget{};
+    float finisherFxTimer = 0; // after the finisher lands: the beam fades and shockwaves spread
+    Vector2 finisherFxFrom{};
+    Vector2 finisherFxTo{};
     QtePrompt qtePrompt = QtePrompt::None;
     float qteTimer = 0;    // time left on the current prompt / beat
     float qteTimerMax = 0; // full length of the current prompt, for the HUD timer

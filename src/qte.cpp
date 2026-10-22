@@ -314,7 +314,7 @@ auto qteUpdateFinisher(Game& game, Vector2 target, float deltaTime) -> bool
             run.qteFinisherPhase = 3;
             run.qteFinisherTimer = UpdateConstants::qteFinisherShot;
             playSFX(game, game.resources.sounds.beamFire);
-            triggerShake(game, 3, 0.1F);
+            triggerShake(game, 6, UpdateConstants::qteFinisherShot);
         }
         return false;
     }
@@ -322,7 +322,11 @@ auto qteUpdateFinisher(Game& game, Vector2 target, float deltaTime) -> bool
     {
         return false;
     }
-    triggerShake(game, 8, 0.3F);
+    triggerShake(game, 16, 0.45F);
+    run.finisherFxTimer = UpdateConstants::qteFinisherFx;
+    run.finisherFxFrom = Vector2Add(run.player.position, Vector2Scale(run.qteAimDir, run.player.radius * 1.4F));
+    run.finisherFxTo = target;
+    spawnKillExplosion(game, target, Palette::Charge, 70, 3.0F);
     return true;
 }
 
@@ -330,6 +334,7 @@ auto qteUpdateFinisher(Game& game, Vector2 target, float deltaTime) -> bool
 void updateBossQte(Game& game, float deltaTime)
 {
     auto& run = game.run;
+    run.finisherFxTimer = std::max(0.0F, run.finisherFxTimer - deltaTime);
     if (!bossQteActive(game))
     {
         for (float& cooldown : run.qteCooldowns)
