@@ -155,71 +155,10 @@ void drawLaserBolt(const Bullet& b);
 void drawPickupIcon(PickupType type, ElementType element, Vector2 position, float alpha);
 void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius, Color rim);
 
-// Laser bolt: a comet streak, faint thin tail to a bright head. Evolved: a matte sakura-pink 110 degree
-// ">" over a darker rim, trailing a faint flat wake.
+// Laser bolt: a comet streak, faint thin tail to a bright head.
 void drawLaserBolt(const Bullet& b)
 {
     const LaserShape shape = laserShape(b);
-    if (b.chevron)
-    {
-        const Vector2 tip = b.position;
-        const Vector2 fwd = Vector2Normalize(b.velocity);
-        const Vector2 side{.x = -fwd.y, .y = fwd.x};
-        const float h = b.halfWidth;
-        const float len = b.streak;
-        const auto at = [&](float back, float across)
-        { return Vector2Add(tip, Vector2Add(Vector2Scale(fwd, -back * len), Vector2Scale(side, across * h))); };
-        // A solid quad from a to c, `w` thick; both windings so raylib never culls it.
-        const auto bar = [](Vector2 a, Vector2 c, float w, Color col)
-        {
-            const Vector2 d = Vector2Normalize(Vector2Subtract(c, a));
-            const Vector2 n{.x = -d.y * w / 2, .y = d.x * w / 2};
-            const Vector2 p0 = Vector2Add(a, n), p1 = Vector2Subtract(a, n);
-            const Vector2 p2 = Vector2Subtract(c, n), p3 = Vector2Add(c, n);
-            for (const auto& [x, y, z] : {std::array{p0, p1, p2}, std::array{p0, p2, p3}})
-            {
-                DrawTriangle(x, y, z, col);
-                DrawTriangle(x, z, y, col);
-            }
-        };
-        // Matte, like the rest of the palette: a flat sakura-pink body over a darker rim, no glow.
-        constexpr Color body{.r = 238, .g = 172, .b = 192, .a = 255};
-        const Color rim = ColorLerp(body, Palette::Void, 0.45F);
-        // Faint flat wake behind the head.
-        constexpr int trailSteps = 6;
-        for (int i = 0; i < trailSteps; i++)
-        {
-            const float t0 = static_cast<float>(i) / trailSteps;
-            const float t1 = static_cast<float>(i + 1) / trailSteps;
-            bar(at(0.3F + t0 * 1.4F, 0), at(0.3F + t1 * 1.4F, 0), h * 0.9F * (1.0F - t0 * 0.6F),
-                Fade(rim, 0.35F * (1.0F - t0)));
-        }
-        struct Pass
-        {
-            float width;
-            Color color;
-        };
-        // One mitred ">" (110 degrees): both arms share the apex edge, so it is a single angle,
-        // and each tapers from full width at the apex to a point.
-        constexpr float halfAngle = 55.0F * DEG2RAD;
-        const float armLength = len * 0.75F;
-        for (const Pass pass : {Pass{.width = 1.4F, .color = rim}, Pass{.width = 0.9F, .color = body}})
-        {
-            const float miter = h * pass.width * 0.5F / std::sin(halfAngle);
-            const Vector2 outer = Vector2Add(tip, Vector2Scale(fwd, miter));
-            const Vector2 inner = Vector2Subtract(tip, Vector2Scale(fwd, miter));
-            for (const float sign : {1.0F, -1.0F})
-            {
-                const Vector2 arm = Vector2Add(Vector2Scale(fwd, -std::cos(halfAngle) * armLength),
-                                               Vector2Scale(side, sign * std::sin(halfAngle) * armLength));
-                // Tapers to a point at the arm's end: thick only at the apex.
-                const Vector2 end = Vector2Add(tip, arm);
-                DrawTriangle(outer, end, inner, pass.color);
-                DrawTriangle(outer, inner, end, pass.color);
-            }
-        }
-        return;
-    }
     constexpr int steps = 5;
     for (int i = 0; i < steps; i++)
     {
@@ -1084,10 +1023,15 @@ void drawWeaponIcon(WeaponType kind, Vector2 c, float s, Color color, bool evolv
     case WeaponType::LaserShots:
         if (evolved)
         {
-            // A chevron arrow, like the bolt itself: ">" and a split tail bar.
-            DrawLineEx(Vector2{.x = c.x + s * 0.7F, .y = c.y}, Vector2{.x = c.x, .y = c.y - s * 0.7F}, 2.0F, color);
-            DrawLineEx(Vector2{.x = c.x + s * 0.7F, .y = c.y}, Vector2{.x = c.x, .y = c.y + s * 0.7F}, 2.0F, color);
-            DrawLineEx(Vector2{.x = c.x - s * 0.9F, .y = c.y}, Vector2{.x = c.x - s * 0.1F, .y = c.y}, 2.0F, color);
+            // A ray bouncing off two walls: a zigzag.
+            const std::array<Vector2, 4> zig{Vector2{.x = c.x - s, .y = c.y + s * 0.6F},
+                                             Vector2{.x = c.x - s * 0.3F, .y = c.y - s * 0.6F},
+                                             Vector2{.x = c.x + s * 0.3F, .y = c.y + s * 0.6F},
+                                             Vector2{.x = c.x + s, .y = c.y - s * 0.6F}};
+            for (size_t i = 0; i + 1 < zig.size(); i++)
+            {
+                DrawLineEx(zig.at(i), zig.at(i + 1), 2.0F, color);
+            }
             break;
         }
         for (const float dy : {-0.5F, 0.0F, 0.5F})
@@ -2909,6 +2853,16 @@ void drawGameplayWorld(const Game& game)
     for (const auto& bolt : game.run.chainLightningBolts)
     {
         DrawLineEx(bolt.from, bolt.to, 2, Fade(Palette::Crit, bolt.timer / 0.2F));
+    }
+
+    // Evolved Laser Shots: thin matte sakura-pink rays over a soft rim, fading out.
+    for (const auto& ray : game.run.laserWebRays)
+    {
+        constexpr Color body{.r = 238, .g = 172, .b = 192, .a = 255};
+        const float fade = std::clamp(ray.timer / laserWebRayLife, 0.0F, 1.0F);
+        DrawLineEx(ray.from, ray.to, 6.0F, Fade(ColorLerp(body, Palette::Void, 0.45F), 0.35F * fade));
+        DrawLineEx(ray.from, ray.to, 2.0F, Fade(body, fade));
+        DrawCircleV(ray.to, 2.5F, Fade(body, fade)); // the bounce point
     }
 
     for (const auto& shot : game.run.sniperShots)

@@ -1647,10 +1647,9 @@ auto estimatePlayerDps(const Game& game) -> float
         case WeaponType::LaserShots:
         {
             // dmg here is the raw weaponDamage; mirror the fire code's per-shot multipliers.
-            const int32_t streaks = w.evolved ? (3 + w.level / 4) * laserVolleyCountMult + laserVolleyExtraBolts
-                                        : 3 + w.level / 4;
-            hitsPerCooldown = static_cast<float>(streaks) * laserShotDamageMult *
-                              (w.evolved ? laserVolleyDamageMult : 1.0F);
+            // Evolved: about two segments of each ray cross a target.
+            hitsPerCooldown = w.evolved ? static_cast<float>(2 + w.level / 4) * laserWebDamageMult * 2.0F
+                                        : static_cast<float>(3 + w.level / 4) * laserShotDamageMult;
             break;
         }
         default:
@@ -2076,19 +2075,19 @@ void updateWeapons(Game& game, float deltaTime)
             const auto jitter = [](float range)
             { return static_cast<float>(GetRandomValue(-100, 100)) / 100.0F * range; };
             const auto baseDamage = static_cast<float>(weaponDamage(game, w.level));
+            if (w.evolved)
+            {
+                fireLaserWeb(game, w, nose, dir);
+                playSFX(game, game.resources.sounds.shoot);
+                break;
+            }
             // A loose barrage: a few thin streaks scattered across a wide field in angle,
             // side offset, start position and length, so it reads as a volley, not one line.
-            // Evolved: the same volley as bigger, faster, harder chevrons.
-            const int32_t streaks = w.evolved ? (3 + w.level / 4) * laserVolleyCountMult + laserVolleyExtraBolts
-                                        : 3 + w.level / 4;
-            const float evoDamage = w.evolved ? laserVolleyDamageMult : 1.0F;
-            const float evoSpeed = w.evolved ? laserVolleySpeedMult : 1.0F;
-            const float halfWidth = w.evolved ? laserVolleyHalfWidth : laserShotHalfWidth;
-            const auto dmg = std::max(1, static_cast<int32_t>(baseDamage * laserShotDamageMult * evoDamage));
+            const int32_t streaks = 3 + w.level / 4;
+            const auto dmg = std::max(1, static_cast<int32_t>(baseDamage * laserShotDamageMult));
             const Vector2 side{.x = -dir.y, .y = dir.x};
             // Each level widens the field a bit: +8%/level, so 1.64x at level 8.
-            const float field = (1.0F + 0.08F * static_cast<float>(w.level)) *
-                                (w.evolved ? laserVolleyScatterMult : 1.0F);
+            const float field = 1.0F + 0.08F * static_cast<float>(w.level);
             for (int32_t s = 0; s < streaks; s++)
             {
                 const Vector2 d =
@@ -2100,17 +2099,14 @@ void updateWeapons(Game& game, float deltaTime)
                     Vector2Scale(d, ahead));
                 game.run.bullets.push_back(Bullet{
                     .position = start,
-                    .velocity = Vector2Scale(d, projectileSpeed * laserShotSpeedMult * evoSpeed *
-                                                    (1.0F + jitter(0.06F))),
-                    .radius = halfWidth,
+                    .velocity = Vector2Scale(d, projectileSpeed * laserShotSpeedMult * (1.0F + jitter(0.06F))),
+                    .radius = laserShotHalfWidth,
                     .color = Palette::ElementStatic,
                     .active = true,
                     .damage = dmg,
                     .source = DamageSource::LaserShots,
-                    .streak = w.evolved ? laserVolleyLength
-                                        : laserShotStreak * lengthMult * (1.0F + jitter(0.3F)),
-                    .halfWidth = halfWidth,
-                    .chevron = w.evolved,
+                    .streak = laserShotStreak * lengthMult * (1.0F + jitter(0.3F)),
+                    .halfWidth = laserShotHalfWidth,
                     .traveled = ahead});
             }
             playSFX(game, game.resources.sounds.shoot);
@@ -2131,7 +2127,7 @@ void updateWeapons(Game& game, float deltaTime)
                 }
                 const Vector2 start = game.run.player.position;
                 const Vector2 end = Vector2Add(start, Vector2Scale(dir, sniperLineLength));
-                sniperLineHit(game, start, end, dmg);
+                sniperLineHit(game, start, end, dmg, WeaponType::Sniper);
                 game.run.sniperShots.push_back(
                     ChainLightningBolt{.from = start, .to = end, .timer = sniperLineFlashDuration});
                 playSFX(game, game.resources.sounds.shoot);
@@ -2869,8 +2865,9 @@ void updateBeamContact(Game& game, float deltaTime)
     }
 }
 
-void sniperLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg)
+void sniperLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg, WeaponType weapon)
 {
+    const DamageSource source = weapon == WeaponType::LaserShots ? DamageSource::LaserShots : DamageSource::Sniper;
     for (size_t j = 0; j < game.run.enemies.size(); j++)
     {
         const auto& enemy = game.run.enemies.at(j);
@@ -2878,10 +2875,10 @@ void sniperLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg)
             CheckCollisionCircleLine(enemy.position, enemyCollisionRadius(enemy), start, end))
         {
             damageEnemy(game, j, dmg);
-            recordDamage(game, DamageSource::Sniper, dmg);
+            recordDamage(game, source, dmg);
             if (!enemy.active)
             {
-                recordWeaponKill(game, WeaponType::Sniper);
+                recordWeaponKill(game, weapon);
             }
         }
     }
@@ -2893,7 +2890,7 @@ void sniperLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg)
             CheckCollisionCircleLine(hazard.position, EliteHazardConstants::radius, start, end))
         {
             damageEliteHazard(game, j, dmg);
-            recordDamage(game, DamageSource::Sniper, dmg);
+            recordDamage(game, source, dmg);
         }
     }
 
@@ -2908,7 +2905,40 @@ void sniperLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg)
         if (CheckCollisionCircleLine(bossCenter, boss.size.x / 2, start, end))
         {
             damageBoss(game, boss, dmg, true, true);
-            recordDamage(game, DamageSource::Sniper, dmg);
+            recordDamage(game, source, dmg);
+        }
+    }
+}
+
+// Ricochet Web: each ray runs from the nose to the screen edge and bounces back in, hitting
+// everything along every segment.
+void fireLaserWeb(Game& game, const Weapon& weapon, Vector2 nose, Vector2 aim)
+{
+    const auto dmg = std::max(
+        1, static_cast<int32_t>(static_cast<float>(weaponDamage(game, weapon.level)) * laserWebDamageMult));
+    const Vector2 center = game.run.player.position;
+    const float halfW = static_cast<float>(game.resources.screenWidth) / 2;
+    const float halfH = static_cast<float>(game.resources.screenHeight) / 2;
+    for (int32_t r = 0; r < 2 + weapon.level / 4; r++)
+    {
+        Vector2 from = nose;
+        Vector2 dir = Vector2Rotate(
+            aim, static_cast<float>(GetRandomValue(-100, 100)) / 100.0F * laserWebSpreadDeg * DEG2RAD);
+        for (int32_t bounce = 0; bounce <= laserWebBounces; bounce++)
+        {
+            // Distance to the view edge along dir, per axis; the nearer one is where it bounces.
+            const float tx = dir.x > 0   ? (center.x + halfW - from.x) / dir.x
+                             : dir.x < 0 ? (center.x - halfW - from.x) / dir.x
+                                         : 1e9F;
+            const float ty = dir.y > 0   ? (center.y + halfH - from.y) / dir.y
+                             : dir.y < 0 ? (center.y - halfH - from.y) / dir.y
+                                         : 1e9F;
+            const float t = std::max(1.0F, std::min(tx, ty));
+            const Vector2 to = Vector2Add(from, Vector2Scale(dir, t));
+            sniperLineHit(game, from, to, dmg, WeaponType::LaserShots);
+            game.run.laserWebRays.push_back(ChainLightningBolt{.from = from, .to = to, .timer = laserWebRayLife});
+            (tx < ty ? dir.x : dir.y) *= -1.0F;
+            from = to;
         }
     }
 }
@@ -2921,6 +2951,11 @@ void updateSniperShots(Game& game, float deltaTime)
     }
     std::erase_if(game.run.sniperShots, [](const ChainLightningBolt& bolt)
                   { return bolt.timer <= 0; });
+    for (auto& ray : game.run.laserWebRays)
+    {
+        ray.timer -= deltaTime;
+    }
+    std::erase_if(game.run.laserWebRays, [](const ChainLightningBolt& ray) { return ray.timer <= 0; });
 }
 
 // Laser Storm, the Interceptor's Nerve burst: one dense, wide fan of gold Laser Shots streaks.

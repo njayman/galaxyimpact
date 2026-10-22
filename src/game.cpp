@@ -283,6 +283,7 @@ void resetRun(Game& game)
     game.run.turrets.clear();
     game.run.chainLightningBolts.clear();
     game.run.sniperShots.clear();
+    game.run.laserWebRays.clear();
     game.run.sniperEventPhase = 0;
     game.run.sniperEventTimer = 0;
     game.run.sniperEventCooldown = 0;

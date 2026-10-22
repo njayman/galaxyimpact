@@ -88,7 +88,6 @@ class Bullet
     // > 0: a laser bolt, a streak this long trailing behind position.
     float streak = 0;
     float halfWidth = 0;
-    bool chevron = false; // evolved Laser Shots: drawn as an arrow chevron
     // Distance flown since leaving the nose (accumulated, so a wormhole jump doesn't count);
     // the bolt grows out of the nose by this much instead of appearing through the hull.
     float traveled = 0;
