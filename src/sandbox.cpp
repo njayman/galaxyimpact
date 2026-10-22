@@ -182,7 +182,7 @@ void sandboxForceAttackNearestBoss(Game& game)
         return;
     }
     const auto attack = static_cast<BossAttack>(game.sandboxBossAttackIndex);
-    if (!nearest->moveset.empty() && !nearest->isBanished)
+    if (!nearest->moveset.empty() && !nearest->isBanished && !nearest->isKraken)
     {
         forceBossAttack(game, *nearest, attack);
     }

@@ -285,11 +285,11 @@ As built: Spore Spit keeps the `Barrage` attack slot and branches on the Wreckwo
 ### Boss QTE: Constrict
 
 - **Trigger:** Coil Clamp closes with the player still inside (recurs; 20 s minimum gap). Escaping through the gap means no QTE.
-- **Choreography:** the coil tightens; a **Mash** Prompt to pry it open (fill the bar within 1.6 s), then 8 segment strikes, each lunging from a different point on the coil.
+- **Choreography:** the coil tightens; a **Mash** Prompt to pry it open (fill the bar within 2.6 s), then 8 segment strikes, each lunging from a different point on the coil.
 - **Prompts:** 9 total (1 Mash + 8 strikes), strikes at 0.8 s window, 20% Parry share; strikes use directions, Shield, Dash, Parry, Nerve.
 - **Clean clear:** the coil springs open; the head is stunned for the 3 s Punish Window (+50%), and armoured segments take full damage during it.
 - **Fail:** the coil crushes for one hit and releases the player.
-- As built: the Mash takes 8 presses in the 1.6 s window (5 a second, leaving room to react); it is mashed on the Nerve input (SPACE, or the NERVE touch button) and other inputs are ignored. The crush is 2 base damage, scaled like other enemy hits (as heavy as a plate dash or Ring Crush). The coil catches the player when its closing ring reaches them outside the gap, then rides with the ship and keeps tightening during the Mash. Strikes come from segments that have not struck yet. Clean or failed, the clamp skips to its release and the segments rejoin the chain; during the Punish Window the head stops moving, starts no attacks, segments hold their volleys, and a ring of pulsing fragments marks the stunned head. The 20 s minimum gap is per Boss QTE, so the Wreckworm's Rush does not lock out its Constrict.
+- As built: the Mash takes 8 presses in the 2.6 s window (about 3 a second, leaving room to react); it is mashed on the Nerve input (SPACE, or the NERVE touch button) and other inputs are ignored. The crush is 2 base damage, scaled like other enemy hits (as heavy as a plate dash or Ring Crush). The coil catches the player when its closing ring reaches them outside the gap, then rides with the ship and keeps tightening during the Mash. Strikes come from segments that have not struck yet. Clean or failed, the clamp skips to its release and the segments rejoin the chain; during the Punish Window the head stops moving, starts no attacks, segments hold their volleys, and a ring of pulsing fragments marks the stunned head. The 20 s minimum gap is per Boss QTE, so the Wreckworm's Rush does not lock out its Constrict.
 
 ### Boss QTE: Rush
 
@@ -386,7 +386,7 @@ Waves 60, 70, 75. Skeleton kept: a huge slow mass (0.32x speed), now basalt with
 - **Clean clear:** the player bursts out and Slagmaw chokes: 3 s Punish Window (+50%) with the maw exposed as a weak point.
 - **Fail:** the player is spat out and takes one burn hit.
 
-- As built: Slagmaw is a faceted basalt mass lit from the upper left, warm gold seams running back from a maw ringed by uneven fangs that turns to track the player; tells heat the seams and open the maw. Slag Spray keeps Barrage's aimed stream with a 0.5 s gold flare tell, spraying jagged slag gobs from the maw within 14 degrees. Magma Ram drops a pool every 70 units of the charge (64 radius, 2 s, 1 damage per 0.5 s, ignoring hit immunity; a dash crosses unharmed). Seeker Embers are spinning gold diamonds that shed sparks. Devour: 1 s tell, then a 2 s inhale along a cone (35 degrees each side, 760 long) locked to where the maw faced, pulling 300 units a second; a dash rides through the pull; reaching the maw while the QTE is on its gap takes a 2 damage bite and throws the player clear. Swallowed: Mash 8 presses in 1.6 s, then 9 prompts (0.7 s, 25% Parry) with a slag gob flying in from each prompt's angle while the boss shakes and the maw whips; a clean chain ends in the shared finisher shot. Wave 75 halves keep the old moveset (no Devour).
+- As built: Slagmaw is a faceted basalt mass lit from the upper left, warm gold seams running back from a maw ringed by uneven fangs that turns to track the player; tells heat the seams and open the maw. Slag Spray keeps Barrage's aimed stream with a 0.5 s gold flare tell, spraying jagged slag gobs from the maw within 14 degrees. Magma Ram drops a pool every 70 units of the charge (64 radius, 2 s, 1 damage per 0.5 s, ignoring hit immunity; a dash crosses unharmed). Seeker Embers are spinning gold diamonds that shed sparks. Devour: 1 s tell, then a 2 s inhale along a cone (35 degrees each side, 760 long) locked to where the maw faced, pulling 300 units a second; a dash rides through the pull; reaching the maw while the QTE is on its gap takes a 2 damage bite and throws the player clear. Swallowed: Mash 8 presses in 2.6 s, then 9 prompts (0.7 s, 25% Parry) with a slag gob flying in from each prompt's angle while the boss shakes and the maw whips; a clean chain ends in the shared finisher shot. Wave 75 halves keep the old moveset (no Devour).
 
 ### Planned rework: Lava Mole (idea, 2026-10-22, not built)
 
@@ -459,7 +459,13 @@ Waves 80, 90, 100 (encounters 1, 2, 3). Skeleton kept; new look: lavender body w
 
 As built (2026-10-22 rework): the body is a third of its old size (175 across) and the silhouette is carried by the tentacles: eight thin resting tentacles, six to seven body-lengths long, writhe slowly around it. Swipe tentacles are thin and 640 long, open from portals 260 to 380 from the player and sweep 110 degrees; their whole length hits, not just the tip. Staggered tentacles hang 260 out from the body. The Snatch grip reaches from a portal 320 away.
 
-Body (2026-10-22): a squid facing the player, replacing the ball and its radial tentacles. A long pointed mantle with two fins and cyan veins trails away; the head turns to the ship with two large cyan-pupilled eyes; eight writhing arms and two long feeding tentacles with clubbed tips reach forward from the face.
+Body (2026-10-22): the same small panelled body, now in a squid's silhouette facing the player: the panel octagon stretched into a mantle trailing away, two panel fins at its tip, a panel head turned to the ship with two pod eyes and the gold core. The eight long thin tentacles still spread all round it.
+
+Arm attacks (2026-10-22, replacing the portal spin): each active tentacle slot runs one at a time; whipping arms are rope sims (pinned at the root, pulled at the tip) so they lag, curl and crack, and their whole length hits. Shielding a strike staggers the slot.
+- **Arm Lash:** an arm from the face rears back 100 degrees to one side (a faint arc shows the sweep, a cyan pulse runs down the arm, 0.45 s), then whips across to 60 degrees past the player in 0.24 s.
+- **Portal Lash:** a portal opens 260-380 from the player (0.25 s), the arm uncoils out of it and rears back, then whips the same way and draws back into the portal.
+- **Spear Rake:** dashed tell lines fan out from the face (0.5 s), then 2 + encounter straight arms, 14 degrees apart, snap out 0.1 s after one another, hold 0.2 s and retract.
+- **Feeding Strike** (replaces the ring Snatch): the two clubbed feeding tentacles draw back while a line and a tightening ring mark the aim (0.55 s), then shoot at where the player stood (0.28 s). A club touching the ship catches it: Dragged Under starts, the ship hauled first toward the beak, then portal to portal. Inside the QTE gap it is a 0.8 s plain hold, then the fail outcome.
 
 **Phases**
 

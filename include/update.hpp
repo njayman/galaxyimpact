@@ -77,8 +77,8 @@ constexpr float beltbreakerPunishDamageMult = 1.5F; // stacks with the 2.5x dash
 // Wreckworm constrict
 constexpr float wreckwormConstrictCatchBand = 48.0F; // ring this close outside the player catches them
 constexpr float wreckwormConstrictHoldMargin = 0.05F; // keeps the coil shut while the cutscene runs
-constexpr float wreckwormConstrictMashDuration = 1.6F;
-constexpr int32_t wreckwormConstrictMashPresses = 8; // 5 a second, leaving room to react
+constexpr float wreckwormConstrictMashDuration = 2.6F;
+constexpr int32_t wreckwormConstrictMashPresses = 8; // about 3 a second, leaving room to react
 constexpr float wreckwormConstrictMashBeat = 0.6F; // lets a mash settle before the first strike
 constexpr int32_t wreckwormConstrictStrikes = 8;
 constexpr float wreckwormConstrictStrikeWindow = 0.8F; // segment arrives exactly at timeout
@@ -90,7 +90,7 @@ constexpr int32_t wreckwormConstrictCrushDamage = 2; // as heavy as a plate dash
 constexpr float wreckwormPunishWindow = 3.0F; // clean clear: stunned head
 constexpr float wreckwormPunishDamageMult = 1.5F;
 // Slagmaw Swallowed: Devour drags the player into the maw
-constexpr float slagmawSwallowMashDuration = 1.6F;
+constexpr float slagmawSwallowMashDuration = 2.6F;
 constexpr int32_t slagmawSwallowMashPresses = 8;
 constexpr float slagmawSwallowMashBeat = 0.5F;
 constexpr int32_t slagmawSwallowPrompts = 9;
@@ -101,12 +101,10 @@ constexpr int32_t slagmawSwallowBurnDamage = 2; // fail: spat out with one burn 
 constexpr float slagmawPunishWindow = 3.0F;     // clean clear: Slagmaw chokes
 constexpr float slagmawPunishDamageMult = 1.5F;
 // Kraken Snatch and Dragged Under
-constexpr float krakenSnatchRadius = 70.0F;
-constexpr float krakenSnatchTell = 1.0F;
 constexpr int32_t krakenSnatchCooldownMin = 8; // seconds, rolled per Snatch
 constexpr int32_t krakenSnatchCooldownMax = 10;
-constexpr float krakenSnatchHold = 0.8F; // plain grab inside the QTE gap
-constexpr float krakenDragMashDuration = 1.6F;
+constexpr float krakenSnatchHold = 0.8F; // Feeding Strike: plain grab inside the QTE gap
+constexpr float krakenDragMashDuration = 2.6F;
 constexpr int32_t krakenDragMashPresses = 8;
 constexpr float krakenDragMashBeat = 0.5F;
 constexpr int32_t krakenDragPrompts = 11;
@@ -115,7 +113,7 @@ constexpr float krakenDragPromptWindow = 0.6F;
 constexpr float krakenDragBeat = 0.3F;
 constexpr int32_t krakenDragParryChance = 30;
 // Banished Juggled: Bind's catch, three throws between tentacles
-constexpr float banishedJuggleMashDuration = 1.4F;
+constexpr float banishedJuggleMashDuration = 2.4F;
 constexpr int32_t banishedJuggleMashPresses = 9;
 constexpr float banishedJuggleMashBeat = 0.5F;
 constexpr int32_t banishedJugglePrompts = 13;
@@ -327,6 +325,10 @@ void updateRushQte(Game& game, Boss& boss, float deltaTime);
 void endBossQteClean(Game& game, Boss& boss);
 void sandboxForceBossQte(Game& game, Boss& boss, BossAttack attack);
 void updateKrakenSnatch(Game& game, Boss& kraken, float deltaTime);
+auto krakenRakeDir(const Boss& boss, int32_t slot, int32_t spear) -> Vector2;
+auto krakenRakeExtent(const Boss& boss, int32_t slot, int32_t spear, float elapsed) -> float;
+auto krakenRakeStrikeDuration(const Boss& boss, int32_t slot) -> float;
+auto krakenLashAngle(const Boss& boss, int32_t slot, float progress) -> float;
 void updateKrakenDraggedUnder(Game& game, Boss& kraken, float deltaTime);
 void updateBanishedJuggled(Game& game, Boss& banished, float deltaTime);
 auto findBossById(Game& game, int32_t instanceId) -> Boss*;

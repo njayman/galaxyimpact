@@ -16,7 +16,6 @@ void seedWreckwormTrail(Boss& head, Vector2 headCenter, Vector2 trailDir);
 void beginWreckwormConstrict(Game& game, Boss& head);
 void updateSlagmawDevour(Game& game, Boss& slagmaw, float deltaTime);
 void endKrakenDraggedUnder(Game& game, Boss& kraken, bool clean);
-void beginKrakenDraggedUnder(Game& game, Boss& kraken);
 auto wreckwormCoilSegmentDeg(const Boss& head, int32_t segmentIndex) -> float;
 
 auto isGenericMovesetAttack(BossAttack attack) -> bool
@@ -2506,12 +2505,16 @@ void sandboxForceBossQte(Game& game, Boss& boss, BossAttack attack)
     }
     else if (boss.isKraken)
     {
-        boss.snatchSlot = 0;
-        boss.snatchPhase = 0;
-        boss.tentaclePhase[0] = 5;
-        boss.tentaclePortalPos[0] = Vector2Add(player, Vector2{.x = 320.0F, .y = 0});
-        boss.snatchPos = player;
-        beginKrakenDraggedUnder(game, boss);
+        // Cycles its attacks: Arm Lash, Portal Lash, Spear Rake, Feeding Strike (whose catch
+        // starts Dragged Under).
+        static int32_t next = 0;
+        constexpr std::array<const char*, 4> names{"Arm Lash", "Portal Lash", "Spear Rake", "Feeding Strike"};
+        boss.sandboxKrakenKind = next;
+        boss.tentacleCheckTimer = 0;
+        boss.qteStunTimer = 0;
+        game.run.achievementToast = names.at(static_cast<size_t>(next));
+        game.run.achievementToastTimer = 2.0F;
+        next = (next + 1) % 4;
     }
     else if (boss.isBanished)
     {
@@ -2761,32 +2764,316 @@ auto krakenTentacleSlotIdle(const Boss& boss, int32_t slot) -> bool
            !boss.tentacleStaggered[static_cast<size_t>(slot)];
 }
 
-// Lets the boss's ordinary body-contact shield parry also stagger a mid-swing tentacle,
-// since that's the parry players already know from every other boss.
+// --- Kraken arm attacks --------------------------------------------------------
+//
+// Every active tentacle slot runs one attack at a time: Arm Lash (an arm from the face rears
+// back and whips through an arc across the player), Portal Lash (the same whip out of a portal
+// beside the player) or Spear Rake (3-5 straight arms snapping out from the face in a fan).
+// Whipping arms are rope sims, so they lag, curl and crack instead of turning as rigid lines;
+// the whole length hits. Shielding a strike staggers the slot, feeding the core-exposure loop.
+// --------------------------------------------------------------------------
+
+namespace
+{
+constexpr int32_t krakenKindLash = 0;
+constexpr int32_t krakenKindPortal = 1;
+constexpr int32_t krakenKindRake = 2;
+} // namespace
+
+auto krakenBodyCenter(const Boss& boss) -> Vector2
+{
+    return Vector2{.x = boss.position.x + boss.size.x / 2, .y = boss.position.y + boss.size.y / 2};
+}
+
+// Lays a rope out from root along dir, `length` long.
+void seedKrakenRope(Boss& boss, int32_t rope, Vector2 root, Vector2 dir, float length)
+{
+    auto& pos = boss.ropePos.at(static_cast<size_t>(rope));
+    auto& old = boss.ropeOld.at(static_cast<size_t>(rope));
+    for (int32_t i = 0; i < Boss::krakenRopePoints; i++)
+    {
+        const float f = static_cast<float>(i) / static_cast<float>(Boss::krakenRopePoints - 1);
+        pos.at(static_cast<size_t>(i)) = Vector2Add(root, Vector2Scale(dir, length * f));
+        old.at(static_cast<size_t>(i)) = pos.at(static_cast<size_t>(i));
+    }
+}
+
+// Verlet rope: pinned at root, tip pulled toward target at `pull` per second, segments held to
+// length / (points - 1). A fast-moving target makes the rope lag into an S and crack.
+void stepKrakenRope(Boss& boss, int32_t rope, Vector2 root, Vector2 target, float length, float pull, float deltaTime)
+{
+    auto& pos = boss.ropePos.at(static_cast<size_t>(rope));
+    auto& old = boss.ropeOld.at(static_cast<size_t>(rope));
+    constexpr int32_t n = Boss::krakenRopePoints;
+    for (int32_t i = 1; i < n; i++)
+    {
+        const Vector2 velocity = Vector2Scale(Vector2Subtract(pos.at(static_cast<size_t>(i)), old.at(static_cast<size_t>(i))), 0.9F);
+        old.at(static_cast<size_t>(i)) = pos.at(static_cast<size_t>(i));
+        pos.at(static_cast<size_t>(i)) = Vector2Add(pos.at(static_cast<size_t>(i)), velocity);
+    }
+    pos.at(n - 1) = Vector2Lerp(pos.at(n - 1), target, std::min(1.0F, pull * deltaTime));
+    const float segment = std::max(1.0F, length) / static_cast<float>(n - 1);
+    for (int32_t iteration = 0; iteration < 8; iteration++)
+    {
+        pos.at(0) = root;
+        for (int32_t i = 0; i + 1 < n; i++)
+        {
+            Vector2& a = pos.at(static_cast<size_t>(i));
+            Vector2& b = pos.at(static_cast<size_t>(i + 1));
+            const Vector2 d = Vector2Subtract(b, a);
+            const float dist = std::max(0.001F, Vector2Length(d));
+            const Vector2 fix = Vector2Scale(d, (dist - segment) / dist);
+            if (i == 0)
+            {
+                b = Vector2Subtract(b, fix);
+            }
+            else
+            {
+                a = Vector2Add(a, Vector2Scale(fix, 0.5F));
+                b = Vector2Subtract(b, Vector2Scale(fix, 0.5F));
+            }
+        }
+    }
+    pos.at(0) = root;
+}
+
+auto krakenRopeHits(const Boss& boss, int32_t rope, Vector2 point, float radius) -> bool
+{
+    const auto& pos = boss.ropePos.at(static_cast<size_t>(rope));
+    for (int32_t i = 0; i + 1 < Boss::krakenRopePoints; i++)
+    {
+        if (CheckCollisionCircleLine(point, radius, pos.at(static_cast<size_t>(i)), pos.at(static_cast<size_t>(i + 1))))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Spear Rake: spear i's direction, fanned around the locked aim.
+auto krakenRakeDir(const Boss& boss, int32_t slot, int32_t spear) -> Vector2
+{
+    const auto s = static_cast<size_t>(slot);
+    const Vector2 aim = Vector2Normalize(Vector2Subtract(boss.tentacleAim.at(s), boss.krakenMouth));
+    const float offset = (static_cast<float>(spear) - static_cast<float>(boss.rakeCount.at(s) - 1) / 2.0F) * krakenRakeSpreadDeg;
+    return Vector2Rotate(aim, offset * DEG2RAD);
+}
+
+// How far spear i reaches at time `elapsed` into the strike (0..krakenTentacleReach).
+auto krakenRakeExtent(const Boss& boss, int32_t slot, int32_t spear, float elapsed) -> float
+{
+    const auto count = static_cast<float>(boss.rakeCount.at(static_cast<size_t>(slot)));
+    const float start = krakenRakeSpearGap * static_cast<float>(spear);
+    const float holdEnd = krakenRakeSpearGap * (count - 1.0F) + krakenRakeExtend + krakenRakeHold;
+    if (elapsed < start)
+    {
+        return 0;
+    }
+    if (elapsed < holdEnd)
+    {
+        return krakenTentacleReach * std::min(1.0F, (elapsed - start) / krakenRakeExtend);
+    }
+    return krakenTentacleReach * std::max(0.0F, 1.0F - (elapsed - holdEnd) / krakenRakeRetract);
+}
+
+auto krakenRakeStrikeDuration(const Boss& boss, int32_t slot) -> float
+{
+    return krakenRakeSpearGap * static_cast<float>(boss.rakeCount.at(static_cast<size_t>(slot)) - 1) + krakenRakeExtend +
+           krakenRakeHold + krakenRakeRetract;
+}
+
+// Arm Lash and Portal Lash: the root of the whipping arm.
+auto krakenLashRoot(const Boss& boss, int32_t slot) -> Vector2
+{
+    const auto s = static_cast<size_t>(slot);
+    return boss.tentacleKind.at(s) == krakenKindPortal ? boss.tentaclePortalPos.at(s) : boss.krakenMouth;
+}
+
+// The whip sweeps from swipeStart to swipeEnd (radians, world) around the root.
+auto krakenLashAngle(const Boss& boss, int32_t slot, float progress) -> float
+{
+    const auto s = static_cast<size_t>(slot);
+    const float eased = progress * progress * (3.0F - 2.0F * progress);
+    return boss.tentacleSwipeStartAngle.at(s) + (boss.tentacleSwipeEndAngle.at(s) - boss.tentacleSwipeStartAngle.at(s)) * eased;
+}
+
+void staggerKrakenSlot(Boss& boss, int32_t slot)
+{
+    const auto s = static_cast<size_t>(slot);
+    boss.tentacleHitPlayerThisSwipe.at(s) = true;
+    boss.tentaclePhase.at(s) = 4;
+    boss.tentacleStateTimer.at(s) = krakenTentacleStaggerRetreatDuration;
+}
+
+// Lets the boss's ordinary body-contact shield parry also stagger a striking arm.
 void krakenStaggerSwipingTentacle(Boss& boss)
 {
-    const int32_t activeCount = krakenActiveTentacleCount(boss.krakenEncounter);
-    for (int32_t s = 0; s < activeCount; s++)
+    for (int32_t s = 0; s < krakenActiveTentacleCount(boss.krakenEncounter); s++)
     {
-        const auto slot = static_cast<size_t>(s);
-        if (boss.tentaclePhase[slot] == 1 || boss.tentaclePhase[slot] == 2)
+        const int32_t phase = boss.tentaclePhase.at(static_cast<size_t>(s));
+        if (phase == 1 || phase == 2)
         {
-            float angle =
-                (boss.tentacleSwipeStartAngle[slot] + boss.tentacleSwipeEndAngle[slot]) / 2.0F;
-            if (boss.tentaclePhase[slot] == 2)
-            {
-                const float progress = std::clamp(
-                    1.0F - boss.tentacleStateTimer[slot] / krakenTentacleSwipeDuration, 0.0F, 1.0F);
-                angle += (boss.tentacleSwipeEndAngle[slot] - boss.tentacleSwipeStartAngle[slot]) *
-                         (progress - 0.5F);
-            }
-            boss.tentacleSwipeEndAngle[slot] = angle;
-            boss.tentacleHitPlayerThisSwipe[slot] = true;
-            boss.tentaclePhase[slot] = 4;
-            boss.tentacleStateTimer[slot] = krakenTentacleStaggerRetreatDuration;
+            staggerKrakenSlot(boss, s);
             return;
         }
     }
+}
+
+void startKrakenArmAttack(Game& game, Boss& boss, int32_t slot, int32_t kind)
+{
+    const auto s = static_cast<size_t>(slot);
+    const Vector2 player = game.run.player.position;
+    boss.tentacleKind.at(s) = kind;
+    boss.tentacleAim.at(s) = player;
+    boss.tentaclePhase.at(s) = 1;
+    boss.tentacleStateTimer.at(s) = kind == krakenKindRake ? krakenRakeTell : krakenArmTell;
+    boss.tentacleHitPlayerThisSwipe.at(s) = false;
+    if (kind == krakenKindRake)
+    {
+        boss.rakeCount.at(s) = 2 + boss.krakenEncounter;
+    }
+    else
+    {
+        if (kind == krakenKindPortal)
+        {
+            const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+            const auto dist = static_cast<float>(GetRandomValue(260, 380));
+            boss.tentaclePortalPos.at(s) = Vector2Add(player, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+            boss.tentacleStateTimer.at(s) += krakenPortalOpen;
+        }
+        const Vector2 root = krakenLashRoot(boss, slot);
+        const float toPlayer = std::atan2(player.y - root.y, player.x - root.x);
+        const float side = GetRandomValue(0, 1) == 0 ? 1.0F : -1.0F;
+        // Rear back well to one side, then crack across to past the other.
+        boss.tentacleSwipeStartAngle.at(s) = toPlayer + side * 100.0F * DEG2RAD;
+        boss.tentacleSwipeEndAngle.at(s) = toPlayer - side * 60.0F * DEG2RAD;
+        seedKrakenRope(boss, slot, root, Vector2{.x = std::cos(toPlayer), .y = std::sin(toPlayer)}, krakenTentacleReach * 0.15F);
+    }
+    playSFX(game, game.resources.sounds.bossWindUp);
+}
+
+void updateKrakenSlot(Game& game, Boss& boss, int32_t slot, float deltaTime)
+{
+    const auto s = static_cast<size_t>(slot);
+    const int32_t kind = boss.tentacleKind.at(s);
+    auto& player = game.run.player;
+    boss.tentacleStateTimer.at(s) -= deltaTime;
+    const float timer = boss.tentacleStateTimer.at(s);
+    const int32_t phase = boss.tentaclePhase.at(s);
+
+    if (kind == krakenKindRake)
+    {
+        if (phase == 1 && timer <= 0)
+        {
+            boss.tentaclePhase.at(s) = 2;
+            boss.tentacleStateTimer.at(s) = krakenRakeStrikeDuration(boss, slot);
+            playSFX(game, game.resources.sounds.slamBoom);
+        }
+        else if (phase == 2)
+        {
+            const float elapsed = krakenRakeStrikeDuration(boss, slot) - timer;
+            for (int32_t spear = 0; spear < boss.rakeCount.at(s) && !boss.tentacleHitPlayerThisSwipe.at(s); spear++)
+            {
+                const Vector2 tip = Vector2Add(boss.krakenMouth, Vector2Scale(krakenRakeDir(boss, slot, spear),
+                                                                              krakenRakeExtent(boss, slot, spear, elapsed)));
+                if (player.health > 0 &&
+                    CheckCollisionCircleLine(player.position, player.radius + krakenTentacleLineHalfWidth, boss.krakenMouth, tip))
+                {
+                    if (player.shieldActive)
+                    {
+                        staggerKrakenSlot(boss, slot);
+                        triggerBossShieldDashShake(game);
+                        return;
+                    }
+                    boss.tentacleHitPlayerThisSwipe.at(s) = true;
+                    damagePlayer(game, enemyDamage(game, krakenTentaclePlayerDamage));
+                }
+            }
+            if (timer <= 0)
+            {
+                boss.tentaclePhase.at(s) = 0;
+                boss.tentacleCooldownTimer.at(s) = krakenTentacleCooldownDuration;
+            }
+        }
+        else if (phase == 4 && timer <= 0)
+        {
+            boss.tentaclePhase.at(s) = 5; // falls through to the stagger set-up below
+        }
+        if (boss.tentaclePhase.at(s) != 5)
+        {
+            return;
+        }
+    }
+    else
+    {
+        const Vector2 root = krakenLashRoot(boss, slot);
+        const float reach = krakenTentacleReach;
+        if (phase == 1)
+        {
+            // Portal Lash: the portal opens first, then the arm uncoils out of it; both rear back.
+            const float tell = kind == krakenKindPortal ? krakenArmTell : krakenArmTell;
+            const float uncoil = std::clamp(1.0F - timer / tell, 0.0F, 1.0F);
+            const float back = boss.tentacleSwipeStartAngle.at(s);
+            const Vector2 target = Vector2Add(root, Vector2Scale(Vector2{.x = std::cos(back), .y = std::sin(back)}, reach * 0.55F * uncoil));
+            stepKrakenRope(boss, slot, root, target, reach * (0.15F + 0.55F * uncoil), 6.0F, deltaTime);
+            if (timer <= 0)
+            {
+                boss.tentaclePhase.at(s) = 2;
+                boss.tentacleStateTimer.at(s) = krakenArmStrike;
+            }
+        }
+        else if (phase == 2)
+        {
+            const float progress = std::clamp(1.0F - timer / krakenArmStrike, 0.0F, 1.0F);
+            const float angle = krakenLashAngle(boss, slot, progress);
+            const Vector2 target = Vector2Add(root, Vector2Scale(Vector2{.x = std::cos(angle), .y = std::sin(angle)}, reach * 1.05F));
+            stepKrakenRope(boss, slot, root, target, reach, 30.0F, deltaTime);
+            if (!boss.tentacleHitPlayerThisSwipe.at(s) && player.health > 0 &&
+                krakenRopeHits(boss, slot, player.position, player.radius + krakenTentacleLineHalfWidth))
+            {
+                if (player.shieldActive)
+                {
+                    staggerKrakenSlot(boss, slot);
+                    triggerBossShieldDashShake(game);
+                    return;
+                }
+                boss.tentacleHitPlayerThisSwipe.at(s) = true;
+                damagePlayer(game, enemyDamage(game, krakenTentaclePlayerDamage));
+            }
+            if (timer <= 0)
+            {
+                boss.tentaclePhase.at(s) = 3;
+                boss.tentacleStateTimer.at(s) = krakenArmRecover;
+            }
+        }
+        else if (phase == 3 || phase == 4)
+        {
+            // Follow-through, then the arm draws back in (into its portal, for Portal Lash).
+            const float duration = phase == 3 ? krakenArmRecover : krakenTentacleStaggerRetreatDuration;
+            const float left = std::clamp(timer / duration, 0.0F, 1.0F);
+            const float end = boss.tentacleSwipeEndAngle.at(s) + (phase == 4 ? std::sin(timer * 60.0F) * 0.1F : 0.0F);
+            const Vector2 target = Vector2Add(root, Vector2Scale(Vector2{.x = std::cos(end), .y = std::sin(end)}, reach * 0.5F * left));
+            stepKrakenRope(boss, slot, root, target, reach * std::max(0.05F, left), 8.0F, deltaTime);
+            if (timer <= 0)
+            {
+                boss.tentaclePhase.at(s) = phase == 4 ? 5 : 0;
+                boss.tentacleCooldownTimer.at(s) = krakenTentacleCooldownDuration;
+            }
+        }
+        if (boss.tentaclePhase.at(s) != 5)
+        {
+            return;
+        }
+    }
+
+    // A staggered arm hangs limp out of the body's gate, open to fire.
+    boss.tentaclePhase.at(s) = 0;
+    boss.tentacleCooldownTimer.at(s) = krakenTentacleCooldownDuration;
+    boss.tentacleStaggered.at(s) = true;
+    boss.tentacleStaggerTimer.at(s) = krakenStaggerDuration(boss.krakenEncounter);
+    const Vector2 gate = krakenPodPosition(boss, slot % 4);
+    boss.tentacleStaggerPos.at(s) =
+        Vector2Add(gate, Vector2Scale(Vector2Normalize(Vector2Subtract(gate, krakenBodyCenter(boss))), krakenStaggerGateOffset));
 }
 
 void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
@@ -2795,12 +3082,13 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
     {
         return;
     }
+    const Vector2 center = krakenBodyCenter(boss);
+    const Vector2 facing = Vector2Normalize(Vector2Subtract(game.run.player.position, center));
+    boss.krakenMouth = Vector2Add(center, Vector2Scale(facing, boss.size.x / 2 * 0.95F));
 
     const int32_t activeCount = krakenActiveTentacleCount(boss.krakenEncounter);
-    const bool allStaggered = std::all_of(
-        boss.tentacleStaggered.begin(),
-        boss.tentacleStaggered.begin() + activeCount,
-        [](bool staggered) { return staggered; });
+    const bool allStaggered = std::all_of(boss.tentacleStaggered.begin(), boss.tentacleStaggered.begin() + activeCount,
+                                          [](bool staggered) { return staggered; });
     if (allStaggered)
     {
         if (boss.krakenCoreExposedTimer > 0)
@@ -2812,8 +3100,7 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
                 for (int32_t slot = 0; slot < activeCount; slot++)
                 {
                     boss.tentacleStaggered[static_cast<size_t>(slot)] = false;
-                    boss.tentacleCooldownTimer[static_cast<size_t>(slot)] =
-                        krakenTentacleCooldownDuration;
+                    boss.tentacleCooldownTimer[static_cast<size_t>(slot)] = krakenTentacleCooldownDuration;
                 }
                 boss.krakenCoreExposureUsed = true;
             }
@@ -2837,99 +3124,17 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
     for (int32_t s = 0; s < activeCount; s++)
     {
         const auto slot = static_cast<size_t>(s);
-
         if (boss.tentacleStaggered[slot])
         {
             continue;
         }
-
         if (boss.tentacleCooldownTimer[slot] > 0)
         {
             boss.tentacleCooldownTimer[slot] -= deltaTime;
         }
-
-        if (boss.tentaclePhase[slot] == 0)
+        if (boss.tentaclePhase[slot] != 0)
         {
-            continue;
-        }
-
-        boss.tentacleStateTimer[slot] -= deltaTime;
-
-        if (boss.tentaclePhase[slot] == 1)
-        {
-            if (boss.tentacleStateTimer[slot] <= 0)
-            {
-                boss.tentaclePhase[slot] = 2;
-                boss.tentacleStateTimer[slot] = krakenTentacleSwipeDuration;
-            }
-            continue;
-        }
-
-        if (boss.tentaclePhase[slot] == 2)
-        {
-            const float progress =
-                std::clamp(1.0F - boss.tentacleStateTimer[slot] / krakenTentacleSwipeDuration, 0.0F, 1.0F);
-            const float angle =
-                boss.tentacleSwipeStartAngle[slot] +
-                (boss.tentacleSwipeEndAngle[slot] - boss.tentacleSwipeStartAngle[slot]) * progress;
-            const Vector2 tip =
-                Vector2Add(boss.tentaclePortalPos[slot],
-                          Vector2{.x = std::cos(angle) * krakenTentacleReach,
-                                  .y = std::sin(angle) * krakenTentacleReach});
-
-            if (!boss.tentacleHitPlayerThisSwipe[slot] && game.run.player.health > 0 &&
-                CheckCollisionCircleLine(game.run.player.position,
-                                         game.run.player.radius + krakenTentacleLineHalfWidth,
-                                         boss.tentaclePortalPos[slot], tip))
-            {
-                const bool blocking = game.run.player.shieldActive;
-                if (blocking)
-                {
-                    boss.tentacleSwipeEndAngle[slot] = angle;
-                    boss.tentacleHitPlayerThisSwipe[slot] = true;
-                    boss.tentaclePhase[slot] = 4;
-                    boss.tentacleStateTimer[slot] = krakenTentacleStaggerRetreatDuration;
-                    triggerBossShieldDashShake(game);
-                    continue;
-                }
-                boss.tentacleHitPlayerThisSwipe[slot] = true;
-                damagePlayer(game, enemyDamage(game, krakenTentaclePlayerDamage));
-            }
-
-            if (boss.tentacleStateTimer[slot] <= 0)
-            {
-                boss.tentaclePhase[slot] = 3;
-                boss.tentacleStateTimer[slot] = krakenTentacleRetreatDuration;
-            }
-            continue;
-        }
-
-        if (boss.tentaclePhase[slot] == 3)
-        {
-            if (boss.tentacleStateTimer[slot] <= 0)
-            {
-                boss.tentaclePhase[slot] = 0;
-                boss.tentacleCooldownTimer[slot] = krakenTentacleCooldownDuration;
-            }
-            continue;
-        }
-
-        if (boss.tentaclePhase[slot] == 4)
-        {
-            if (boss.tentacleStateTimer[slot] <= 0)
-            {
-                boss.tentaclePhase[slot] = 0;
-                boss.tentacleCooldownTimer[slot] = krakenTentacleCooldownDuration;
-                boss.tentacleStaggered[slot] = true;
-                boss.tentacleStaggerTimer[slot] = krakenStaggerDuration(boss.krakenEncounter);
-                boss.tentacleStaggerPos[slot] = Vector2Add(
-                    krakenPodPosition(boss, s % 4),
-                    Vector2Scale(Vector2Normalize(Vector2Subtract(
-                                     krakenPodPosition(boss, s % 4),
-                                     Vector2{.x = boss.position.x + boss.size.x / 2,
-                                             .y = boss.position.y + boss.size.y / 2})),
-                                 krakenStaggerGateOffset));
-            }
+            updateKrakenSlot(game, boss, s, deltaTime);
         }
     }
 
@@ -2940,63 +3145,45 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
     }
     boss.tentacleCheckTimer = krakenTentacleCheckInterval;
 
-    // Every idle, off-cooldown tentacle gets its own roll, so encounters with more than one
-    // active tentacle actually use them instead of leaving spares parked.
+    // Every idle, off-cooldown slot gets its own roll for an attack.
     for (int32_t s = 0; s < activeCount; s++)
     {
         const auto slot = static_cast<size_t>(s);
-        if (!krakenTentacleSlotIdle(boss, s) || boss.tentacleCooldownTimer[slot] > 0)
+        const bool forced = boss.sandboxKrakenKind >= 0 && boss.sandboxKrakenKind <= krakenKindRake;
+        if (!krakenTentacleSlotIdle(boss, s) || (boss.tentacleCooldownTimer[slot] > 0 && !forced))
         {
             continue;
         }
-        if (static_cast<float>(GetRandomValue(0, 99)) / 100.0F >= krakenTentacleTriggerChance)
+        if (!forced && static_cast<float>(GetRandomValue(0, 99)) / 100.0F >= krakenTentacleTriggerChance)
         {
             continue;
         }
-
-        const float portalAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-        const auto portalDist = static_cast<float>(GetRandomValue(260, 380));
-        boss.tentaclePortalPos[slot] = Vector2Add(
-            game.run.player.position,
-            Vector2{.x = std::cos(portalAngle) * portalDist, .y = std::sin(portalAngle) * portalDist});
-
-        const float aimAngle = std::atan2(game.run.player.position.y - boss.tentaclePortalPos[slot].y,
-                                          game.run.player.position.x - boss.tentaclePortalPos[slot].x);
-        const float halfArc = krakenTentacleSwipeArcDeg * DEG2RAD / 2.0F;
-        boss.tentacleSwipeStartAngle[slot] = aimAngle - halfArc;
-        boss.tentacleSwipeEndAngle[slot] = aimAngle + halfArc;
-
-        boss.tentaclePhase[slot] = 1;
-        boss.tentacleStateTimer[slot] = krakenTentacleEmergeDuration;
-        boss.tentacleHitPlayerThisSwipe[slot] = false;
-        playSFX(game, game.resources.sounds.bossWindUp);
+        const int32_t roll = GetRandomValue(0, 99);
+        const int32_t kind = forced       ? boss.sandboxKrakenKind
+                             : roll < 40  ? krakenKindLash
+                             : roll < 75  ? krakenKindPortal
+                                          : krakenKindRake;
+        boss.sandboxKrakenKind = -1;
+        startKrakenArmAttack(game, boss, s, kind);
     }
 }
 
-// --- Kraken Snatch and Dragged Under QTE (cutscene) ----------------------------
+// --- Kraken Feeding Strike and Dragged Under QTE (cutscene) --------------------
 //
-// Snatch: a cyan ring opens under the player; still inside it after the tell, an idle
-// tentacle grabs the ship from a portal. That starts Dragged Under, or a short plain hold
-// inside the QTE gap. Dragged Under: a Mash to break the grip, then prompts as the
-// tentacle hauls the ship portal to portal while others lash in. Clean clear: the grip is
-// severed, the finisher hits the core, then a Punish Window with the core open
-// (qteStunTimer). Fail: flung out of a portal nearby with one tentacle hit.
+// Feeding Strike: the two long clubbed feeding tentacles draw back, then shoot at where the
+// player stood. A club touching the ship catches it: that starts Dragged Under, or a short plain
+// hold inside the QTE gap. Dragged Under: a Mash to break the grip, then prompts as the
+// tentacle hauls the ship toward the beak and then portal to portal while other arms lash in.
+// Clean clear: the grip is severed, the finisher hits the core, then a Punish Window with the
+// core open (qteStunTimer). Fail: flung out of a portal nearby with one tentacle hit.
 // --------------------------------------------------------------------------
 
 void releaseKrakenGrip(Boss& kraken)
 {
-    if (kraken.snatchSlot < 0)
-    {
-        return;
-    }
-    const auto slot = static_cast<size_t>(kraken.snatchSlot);
-    const Vector2 toTip = Vector2Subtract(kraken.snatchPos, kraken.tentaclePortalPos[slot]);
-    kraken.tentacleSwipeEndAngle[slot] = std::atan2(toTip.y, toTip.x);
-    kraken.tentacleSwipeStartAngle[slot] = kraken.tentacleSwipeEndAngle[slot];
-    kraken.tentaclePhase[slot] = 3;
-    kraken.tentacleStateTimer[slot] = krakenTentacleRetreatDuration;
-    kraken.snatchSlot = -1;
-    kraken.snatchPhase = 0;
+    kraken.gripping = false;
+    kraken.gripFromMouth = false;
+    kraken.snatchPhase = 3; // the feeding tentacles reel back in
+    kraken.snatchStateTimer = krakenFeedRecover;
 }
 
 void flingFromKrakenGrip(Game& game, Boss& kraken)
@@ -3020,8 +3207,11 @@ void beginKrakenDraggedUnder(Game& game, Boss& kraken)
     game.run.qteTimerMax = UpdateConstants::krakenDragMashDuration;
     game.run.qteMashTarget = UpdateConstants::krakenDragMashPresses;
     game.run.qteThreatDir = Vector2{};
+    kraken.gripping = true;
+    kraken.gripFromMouth = true;
+    kraken.snatchPhase = 0;
     kraken.grabPromptsLeft = UpdateConstants::krakenDragPrompts;
-    kraken.grabDragTarget = kraken.tentaclePortalPos[static_cast<size_t>(kraken.snatchSlot)];
+    kraken.grabDragTarget = kraken.krakenMouth; // hauled toward the beak first
     playSFX(game, game.resources.sounds.slamBoom);
     triggerShake(game, 12, 0.4F);
 }
@@ -3044,89 +3234,153 @@ void endKrakenDraggedUnder(Game& game, Boss& kraken, bool clean)
     playSFX(game, game.resources.sounds.critical);
 }
 
+// The feeding tentacles' rest pose, tucked back along the mantle.
+auto krakenFeedRest(const Boss& kraken, float sign) -> Vector2
+{
+    const Vector2 center = krakenBodyCenter(kraken);
+    const Vector2 back = Vector2Normalize(Vector2Subtract(center, kraken.krakenMouth));
+    const Vector2 side{.x = -back.y, .y = back.x};
+    return Vector2Add(center, Vector2Add(Vector2Scale(back, kraken.size.x * 0.9F), Vector2Scale(side, sign * kraken.size.x * 0.5F)));
+}
+
 void updateKrakenSnatch(Game& game, Boss& kraken, float deltaTime)
 {
     auto& player = game.run.player;
+    const float feedLength = kraken.size.x / 2 * 6.5F;
+    if (kraken.gripping)
+    {
+        return; // Dragged Under or the plain hold below owns the grip
+    }
     if (kraken.snatchPhase == 0)
     {
         kraken.snatchTimer -= deltaTime;
-        if (kraken.snatchTimer > 0 || kraken.snatchSlot >= 0 || kraken.qteStunTimer > 0 || !qteSlotFree(game))
+        const bool forced = kraken.sandboxKrakenKind == 3;
+        if ((kraken.snatchTimer > 0 && !forced) || kraken.qteStunTimer > 0 || !qteSlotFree(game))
         {
             return;
         }
-        for (int32_t s = 0; s < krakenActiveTentacleCount(kraken.krakenEncounter); s++)
+        kraken.sandboxKrakenKind = forced ? -1 : kraken.sandboxKrakenKind;
+        kraken.snatchPhase = 1;
+        kraken.snatchStateTimer = krakenFeedTell;
+        kraken.snatchTimer = static_cast<float>(GetRandomValue(UpdateConstants::krakenSnatchCooldownMin,
+                                                               UpdateConstants::krakenSnatchCooldownMax));
+        for (int32_t k = 0; k < 2; k++)
         {
-            if (krakenTentacleSlotIdle(kraken, s))
-            {
-                kraken.snatchSlot = s;
-                kraken.tentaclePhase[static_cast<size_t>(s)] = 5; // reserved, drawn once it grabs
-                kraken.snatchPhase = 1;
-                kraken.snatchStateTimer = UpdateConstants::krakenSnatchTell;
-                kraken.snatchPos = player.position;
-                kraken.snatchTimer = static_cast<float>(GetRandomValue(UpdateConstants::krakenSnatchCooldownMin,
-                                                                       UpdateConstants::krakenSnatchCooldownMax));
-                playSFX(game, game.resources.sounds.bossWindUp);
-                return;
-            }
+            seedKrakenRope(kraken, 4 + k, kraken.krakenMouth,
+                           Vector2Normalize(Vector2Subtract(krakenFeedRest(kraken, k == 0 ? 1.0F : -1.0F), kraken.krakenMouth)),
+                           feedLength * 0.3F);
         }
+        playSFX(game, game.resources.sounds.bossWindUp);
         return;
     }
 
     kraken.snatchStateTimer -= deltaTime;
+    for (int32_t k = 0; k < 2; k++)
+    {
+        const float sign = k == 0 ? 1.0F : -1.0F;
+        Vector2 target = krakenFeedRest(kraken, sign);
+        float pull = 6.0F;
+        float length = feedLength * 0.45F;
+        if (kraken.snatchPhase == 2)
+        {
+            const Vector2 aimDir = Vector2Normalize(Vector2Subtract(kraken.feedAim, kraken.krakenMouth));
+            target = Vector2Add(Vector2Add(kraken.feedAim, Vector2Scale(aimDir, 60.0F)),
+                                Vector2Scale(Vector2{.x = -aimDir.y, .y = aimDir.x}, sign * 22.0F));
+            pull = 40.0F;
+            length = Vector2Distance(kraken.krakenMouth, kraken.feedAim) + 80.0F;
+        }
+        else if (kraken.snatchPhase == 3 || kraken.snatchPhase == 4)
+        {
+            length = feedLength * 0.45F * std::clamp(kraken.snatchStateTimer / krakenFeedRecover, 0.1F, 1.0F);
+            if (kraken.snatchPhase == 4)
+            {
+                target = player.position;
+                length = Vector2Distance(kraken.krakenMouth, player.position) * 1.05F;
+                pull = 40.0F;
+            }
+        }
+        stepKrakenRope(kraken, 4 + k, kraken.krakenMouth, target, length, pull, deltaTime);
+    }
+
     if (kraken.snatchPhase == 1)
     {
-        if (kraken.snatchStateTimer > 0)
+        kraken.feedAim = player.position; // tracks through the tell, locks as it shoots
+        if (kraken.snatchStateTimer <= 0)
         {
-            return;
+            kraken.snatchPhase = 2;
+            kraken.snatchStateTimer = krakenFeedShoot;
+            playSFX(game, game.resources.sounds.slamBoom);
         }
-        if (Vector2Distance(player.position, kraken.snatchPos) > UpdateConstants::krakenSnatchRadius + player.radius ||
-            !qteSlotFree(game))
-        {
-            kraken.tentaclePhase[static_cast<size_t>(kraken.snatchSlot)] = 0;
-            kraken.snatchSlot = -1;
-            kraken.snatchPhase = 0;
-            return; // left the ring: no grab
-        }
-        const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-        kraken.tentaclePortalPos[static_cast<size_t>(kraken.snatchSlot)] =
-            Vector2Add(player.position, Vector2{.x = std::cos(angle) * 320.0F, .y = std::sin(angle) * 320.0F});
-        kraken.snatchPos = player.position;
-        triggerShake(game, 8, 0.25F);
-        if (bossQteCanStart(game, QteKind::DraggedUnder))
-        {
-            kraken.snatchPhase = 0;
-            beginKrakenDraggedUnder(game, kraken);
-            return;
-        }
-        kraken.snatchPhase = 2;
-        kraken.snatchStateTimer = UpdateConstants::krakenSnatchHold;
-        playSFX(game, game.resources.sounds.slamBoom);
         return;
     }
-    // Plain grab: held fast, then the fail outcome.
-    player.position = kraken.snatchPos;
-    player.velocity = Vector2{};
+    if (kraken.snatchPhase == 2)
+    {
+        for (int32_t k = 0; k < 2; k++)
+        {
+            const Vector2 club = kraken.ropePos.at(static_cast<size_t>(4 + k)).back();
+            if (player.health > 0 && Vector2Distance(club, player.position) <= krakenFeedCatchRadius + player.radius &&
+                qteSlotFree(game))
+            {
+                kraken.snatchPos = player.position;
+                triggerShake(game, 8, 0.25F);
+                if (bossQteCanStart(game, QteKind::DraggedUnder))
+                {
+                    beginKrakenDraggedUnder(game, kraken);
+                    return;
+                }
+                kraken.snatchPhase = 4;
+                kraken.snatchStateTimer = UpdateConstants::krakenSnatchHold;
+                playSFX(game, game.resources.sounds.slamBoom);
+                return;
+            }
+        }
+        if (kraken.snatchStateTimer <= 0)
+        {
+            kraken.snatchPhase = 3;
+            kraken.snatchStateTimer = krakenFeedRecover;
+        }
+        return;
+    }
+    if (kraken.snatchPhase == 4)
+    {
+        // Plain grab: held fast, then the fail outcome.
+        player.position = kraken.snatchPos;
+        player.velocity = Vector2{};
+        if (kraken.snatchStateTimer <= 0)
+        {
+            flingFromKrakenGrip(game, kraken);
+        }
+        return;
+    }
     if (kraken.snatchStateTimer <= 0)
     {
-        flingFromKrakenGrip(game, kraken);
+        kraken.snatchPhase = 0;
     }
 }
 
 void updateKrakenDraggedUnder(Game& game, Boss& kraken, float deltaTime)
 {
     auto& run = game.run;
-    if (kraken.snatchSlot < 0)
+    if (!kraken.gripping)
     {
         endKrakenDraggedUnder(game, kraken, false);
         return;
     }
-    const auto slot = static_cast<size_t>(kraken.snatchSlot);
+    if (kraken.gripFromMouth)
+    {
+        kraken.gripRoot = kraken.krakenMouth;
+        kraken.grabDragTarget = Vector2Add(kraken.krakenMouth, Vector2Scale(Vector2Normalize(
+                                                                   Vector2Subtract(run.player.position, kraken.krakenMouth)),
+                                                               kraken.size.x * 0.6F));
+    }
     if (run.qteActionTimer <= 0)
     {
         run.player.position =
             Vector2Lerp(run.player.position, kraken.grabDragTarget, std::min(1.0F, deltaTime * 0.6F));
     }
     kraken.snatchPos = run.player.position;
+    stepKrakenRope(kraken, 4, kraken.gripRoot, run.player.position, Vector2Distance(kraken.gripRoot, run.player.position) * 1.05F,
+                   40.0F, deltaTime);
 
     if (run.qtePrompt == QtePrompt::Mash)
     {
@@ -3178,8 +3432,7 @@ void updateKrakenDraggedUnder(Game& game, Boss& kraken, float deltaTime)
         if (done > 0 && done % UpdateConstants::krakenDragPromptsPerPortal == 0)
         {
             // Hauled through the tear: out of a portal by the Kraken, toward the next.
-            const Vector2 center{.x = kraken.position.x + kraken.size.x / 2,
-                                 .y = kraken.position.y + kraken.size.y / 2};
+            const Vector2 center = krakenBodyCenter(kraken);
             const float exitAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
             const Vector2 exitDir{.x = std::cos(exitAngle), .y = std::sin(exitAngle)};
             spawnKillExplosion(game, run.player.position, Palette::ElementFreeze, 14, 1.0F);
@@ -3187,13 +3440,15 @@ void updateKrakenDraggedUnder(Game& game, Boss& kraken, float deltaTime)
             kraken.snatchPos = run.player.position;
             spawnKillExplosion(game, run.player.position, Palette::ElementFreeze, 14, 1.0F);
             const Vector2 pullDir = Vector2Rotate(exitDir, static_cast<float>(GetRandomValue(60, 120)) * DEG2RAD);
-            kraken.tentaclePortalPos[slot] = Vector2Add(run.player.position, Vector2Scale(pullDir, 320.0F));
-            kraken.grabDragTarget = kraken.tentaclePortalPos[slot];
+            kraken.gripFromMouth = false;
+            kraken.gripRoot = Vector2Add(run.player.position, Vector2Scale(pullDir, 320.0F));
+            kraken.grabDragTarget = kraken.gripRoot;
+            seedKrakenRope(kraken, 4, kraken.gripRoot, Vector2Scale(pullDir, -1.0F), 320.0F);
             game.run.punctumThunderFlashTimer = punctumThunderFlashDuration; // visual only
             playSFX(game, game.resources.sounds.slamBoom);
             triggerShake(game, 10, 0.3F);
         }
-        // Other tentacles lash in from any side.
+        // Other arms lash in from any side.
         const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
         run.qteThreatDir = Vector2{.x = std::cos(angle), .y = std::sin(angle)};
         run.qtePrompt = qtePromptForThreat(game, run.qteThreatDir, UpdateConstants::krakenDragParryChance);

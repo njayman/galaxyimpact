@@ -245,13 +245,29 @@ class Boss
     std::array<Vector2, krakenLimbSlots> tentacleStaggerPos{};
     float krakenCoreExposedTimer = 0;
     bool krakenCoreExposureUsed = false;
-    // Snatch: 1 = ring tell under the player, 2 = plain grab hold. The gripping tentacle
-    // sits in tentaclePhase 5 with its tip at snatchPos (the ship, once caught).
+    // Feeding Strike (the Kraken's Snatch): 1 tell (the feeding tentacles draw back), 2 shoot,
+    // 3 recover, 4 plain hold. Once caught, gripRoot is where the tentacle holding the ship
+    // comes from: the mouth, then each portal it is hauled through.
     int32_t snatchPhase = 0;
-    float snatchTimer = 9.0F; // until the next Snatch try
+    float snatchTimer = 9.0F; // until the next Feeding Strike
     float snatchStateTimer = 0;
-    Vector2 snatchPos{};
-    int32_t snatchSlot = -1;
+    Vector2 snatchPos{}; // the ship, once caught
+    Vector2 feedAim{};
+    bool gripping = false;
+    bool gripFromMouth = false;
+    Vector2 gripRoot{};
+    Vector2 krakenMouth{}; // updated every frame; the arms and feeding tentacles root here
+    int32_t snatchSlot = -1; // Banished: the tentacle holding the ship in Juggled
+    // Arm attacks run as rope sims: ropes 0-3 for the slots (Arm Lash, Portal Lash), 4-5 for
+    // the feeding tentacles. Spear Rake arms are straight and need no rope.
+    static constexpr int32_t krakenRopeCount = 6;
+    static constexpr int32_t krakenRopePoints = 14;
+    std::array<std::array<Vector2, krakenRopePoints>, krakenRopeCount> ropePos{};
+    std::array<std::array<Vector2, krakenRopePoints>, krakenRopeCount> ropeOld{};
+    std::array<int32_t, krakenLimbSlots> tentacleKind{}; // 0 Arm Lash, 1 Portal Lash, 2 Spear Rake
+    std::array<Vector2, krakenLimbSlots> tentacleAim{};
+    std::array<int32_t, krakenLimbSlots> rakeCount{};
+    int32_t sandboxKrakenKind = -1; // sandbox: the next attack, 3 = Feeding Strike
     int32_t grabPromptsLeft = 0; // Dragged Under / Juggled prompts still to pose
     Vector2 grabDragTarget{};    // where the grip hauls the ship between prompts
 

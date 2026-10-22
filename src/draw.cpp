@@ -5523,114 +5523,60 @@ void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color colo
                   t * 0.4F + seed, Fade(lit, 0.8F));
 }
 
-// The Kraken: a squid facing the player. A long pointed mantle trails away with two fins near
-// its tip and cyan veins down its length; the head turns to the ship with two large eyes, and all
-// the arms reach forward from the face: eight writhing arms and two long feeding tentacles with
-// clubbed tips. Matte lavender; only the veins, eyes and club tips carry cyan.
+// The Kraken: small panelled body in a squid's silhouette, facing the player, with eight thin
+// tentacles many body-lengths long spread all round it. The mantle is the old panel octagon
+// stretched along the facing and trailing away, with two panel fins at its tip; the head is a
+// panel hex turned to the ship with two pod eyes and the pulsing gold core.
 void drawKrakenShape(Vector2 center, float radius, float seed, Color color, Vector2 facing)
 {
     const auto t = static_cast<float>(GetTime());
-    const Vector2 f = Vector2Normalize(facing);
-    const Vector2 side{.x = -f.y, .y = f.x};
-    const auto at = [&](float along, float across)
-    { return Vector2Add(center, Vector2Add(Vector2Scale(f, along * radius), Vector2Scale(side, across * radius))); };
-    const auto fill = [](const std::vector<Vector2>& outline, Vector2 hub, Color col)
-    {
-        for (size_t i = 0; i < outline.size(); i++)
-        {
-            const Vector2 a = outline.at(i);
-            const Vector2 b = outline.at((i + 1) % outline.size());
-            DrawTriangle(hub, a, b, col);
-            DrawTriangle(hub, b, a, col);
-        }
-    };
-    const float breathe = 1.0F + 0.04F * std::sin(t * 2.0F + seed);
-    const Color mantleColor = ColorLerp(color, Palette::Void, 0.15F);
-    const Color rimColor = ColorLerp(color, Palette::Void, 0.55F);
-
-    // Fins, under the mantle.
-    for (const float sgn : {1.0F, -1.0F})
-    {
-        const float flap = 0.08F * std::sin(t * 3.0F + seed + sgn);
-        fill({at(-1.5F, sgn * 0.3F), at(-1.95F, sgn * (1.0F + flap)), at(-2.3F, sgn * 0.06F)}, at(-1.9F, sgn * 0.35F),
-             rimColor);
-    }
-
-    // Mantle: from the pointed back tip to the collar behind the head.
-    std::vector<Vector2> mantle;
-    constexpr int32_t steps = 12;
-    for (int32_t i = 0; i <= steps; i++)
-    {
-        const float u = static_cast<float>(i) / steps;
-        mantle.push_back(at(-2.4F + 2.85F * u, 0.62F * breathe * std::pow(u, 0.6F)));
-    }
-    for (int32_t i = steps; i >= 0; i--)
-    {
-        const float u = static_cast<float>(i) / steps;
-        mantle.push_back(at(-2.4F + 2.85F * u, -0.62F * breathe * std::pow(u, 0.6F)));
-    }
-    fill(mantle, at(-0.6F, 0), mantleColor);
-    for (size_t i = 0; i + 1 < mantle.size(); i++)
-    {
-        DrawLineEx(mantle.at(i), mantle.at(i + 1), 1.5F, rimColor);
-    }
-    for (const float across : {-0.28F, 0.0F, 0.28F})
-    {
-        // Cyan veins running back from the collar, bending slightly.
-        Vector2 prev = at(0.3F, across);
-        for (int32_t i = 1; i <= 6; i++)
-        {
-            const float u = static_cast<float>(i) / 6.0F;
-            const float bend = 0.06F * std::sin(u * 5.0F + across * 9.0F + seed);
-            const Vector2 next = at(0.3F - 2.2F * u, across * (1.0F - u * 0.8F) + bend);
-            DrawLineEx(prev, next, 1.2F, Fade(Palette::ElementFreeze, 0.55F * (1.0F - u * 0.6F)));
-            prev = next;
-        }
-    }
-
-    // Arms: eight writhing ones fanned across the face, two long feeding tentacles down the middle.
-    const Vector2 mouth = at(0.95F, 0);
     for (int32_t i = 0; i < 8; i++)
     {
-        const float spread = (-1.0F + 2.0F * static_cast<float>(i) / 7.0F) * 55.0F * DEG2RAD;
-        const float sway = 0.25F * std::sin(t * 1.1F + static_cast<float>(i) * 1.4F + seed);
-        const Vector2 dir = Vector2Rotate(f, spread + sway);
-        const float length = radius * (3.0F + 0.8F * std::sin(t * 0.8F + static_cast<float>(i) * 2.3F));
-        drawBendyTentacle(at(0.85F, (-1.0F + 2.0F * static_cast<float>(i) / 7.0F) * 0.3F),
-                          Vector2Add(mouth, Vector2Scale(dir, length)), center, radius * 0.3F,
-                          seed + static_cast<float>(i) * 3.0F, 0.24F, radius * 0.35F, false, mantleColor, rimColor);
-    }
-    for (const float sgn : {1.0F, -1.0F})
-    {
-        const float sway = 0.12F * std::sin(t * 0.7F + sgn * 2.0F + seed);
-        const Vector2 tip = Vector2Add(mouth, Vector2Scale(Vector2Rotate(f, sgn * 10.0F * DEG2RAD + sway), radius * 6.5F));
-        drawBendyTentacle(mouth, tip, center, radius * 0.3F, seed + sgn * 11.0F, 0.18F, radius * 0.5F, false,
-                          mantleColor, mantleColor);
-        DrawCircleV(tip, radius * 0.12F, rimColor); // the club
-        DrawCircleV(tip, radius * 0.06F, Fade(Palette::ElementFreeze, 0.8F));
+        const float sway = 0.3F * std::sin(t * 0.6F + static_cast<float>(i) * 1.3F + seed);
+        const float angle = static_cast<float>(i) * 45.0F * DEG2RAD + seed * 0.7F + sway;
+        const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
+        const float length = radius * (6.0F + 1.2F * std::sin(t * 0.9F + static_cast<float>(i) * 2.1F));
+        drawBendyTentacle(Vector2Add(center, Vector2Scale(dir, radius * 0.5F)), Vector2Add(center, Vector2Scale(dir, length)),
+                          center, radius, seed + static_cast<float>(i) * 3.0F, 0.22F, radius * 0.45F, false,
+                          ColorLerp(color, Palette::Void, 0.35F), Palette::ElementFreeze);
     }
 
-    // Head, turned to the ship, and its eyes.
-    std::vector<Vector2> head;
-    for (int32_t i = 0; i < 16; i++)
+    const Vector2 f = Vector2Normalize(facing);
+    const Vector2 side{.x = -f.y, .y = f.x};
+    const float facingDeg = std::atan2(f.y, f.x) * RAD2DEG;
+    const auto at = [&](float along, float across)
+    { return Vector2Add(center, Vector2Add(Vector2Scale(f, along * radius), Vector2Scale(side, across * radius))); };
+    // A panel shape drawn squashed and turned to the facing: stretch along it, squeeze across.
+    const auto stretched = [&](Vector2 c, float r, int32_t sides, float along, float across, Color col, float s)
     {
-        const float a = static_cast<float>(i) / 16.0F * 2.0F * std::numbers::pi_v<float>;
-        head.push_back(at(0.62F + 0.38F * std::cos(a), 0.5F * std::sin(a)));
-    }
-    fill(head, at(0.62F, 0), color);
-    for (size_t i = 0; i < head.size(); i++)
-    {
-        DrawLineEx(head.at(i), head.at((i + 1) % head.size()), 1.5F, rimColor);
-    }
-    const float blink = std::fmod(t + seed, 5.0F) < 0.12F ? 0.2F : 1.0F;
+        rlDrawRenderBatchActive();
+        rlPushMatrix();
+        rlTranslatef(c.x, c.y, 0);
+        rlRotatef(facingDeg, 0, 0, 1);
+        rlScalef(along, across, 1);
+        drawPanelShape(Vector2{}, r, sides, seed * 12.0F, col, s);
+        rlDrawRenderBatchActive();
+        rlPopMatrix();
+    };
+    const Color podColor = ColorLerp(color, Palette::StructDark, 0.25F);
+
     for (const float sgn : {1.0F, -1.0F})
     {
-        const Vector2 eye = at(0.72F, sgn * 0.34F);
-        DrawCircleV(eye, radius * 0.17F, Palette::Void);
-        DrawRing(eye, radius * 0.15F, radius * 0.17F, 0, 360, 24, rimColor);
-        DrawCircleV(Vector2Add(eye, Vector2Scale(f, radius * 0.05F)), radius * 0.07F * blink,
-                    Fade(Palette::ElementFreeze, 0.9F));
+        const float flap = 0.06F * std::sin(t * 3.0F + seed + sgn);
+        drawPanelShape(at(-1.75F, sgn * (0.42F + flap)), radius * 0.34F, 3, facingDeg + 180.0F + sgn * 25.0F, podColor,
+                       seed + sgn);
     }
+    stretched(at(-0.6F, 0), radius, 8, 1.55F, 0.62F, ColorLerp(color, Palette::Void, 0.15F), seed);
+    drawPanelShape(at(0.5F, 0), radius * 0.55F, 6, facingDeg, color, seed + 2.0F);
+    for (const float sgn : {1.0F, -1.0F})
+    {
+        drawPanelShape(at(0.62F, sgn * 0.42F), radius * 0.2F, 6, seed * 30.0F + sgn * 40.0F, podColor, seed + sgn * 5.0F);
+    }
+
+    const float pulse = 0.6F + 0.4F * std::sin(t * 2.0F + seed);
+    const Vector2 core = at(0.5F, 0);
+    DrawCircleV(core, radius * 0.16F, Fade(Palette::PunctumAccent, 0.5F + 0.4F * pulse));
+    DrawCircleLines(static_cast<int32_t>(core.x), static_cast<int32_t>(core.y), radius * 0.16F, Fade(WHITE, 0.6F));
 }
 
 void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bodyRadius,
@@ -5696,124 +5642,188 @@ void drawKrakenStaggeredTentacle(const Boss& boss, int32_t slot)
                     krakenTentacleHitRadius, Fade(WHITE, 0.5F + flash * 0.3F));
 }
 
-void drawKrakenPortal(Vector2 portal, float t)
+void drawKrakenPortal(Vector2 portal, float t, float open = 1.0F)
 {
-    const float ringPulse = 0.7F + 0.3F * std::sin(t * 6.0F);
-    DrawCircleV(portal, krakenTentaclePortalRadius * ringPulse, Fade(Palette::Void, 0.7F));
-    DrawCircleLines(static_cast<int32_t>(portal.x), static_cast<int32_t>(portal.y),
-                    krakenTentaclePortalRadius * ringPulse, Fade(Palette::PunctumAccent, 0.8F));
-    DrawCircleLines(static_cast<int32_t>(portal.x), static_cast<int32_t>(portal.y),
-                    krakenTentaclePortalRadius * ringPulse * 0.6F, Fade(Palette::PunctumHaze, 0.6F));
+    const float r = krakenTentaclePortalRadius * (0.7F + 0.3F * std::sin(t * 6.0F)) * open;
+    if (r < 1.0F)
+    {
+        return;
+    }
+    DrawCircleV(portal, r, Fade(Palette::Void, 0.7F));
+    DrawCircleLines(static_cast<int32_t>(portal.x), static_cast<int32_t>(portal.y), r, Fade(Palette::PunctumAccent, 0.8F));
+    DrawCircleLines(static_cast<int32_t>(portal.x), static_cast<int32_t>(portal.y), r * 0.6F, Fade(Palette::PunctumHaze, 0.6F));
 }
 
-// Snatch: the ring tell under the player, then the gripping tentacle coiled round the ship.
+// A rope arm: thick at the root tapering to the tip, a darker rim under a lavender body.
+void drawKrakenRope(const std::array<Vector2, Boss::krakenRopePoints>& pts, float rootWidth, float tipWidth, float alpha)
+{
+    const Color body = Fade(Palette::PunctumHaze, alpha);
+    const Color rim = Fade(ColorLerp(Palette::PunctumHaze, Palette::Void, 0.55F), alpha);
+    const auto width = [&](size_t i)
+    { return rootWidth + (tipWidth - rootWidth) * static_cast<float>(i) / static_cast<float>(pts.size() - 1); };
+    for (size_t i = 0; i + 1 < pts.size(); i++)
+    {
+        DrawLineEx(pts.at(i), pts.at(i + 1), width(i) + 2.5F, rim);
+    }
+    for (size_t i = 0; i + 1 < pts.size(); i++)
+    {
+        DrawLineEx(pts.at(i), pts.at(i + 1), width(i), body);
+        DrawCircleV(pts.at(i + 1), width(i + 1) / 2, body);
+    }
+}
+
+// Feeding Strike (the tell, the shot and the reel-in) and the grip of Dragged Under.
 void drawKrakenSnatch(const Boss& boss)
 {
     const auto t = static_cast<float>(GetTime());
-    const Vector2 c = boss.snatchPos;
-    if (boss.snatchPhase == 1)
+    if (boss.gripping)
     {
-        const float r = UpdateConstants::krakenSnatchRadius;
-        const float fill = 1.0F - std::clamp(boss.snatchStateTimer / UpdateConstants::krakenSnatchTell, 0.0F, 1.0F);
-        DrawCircleV(c, r * fill, Fade(Palette::ElementFreeze, 0.12F + 0.1F * fill));
-        DrawRing(c, r - 2.0F, r, 0, 360, 48, Fade(Palette::ElementFreeze, 0.5F + 0.4F * fill));
-        DrawRing(c, r * fill - 1.0F, r * fill, 0, 360, 48, Fade(Palette::PunctumHaze, 0.5F));
-        for (int32_t k = 0; k < 6; k++)
+        if (!boss.gripFromMouth)
         {
-            // Six ticks close in on the centre as the grab nears.
-            const float a = t * 1.5F + static_cast<float>(k) * 60.0F * DEG2RAD;
-            const Vector2 dir{.x = std::cos(a), .y = std::sin(a)};
-            const float inner = r + 4.0F + 10.0F * (1.0F - fill);
-            DrawLineEx(Vector2Add(c, Vector2Scale(dir, inner)), Vector2Add(c, Vector2Scale(dir, inner + 8.0F)), 2.0F,
-                       Fade(Palette::ElementFreeze, 0.8F));
+            drawKrakenPortal(boss.gripRoot, t);
+        }
+        drawKrakenRope(boss.ropePos.at(4), 7.0F, 4.0F, 1.0F);
+        const Vector2 c = boss.snatchPos;
+        for (int32_t k = 0; k < 2; k++)
+        {
+            // Two coils wound round the ship, turning against each other.
+            const float spin = t * (k == 0 ? 220.0F : -160.0F);
+            const float radius = 20.0F + static_cast<float>(k) * 6.0F;
+            DrawRing(c, radius - 4.0F, radius, spin, spin + 230.0F, 24, Fade(Palette::PunctumHaze, 0.85F));
+        }
+        const float seed = std::floor(t * 14.0F);
+        Vector2 prev = Vector2Add(c, Vector2{.x = 26.0F, .y = 0});
+        for (int32_t k = 1; k <= 6; k++)
+        {
+            const float a = static_cast<float>(k) * 60.0F * DEG2RAD;
+            const float jitter = 22.0F + 8.0F * hashNoise(seed + static_cast<float>(k));
+            const Vector2 next = Vector2Add(c, Vector2{.x = std::cos(a) * jitter, .y = std::sin(a) * jitter});
+            DrawLineEx(prev, next, 1.5F, Fade(Palette::ElementFreeze, 0.8F));
+            prev = next;
         }
         return;
     }
-    if (boss.snatchSlot < 0 || boss.tentaclePhase.at(static_cast<size_t>(boss.snatchSlot)) != 5)
+    if (boss.snatchPhase == 0)
     {
         return;
     }
-    const Vector2 portal = boss.tentaclePortalPos.at(static_cast<size_t>(boss.snatchSlot));
-    const Vector2 bodyCenter{.x = boss.position.x + boss.size.x / 2, .y = boss.position.y + boss.size.y / 2};
-    drawKrakenPortal(portal, t);
-    drawBendyTentacle(portal, c, bodyCenter, boss.size.x / 2, static_cast<float>(boss.instanceId) + 3.0F,
-                      krakenTentacleThickness, 16.0F, false, Palette::PunctumHaze, Palette::PunctumHaze);
+    if (boss.snatchPhase == 1)
+    {
+        // The tell: a thin line to where the clubs will land and the catch ring, both tightening.
+        const float progress = 1.0F - std::clamp(boss.snatchStateTimer / krakenFeedTell, 0.0F, 1.0F);
+        DrawLineEx(boss.krakenMouth, boss.feedAim, 1.0F, Fade(Palette::ElementFreeze, 0.25F + 0.4F * progress));
+        const float ring = krakenFeedCatchRadius * (2.0F - progress);
+        DrawRing(boss.feedAim, ring - 1.5F, ring, 0, 360, 32, Fade(Palette::ElementFreeze, 0.3F + 0.5F * progress));
+    }
     for (int32_t k = 0; k < 2; k++)
     {
-        // Two coils wound round the ship, turning against each other.
-        const float spin = t * (k == 0 ? 220.0F : -160.0F);
-        const float radius = 20.0F + static_cast<float>(k) * 6.0F;
-        DrawRing(c, radius - 4.0F, radius, spin, spin + 230.0F, 24, Fade(Palette::PunctumHaze, 0.85F));
-    }
-    // Cyan crackle along the coil.
-    const float seed = std::floor(t * 14.0F);
-    Vector2 prev = Vector2Add(c, Vector2{.x = 26.0F, .y = 0});
-    for (int32_t k = 1; k <= 6; k++)
-    {
-        const float a = static_cast<float>(k) * 60.0F * DEG2RAD;
-        const float jitter = 22.0F + 8.0F * hashNoise(seed + static_cast<float>(k));
-        const Vector2 next = Vector2Add(c, Vector2{.x = std::cos(a) * jitter, .y = std::sin(a) * jitter});
-        DrawLineEx(prev, next, 1.5F, Fade(Palette::ElementFreeze, 0.8F));
-        prev = next;
+        const auto& rope = boss.ropePos.at(static_cast<size_t>(4 + k));
+        drawKrakenRope(rope, 6.0F, 3.0F, 1.0F);
+        const float glow = boss.snatchPhase == 1 ? 0.5F + 0.5F * std::sin(t * 24.0F) : 0.6F;
+        DrawCircleV(rope.back(), 10.0F, ColorLerp(Palette::PunctumHaze, Palette::Void, 0.55F)); // the club
+        DrawCircleV(rope.back(), 5.0F, Fade(Palette::ElementFreeze, glow));
     }
 }
 
 void drawKrakenTentacle(const Boss& boss, int32_t slot)
 {
-    if (boss.tentaclePhase[static_cast<size_t>(slot)] == 5)
-    {
-        return; // the Snatch grip, drawn by drawKrakenSnatch
-    }
-    const Vector2 portal = boss.tentaclePortalPos[static_cast<size_t>(slot)];
+    const auto s = static_cast<size_t>(slot);
     const auto t = static_cast<float>(GetTime());
-    drawKrakenPortal(portal, t);
+    const int32_t phase = boss.tentaclePhase.at(s);
+    const int32_t kind = boss.tentacleKind.at(s);
+    const float timer = boss.tentacleStateTimer.at(s);
 
-    const int32_t phase = boss.tentaclePhase[static_cast<size_t>(slot)];
-    const float stateTimer = boss.tentacleStateTimer[static_cast<size_t>(slot)];
-    const float startAngle = boss.tentacleSwipeStartAngle[static_cast<size_t>(slot)];
-    const float endAngle = boss.tentacleSwipeEndAngle[static_cast<size_t>(slot)];
-
-    float length = 0;
-    float angle = (startAngle + endAngle) / 2.0F;
-    if (phase == 1)
+    if (kind == 2)
     {
-        const float progress =
-            std::clamp(1.0F - stateTimer / krakenTentacleEmergeDuration, 0.0F, 1.0F);
-        length = krakenTentacleReach * progress;
-    }
-    else if (phase == 2)
-    {
-        const float progress =
-            std::clamp(1.0F - stateTimer / krakenTentacleSwipeDuration, 0.0F, 1.0F);
-        angle = startAngle + (endAngle - startAngle) * progress;
-        length = krakenTentacleReach;
-    }
-    else if (phase == 3)
-    {
-        const float progress = std::clamp(stateTimer / krakenTentacleRetreatDuration, 0.0F, 1.0F);
-        angle = endAngle;
-        length = krakenTentacleReach * progress;
-    }
-    else if (phase == 4)
-    {
-        const float progress =
-            std::clamp(stateTimer / krakenTentacleStaggerRetreatDuration, 0.0F, 1.0F);
-        const float jitter = std::sin(t * 40.0F) * 0.08F;
-        angle = endAngle + jitter;
-        length = krakenTentacleReach * progress;
-    }
-
-    if (length < 1.0F)
-    {
+        // Spear Rake: dashed tell lines fan out from the face, then the spears snap out in turn.
+        const int32_t count = boss.rakeCount.at(s);
+        const Vector2 mouth = boss.krakenMouth;
+        if (phase == 1)
+        {
+            const float progress = 1.0F - std::clamp(timer / krakenRakeTell, 0.0F, 1.0F);
+            for (int32_t spear = 0; spear < count; spear++)
+            {
+                const Vector2 dir = krakenRakeDir(boss, slot, spear);
+                for (float d = 30.0F; d < krakenTentacleReach; d += 36.0F)
+                {
+                    DrawLineEx(Vector2Add(mouth, Vector2Scale(dir, d)), Vector2Add(mouth, Vector2Scale(dir, d + 18.0F)), 1.5F,
+                               Fade(Palette::ElementFreeze, 0.15F + 0.5F * progress));
+                }
+            }
+            return;
+        }
+        const float elapsed = phase == 2 ? krakenRakeStrikeDuration(boss, slot) - timer : 0.0F;
+        const float shrink = phase == 4 ? std::clamp(timer / krakenTentacleStaggerRetreatDuration, 0.0F, 1.0F) : 1.0F;
+        for (int32_t spear = 0; spear < count; spear++)
+        {
+            const Vector2 dir = krakenRakeDir(boss, slot, spear);
+            const float extent = (phase == 2 ? krakenRakeExtent(boss, slot, spear, elapsed) : krakenTentacleReach) * shrink;
+            if (extent < 2.0F)
+            {
+                continue;
+            }
+            const Vector2 side{.x = -dir.y, .y = dir.x};
+            const float jitter = phase == 4 ? std::sin(t * 60.0F + static_cast<float>(spear)) * 4.0F : 0.0F;
+            std::array<Vector2, Boss::krakenRopePoints> pts{};
+            for (size_t i = 0; i < pts.size(); i++)
+            {
+                const float f = static_cast<float>(i) / static_cast<float>(pts.size() - 1);
+                pts.at(i) = Vector2Add(Vector2Add(mouth, Vector2Scale(dir, extent * f)), Vector2Scale(side, jitter * f));
+            }
+            drawKrakenRope(pts, 8.0F, 2.0F, 1.0F);
+            DrawLineEx(Vector2Add(mouth, Vector2Scale(dir, extent * 0.2F)), pts.back(), 1.0F, Fade(Palette::ElementFreeze, 0.6F));
+        }
         return;
     }
 
-    const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
-    const Vector2 tip = Vector2Add(portal, Vector2Scale(dir, length));
-    const Vector2 bodyCenter{.x = boss.position.x + boss.size.x / 2,
-                             .y = boss.position.y + boss.size.y / 2};
-    drawBendyTentacle(portal, tip, bodyCenter, boss.size.x / 2, static_cast<float>(boss.instanceId),
-                      krakenTentacleThickness, 34.0F, false, Palette::PunctumHaze, Palette::Crit);
+    // Arm Lash and Portal Lash.
+    const Vector2 root = kind == 1 ? boss.tentaclePortalPos.at(s) : boss.krakenMouth;
+    if (kind == 1)
+    {
+        float open = 1.0F;
+        if (phase == 1)
+        {
+            open = std::clamp((krakenArmTell + krakenPortalOpen - timer) / krakenPortalOpen, 0.0F, 1.0F);
+        }
+        else if (phase == 3 || phase == 4)
+        {
+            open = std::clamp(timer / (phase == 3 ? krakenArmRecover : krakenTentacleStaggerRetreatDuration) * 1.5F, 0.0F, 1.0F);
+        }
+        drawKrakenPortal(root, t, open);
+        if (phase == 1 && timer > krakenArmTell)
+        {
+            return; // the portal is still opening
+        }
+    }
+    const auto& rope = boss.ropePos.at(s);
+    if (phase == 1)
+    {
+        // The tell: a faint arc where the whip will sweep, and a cyan pulse running down the arm.
+        const float progress = 1.0F - std::clamp(timer / krakenArmTell, 0.0F, 1.0F);
+        constexpr int32_t arcSteps = 16;
+        for (int32_t i = 0; i < arcSteps; i += 2)
+        {
+            const float a0 = krakenLashAngle(boss, slot, static_cast<float>(i) / arcSteps);
+            const float a1 = krakenLashAngle(boss, slot, static_cast<float>(i + 1) / arcSteps);
+            DrawLineEx(Vector2Add(root, Vector2Scale(Vector2{.x = std::cos(a0), .y = std::sin(a0)}, krakenTentacleReach)),
+                       Vector2Add(root, Vector2Scale(Vector2{.x = std::cos(a1), .y = std::sin(a1)}, krakenTentacleReach)),
+                       1.5F, Fade(Palette::ElementFreeze, 0.12F + 0.35F * progress));
+        }
+        drawKrakenRope(rope, 8.0F, 3.0F, 1.0F);
+        const auto at = static_cast<size_t>(progress * static_cast<float>(rope.size() - 1));
+        DrawCircleV(rope.at(at), 5.0F, Fade(Palette::ElementFreeze, 0.9F));
+        return;
+    }
+    drawKrakenRope(rope, 8.0F, 3.0F, 1.0F);
+    if (phase == 2)
+    {
+        // The crack: a pale streak where the tip just passed.
+        const auto& old = boss.ropeOld.at(s);
+        for (size_t i = rope.size() / 2; i < rope.size(); i++)
+        {
+            DrawLineEx(old.at(i), rope.at(i), 2.0F, Fade(WHITE, 0.5F * static_cast<float>(i) / static_cast<float>(rope.size())));
+        }
+    }
 }
 
 void drawKrakenGrabbedEnemy(Vector2 pos, int32_t kindIndex, float scale, float facingAngle)
