@@ -3984,6 +3984,9 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 boss.color = Palette::Haze;
                 break;
             case BossAttack::Barrage:
+                boss.barragePattern = GetRandomValue(0, 2);
+                boss.barrageAngle = std::atan2(game.run.player.position.y - bossCenter.y,
+                                               game.run.player.position.x - bossCenter.x);
                 boss.color = boss.isBeltbreaker ? Palette::ShatteredBeltAccent
                              : boss.isWreckwormHead && !boss.krakenSnakeVariant
                                  ? Palette::RustbloomAccent
@@ -4299,6 +4302,47 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 const float attackScale =
                     boss.isBeltbreakerPlate ? beltbreakerPlateAttackScale : 1.0F;
                 boss.barrageTimer = barrageFireInterval / attackScale;
+                // Generic bosses: a turning spiral or gapped rings instead of the aimed stream.
+                const bool generic = !boss.isBeltbreaker && !boss.isBeltbreakerPlate && !boss.isWreckwormHead &&
+                                     !boss.isWreckwormSegment && !boss.isSlagmaw;
+                if (generic && boss.barragePattern != 0)
+                {
+                    constexpr float tau = 2.0F * std::numbers::pi_v<float>;
+                    const int32_t damage = enemyDamage(game, crossfireProjectileDamage);
+                    const auto shoot = [&](float angle)
+                    {
+                        const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
+                        game.run.bossProjectiles.push_back(BossProjectile{
+                            .position = Vector2Add(bossCenter, Vector2Scale(dir, boss.size.x * 0.4F)),
+                            .velocity = Vector2Scale(dir, barrageProjSpeed * 0.6F),
+                            .radius = 6,
+                            .homing = false,
+                            .active = true,
+                            .fromPlayer = false,
+                            .damage = damage,
+                            .health = 1});
+                    };
+                    if (boss.barragePattern == 1)
+                    {
+                        boss.barrageAngle += barrageSpiralStepDeg * DEG2RAD;
+                        for (int32_t arm = 0; arm < barrageSpiralArms; arm++)
+                        {
+                            shoot(boss.barrageAngle + static_cast<float>(arm) * tau / barrageSpiralArms);
+                        }
+                    }
+                    else
+                    {
+                        boss.barrageTimer *= barrageRingIntervalMult;
+                        boss.barrageAngle += 23.0F * DEG2RAD;
+                        for (int32_t shot = barrageRingGap; shot < barrageRingCount; shot++)
+                        {
+                            shoot(boss.barrageAngle + static_cast<float>(shot) * tau / barrageRingCount);
+                        }
+                    }
+                    playSFX(game, game.resources.sounds.spreadBurst);
+                }
+                else
+                {
                 const Vector2 direction =
                     Vector2Normalize(Vector2Subtract(game.run.player.position, bossCenter));
 
@@ -4336,6 +4380,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                     .isFluid = isWreckworm,
                     .fluidColor = fluidColors.at(static_cast<size_t>(GetRandomValue(0, 2)))});
                 playSFX(game, game.resources.sounds.spreadBurst);
+                }
             }
         }
 

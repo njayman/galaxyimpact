@@ -401,6 +401,12 @@ constexpr float barrageFireInterval = 0.3F;
 constexpr float barrageDuration = 2.5F;
 
 constexpr float barrageProjSpeed = 8;
+// Generic bosses' Barrage also comes as a turning spiral or gapped rings, so the safe lanes move.
+constexpr int32_t barrageSpiralArms = 5;
+constexpr float barrageSpiralStepDeg = 11.0F;
+constexpr int32_t barrageRingCount = 18;
+constexpr int32_t barrageRingGap = 3;
+constexpr float barrageRingIntervalMult = 3.0F; // rings fire this many times slower than the stream
 constexpr float homingBarrageFireInterval = 0.5F;
 
 constexpr int spreadBulletsPerRound = 10;

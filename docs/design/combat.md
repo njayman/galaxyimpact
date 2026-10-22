@@ -23,4 +23,5 @@
 - Swarm movement (2026-10-22): chasers turn at most 3.2 rad/s toward an approach angled 40 degrees off the player (per enemy, either side), straightening inside 500; they push apart within 34 of each other; speed varies 0.85-1.15 per enemy with a 15% surge.
 - Boss movement (2026-10-22): bosses steer a heading at a limited turn rate (1.4 rad/s; Wreckworm 2.2, director bosses 2.6 keeping their pattern speed), sweeping round the player at the engage distance with an orbit that slowly reverses. Charge dashes bend toward the player at 0.9 rad/s while the player is still ahead (not Beltbreaker plates).
 
-Also from the trailer, after these: rotating spiral and ring patterns for boss barrages, a thin tell line before every beam, and short afterimage trails on fast movers.
+- Trailer extras (2026-10-22): generic bosses' Barrage is, per use, the aimed stream, a turning five-arm spiral, or 18-shot rings with a 3-shot gap (the Beltbreaker, Wreckworm and Slagmaw keep their own); Beam and Wormhole Beam wind-ups draw a thin tell line from the origin through the player, firming up to the shot; charging bosses (Charge Dash, Dash Rush, Burrow Charge) trail four fading afterimages.
+- Flamethrower (2026-10-22): bursts of 1.8 s, then 1 s reheating with a swelling nozzle glow; the two long jets are streams of flame particles that billow wider and redder along the jet.

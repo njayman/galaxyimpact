@@ -309,6 +309,8 @@ class Boss
     float qteStunTimer = 0;                // any other boss: stunned after a clean Rush QTE
     bool sandboxForcedRush = false;        // sandbox: the forced rush starts its QTE before enrage
     Vector2 moveHeading{};                 // steered travel direction (see updateBossMovement)
+    int32_t barragePattern = 0;            // generic Barrage: 0 aimed stream, 1 turning spiral, 2 gapped rings
+    float barrageAngle = 0;
     int32_t swallowPromptsLeft = 0;
     float magmaTrailDist = 0;              // Magma Ram: distance since the last pool
 

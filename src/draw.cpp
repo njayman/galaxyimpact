@@ -4857,6 +4857,29 @@ void drawBoss(const Game& game, const Boss& boss)
                  ColorAlpha(Palette::Shield, alpha + 0.3F));
     }
 
+    // Afterimages behind a charging boss, so its speed and line read at a glance.
+    if (boss.state == BossState::SHOOTING &&
+        (boss.attack == BossAttack::ChargeDash || boss.attack == BossAttack::DashRush ||
+         boss.attack == BossAttack::BurrowCharge) &&
+        Vector2LengthSqr(boss.chargeVelocity) > 0.01F && !boss.isWreckwormHead && !boss.isWreckwormSegment &&
+        !boss.isKraken && !boss.isBanished)
+    {
+        const Vector2 back = Vector2Normalize(Vector2Negate(boss.chargeVelocity));
+        for (int32_t k = 1; k <= 4; k++)
+        {
+            const float f = static_cast<float>(k);
+            const Vector2 ghost = Vector2Add(bossCenter, Vector2Scale(back, f * boss.size.x * 0.45F));
+            if (boss.isSlagmaw)
+            {
+                DrawCircleV(ghost, boss.size.x / 2 * (1.0F - f * 0.12F), Fade(boss.color, 0.22F - f * 0.04F));
+            }
+            else
+            {
+                drawBossHull(boss.shape, ghost, Vector2Scale(boss.size, 1.0F - f * 0.1F), Fade(boss.color, 0.22F - f * 0.04F));
+            }
+        }
+    }
+
     if (boss.state == BossState::WINDING_UP)
     {
         const float progress =
@@ -4874,6 +4897,13 @@ void drawBoss(const Game& game, const Boss& boss)
 
         if (boss.attack == BossAttack::Beam || boss.attack == BossAttack::WormholeBeam)
         {
+            // A thin tell line from the beam's origin through the player, firming up to the shot.
+            const Vector2 origin = boss.attack == BossAttack::WormholeBeam && Vector2LengthSqr(boss.wormholeBeamOrigin) > 0
+                                       ? boss.wormholeBeamOrigin
+                                       : bossCenter;
+            const Vector2 through = Vector2Normalize(Vector2Subtract(game.run.player.position, origin));
+            DrawLineEx(origin, Vector2Add(origin, Vector2Scale(through, 2000.0F)), 1.0F + progress,
+                       Fade(Palette::Crit, 0.15F + 0.45F * progress));
             const float blink = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 10.0F);
             const float markerRadius = game.run.player.radius + 10 + 4 * progress;
             DrawCircleLines(static_cast<int32_t>(game.run.player.position.x),
