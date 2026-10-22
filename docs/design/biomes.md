@@ -387,6 +387,12 @@ Waves 60, 70, 75. Skeleton kept: a huge slow mass (0.32x speed), now basalt with
 
 - As built: Slagmaw is a faceted basalt mass lit from the upper left, warm gold seams running back from a maw ringed by uneven fangs that turns to track the player; tells heat the seams and open the maw. Slag Spray keeps Barrage's aimed stream with a 0.5 s gold flare tell, spraying jagged slag gobs from the maw within 14 degrees. Magma Ram drops a pool every 70 units of the charge (64 radius, 2 s, 1 damage per 0.5 s, ignoring hit immunity; a dash crosses unharmed). Seeker Embers are spinning gold diamonds that shed sparks. Devour: 1 s tell, then a 2 s inhale along a cone (35 degrees each side, 760 long) locked to where the maw faced, pulling 300 units a second; a dash rides through the pull; reaching the maw while the QTE is on its gap takes a 2 damage bite and throws the player clear. Swallowed: Mash 8 presses in 1.6 s, then 9 prompts (0.7 s, 25% Parry) with a slag gob flying in from each prompt's angle while the boss shakes and the maw whips; a clean chain ends in the shared finisher shot. Wave 75 halves keep the old moveset (no Devour).
 
+### Planned rework: Lava Mole (idea, 2026-10-22, not built)
+
+- **Look:** keep the current design language (basalt, gold seams, fanged maw), but the body becomes a thinner lava mole instead of a planet-like mass.
+- **Spawn:** Slagmaw floods the whole map with the Solar Forge lava gel (it slows the player), except the area the screen shows at that moment. The player can't easily escape and has to fight inside that clearing.
+- **Open:** whether the clearing stays fixed or shifts; whether the gel clears on death; whether the mole burrows through the gel; how Devour and Magma Ram fit a thinner body.
+
 ### Open for build
 
 - Devour pull strength and cone width; maw weak-point multiplier.
