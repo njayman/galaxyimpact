@@ -116,7 +116,7 @@ void drawFluidBlob(Vector2 center, float radius, Color color, float seed, Vector
 void drawLavaChunk(Vector2 center, float radius, float seed, Vector2 velocity);
 void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color color,
                             Vector2 velocity, Vector2 facing, float mouthOpen);
-void drawKrakenShape(Vector2 center, float radius, float seed, Color color);
+void drawKrakenShape(Vector2 center, float radius, float seed, Color color, Vector2 facing = Vector2{.x = 0, .y = 1});
 void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bodyRadius,
                        float seed, float thicknessScale, float waveScale, bool calm, Color color,
                        Color tipColor);
@@ -4596,11 +4596,13 @@ void drawBoss(const Game& game, const Boss& boss)
         const Color shadowColor = ColorLerp(ufoColor, BLACK, progress);
         const float twirlSeed = static_cast<float>(boss.instanceId) + progress * 40.0F +
                                 static_cast<float>(GetTime()) * 4.0F;
-        drawKrakenShape(bossCenter, boss.size.x / 2 * shrink, twirlSeed, shadowColor);
+        drawKrakenShape(bossCenter, boss.size.x / 2 * shrink, twirlSeed, shadowColor,
+                        Vector2Rotate(Vector2{.x = 0, .y = 1}, twirlSeed));
     }
     else if (boss.isKraken)
     {
-        drawKrakenShape(bossCenter, boss.size.x / 2, static_cast<float>(boss.instanceId), ufoColor);
+        drawKrakenShape(bossCenter, boss.size.x / 2, static_cast<float>(boss.instanceId), ufoColor,
+                        Vector2Subtract(game.run.player.position, bossCenter));
     }
     else if (boss.isBanished)
     {
@@ -5521,37 +5523,114 @@ void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color colo
                   t * 0.4F + seed, Fade(lit, 0.8F));
 }
 
-void drawKrakenShape(Vector2 center, float radius, float seed, Color color)
+// The Kraken: a squid facing the player. A long pointed mantle trails away with two fins near
+// its tip and cyan veins down its length; the head turns to the ship with two large eyes, and all
+// the arms reach forward from the face: eight writhing arms and two long feeding tentacles with
+// clubbed tips. Matte lavender; only the veins, eyes and club tips carry cyan.
+void drawKrakenShape(Vector2 center, float radius, float seed, Color color, Vector2 facing)
 {
     const auto t = static_cast<float>(GetTime());
-    // Eight thin resting tentacles, many body-lengths long, writhing slowly around the small body.
+    const Vector2 f = Vector2Normalize(facing);
+    const Vector2 side{.x = -f.y, .y = f.x};
+    const auto at = [&](float along, float across)
+    { return Vector2Add(center, Vector2Add(Vector2Scale(f, along * radius), Vector2Scale(side, across * radius))); };
+    const auto fill = [](const std::vector<Vector2>& outline, Vector2 hub, Color col)
+    {
+        for (size_t i = 0; i < outline.size(); i++)
+        {
+            const Vector2 a = outline.at(i);
+            const Vector2 b = outline.at((i + 1) % outline.size());
+            DrawTriangle(hub, a, b, col);
+            DrawTriangle(hub, b, a, col);
+        }
+    };
+    const float breathe = 1.0F + 0.04F * std::sin(t * 2.0F + seed);
+    const Color mantleColor = ColorLerp(color, Palette::Void, 0.15F);
+    const Color rimColor = ColorLerp(color, Palette::Void, 0.55F);
+
+    // Fins, under the mantle.
+    for (const float sgn : {1.0F, -1.0F})
+    {
+        const float flap = 0.08F * std::sin(t * 3.0F + seed + sgn);
+        fill({at(-1.5F, sgn * 0.3F), at(-1.95F, sgn * (1.0F + flap)), at(-2.3F, sgn * 0.06F)}, at(-1.9F, sgn * 0.35F),
+             rimColor);
+    }
+
+    // Mantle: from the pointed back tip to the collar behind the head.
+    std::vector<Vector2> mantle;
+    constexpr int32_t steps = 12;
+    for (int32_t i = 0; i <= steps; i++)
+    {
+        const float u = static_cast<float>(i) / steps;
+        mantle.push_back(at(-2.4F + 2.85F * u, 0.62F * breathe * std::pow(u, 0.6F)));
+    }
+    for (int32_t i = steps; i >= 0; i--)
+    {
+        const float u = static_cast<float>(i) / steps;
+        mantle.push_back(at(-2.4F + 2.85F * u, -0.62F * breathe * std::pow(u, 0.6F)));
+    }
+    fill(mantle, at(-0.6F, 0), mantleColor);
+    for (size_t i = 0; i + 1 < mantle.size(); i++)
+    {
+        DrawLineEx(mantle.at(i), mantle.at(i + 1), 1.5F, rimColor);
+    }
+    for (const float across : {-0.28F, 0.0F, 0.28F})
+    {
+        // Cyan veins running back from the collar, bending slightly.
+        Vector2 prev = at(0.3F, across);
+        for (int32_t i = 1; i <= 6; i++)
+        {
+            const float u = static_cast<float>(i) / 6.0F;
+            const float bend = 0.06F * std::sin(u * 5.0F + across * 9.0F + seed);
+            const Vector2 next = at(0.3F - 2.2F * u, across * (1.0F - u * 0.8F) + bend);
+            DrawLineEx(prev, next, 1.2F, Fade(Palette::ElementFreeze, 0.55F * (1.0F - u * 0.6F)));
+            prev = next;
+        }
+    }
+
+    // Arms: eight writhing ones fanned across the face, two long feeding tentacles down the middle.
+    const Vector2 mouth = at(0.95F, 0);
     for (int32_t i = 0; i < 8; i++)
     {
-        const float sway = 0.3F * std::sin(t * 0.6F + static_cast<float>(i) * 1.3F + seed);
-        const float angle = static_cast<float>(i) * 45.0F * DEG2RAD + seed * 0.7F + sway;
-        const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
-        const float length = radius * (6.0F + 1.2F * std::sin(t * 0.9F + static_cast<float>(i) * 2.1F));
-        drawBendyTentacle(Vector2Add(center, Vector2Scale(dir, radius * 0.7F)), Vector2Add(center, Vector2Scale(dir, length)),
-                          center, radius, seed + static_cast<float>(i) * 3.0F, 0.22F, radius * 0.45F, false,
-                          ColorLerp(color, Palette::Void, 0.35F), Palette::ElementFreeze);
+        const float spread = (-1.0F + 2.0F * static_cast<float>(i) / 7.0F) * 55.0F * DEG2RAD;
+        const float sway = 0.25F * std::sin(t * 1.1F + static_cast<float>(i) * 1.4F + seed);
+        const Vector2 dir = Vector2Rotate(f, spread + sway);
+        const float length = radius * (3.0F + 0.8F * std::sin(t * 0.8F + static_cast<float>(i) * 2.3F));
+        drawBendyTentacle(at(0.85F, (-1.0F + 2.0F * static_cast<float>(i) / 7.0F) * 0.3F),
+                          Vector2Add(mouth, Vector2Scale(dir, length)), center, radius * 0.3F,
+                          seed + static_cast<float>(i) * 3.0F, 0.24F, radius * 0.35F, false, mantleColor, rimColor);
     }
-    drawPanelShape(center, radius, 8, seed * 12.0F, ColorLerp(color, Palette::Void, 0.15F), seed);
-
-    constexpr int32_t podCount = 4;
-    for (int32_t i = 0; i < podCount; i++)
+    for (const float sgn : {1.0F, -1.0F})
     {
-        const float angle = static_cast<float>(i) * 90.0F * DEG2RAD + seed;
-        const Vector2 podCenter =
-            Vector2Add(center, Vector2{.x = std::cos(angle) * radius * 0.78F,
-                                       .y = std::sin(angle) * radius * 0.78F});
-        drawPanelShape(podCenter, radius * 0.32F, 6, seed * 30.0F + static_cast<float>(i) * 40.0F,
-                       ColorLerp(color, Palette::StructDark, 0.25F), seed + static_cast<float>(i));
+        const float sway = 0.12F * std::sin(t * 0.7F + sgn * 2.0F + seed);
+        const Vector2 tip = Vector2Add(mouth, Vector2Scale(Vector2Rotate(f, sgn * 10.0F * DEG2RAD + sway), radius * 6.5F));
+        drawBendyTentacle(mouth, tip, center, radius * 0.3F, seed + sgn * 11.0F, 0.18F, radius * 0.5F, false,
+                          mantleColor, mantleColor);
+        DrawCircleV(tip, radius * 0.12F, rimColor); // the club
+        DrawCircleV(tip, radius * 0.06F, Fade(Palette::ElementFreeze, 0.8F));
     }
 
-    const float pulse = 0.6F + 0.4F * std::sin(t * 2.0F + seed);
-    DrawCircleV(center, radius * 0.16F, Fade(Palette::PunctumAccent, 0.5F + 0.4F * pulse));
-    DrawCircleLines(static_cast<int32_t>(center.x), static_cast<int32_t>(center.y), radius * 0.16F,
-                    Fade(WHITE, 0.6F));
+    // Head, turned to the ship, and its eyes.
+    std::vector<Vector2> head;
+    for (int32_t i = 0; i < 16; i++)
+    {
+        const float a = static_cast<float>(i) / 16.0F * 2.0F * std::numbers::pi_v<float>;
+        head.push_back(at(0.62F + 0.38F * std::cos(a), 0.5F * std::sin(a)));
+    }
+    fill(head, at(0.62F, 0), color);
+    for (size_t i = 0; i < head.size(); i++)
+    {
+        DrawLineEx(head.at(i), head.at((i + 1) % head.size()), 1.5F, rimColor);
+    }
+    const float blink = std::fmod(t + seed, 5.0F) < 0.12F ? 0.2F : 1.0F;
+    for (const float sgn : {1.0F, -1.0F})
+    {
+        const Vector2 eye = at(0.72F, sgn * 0.34F);
+        DrawCircleV(eye, radius * 0.17F, Palette::Void);
+        DrawRing(eye, radius * 0.15F, radius * 0.17F, 0, 360, 24, rimColor);
+        DrawCircleV(Vector2Add(eye, Vector2Scale(f, radius * 0.05F)), radius * 0.07F * blink,
+                    Fade(Palette::ElementFreeze, 0.9F));
+    }
 }
 
 void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bodyRadius,
