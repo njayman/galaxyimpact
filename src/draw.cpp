@@ -2956,7 +2956,38 @@ void drawGameplayWorld(const Game& game)
         drawShip(game);
     }
 
-    if (game.run.player.shieldActive)
+    if (game.run.player.shieldActive && game.run.player.dashing &&
+        Vector2Length(game.run.player.dashVelocity) > 0.01F)
+    {
+        // Shield dash: a spear tip of light wrapped round the ship, pointing along the dash. A
+        // long faceted head, a pale ridge down its middle, and a faint split shaft trailing behind.
+        const Vector2 p = game.run.player.position;
+        const float r = game.run.player.radius;
+        const Vector2 fwd = Vector2Normalize(game.run.player.dashVelocity);
+        const Vector2 side{.x = -fwd.y, .y = fwd.x};
+        const auto at = [&](float ahead, float across)
+        { return Vector2Add(p, Vector2Add(Vector2Scale(fwd, ahead * r), Vector2Scale(side, across * r))); };
+        const Vector2 tip = at(3.4F, 0);
+        const Vector2 wingL = at(0.6F, 1.0F);
+        const Vector2 wingR = at(0.6F, -1.0F);
+        const Vector2 notch = at(-0.2F, 0);
+        const float flicker = 0.85F + 0.15F * std::sin(static_cast<float>(GetTime()) * 40.0F);
+        for (const auto& [a, b, c] : {std::array{tip, wingL, notch}, std::array{tip, notch, wingR}})
+        {
+            DrawTriangle(a, b, c, Fade(Palette::Shield, 0.55F * flicker));
+            DrawTriangle(a, c, b, Fade(Palette::Shield, 0.55F * flicker));
+        }
+        DrawLineEx(tip, wingL, 1.5F, Fade(Palette::Crit, 0.9F));
+        DrawLineEx(tip, wingR, 1.5F, Fade(Palette::Crit, 0.9F));
+        DrawLineEx(wingL, notch, 1.0F, Fade(Palette::Crit, 0.5F));
+        DrawLineEx(wingR, notch, 1.0F, Fade(Palette::Crit, 0.5F));
+        DrawLineEx(at(2.9F, 0), notch, 2.0F, Fade(WHITE, 0.8F * flicker)); // the ridge
+        for (const float s : {0.35F, -0.35F})
+        {
+            DrawLineEx(at(-0.4F, s), at(-2.6F, s * 0.4F), 1.0F, Fade(Palette::Shield, 0.4F));
+        }
+    }
+    else if (game.run.player.shieldActive)
     {
         const float shieldRadius = game.run.player.radius + 5;
         DrawCircleV(game.run.player.position, shieldRadius, Fade(Palette::Shield, 0.5F));
