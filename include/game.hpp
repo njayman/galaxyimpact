@@ -215,7 +215,6 @@ struct GameplayState
     std::vector<Turret> turrets;
     std::vector<ChainLightningBolt> chainLightningBolts;
     std::vector<ChainLightningBolt> sniperShots;
-    std::vector<ChainLightningBolt> laserWebRays; // evolved Laser Shots, one entry per ray segment
     int32_t sniperEventPhase = 0; // 0 idle, 1 dodge tell, 2 live line, 3 counter window
     float sniperEventTimer = 0;
     float sniperEventCooldown = 0;

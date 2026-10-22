@@ -439,7 +439,7 @@ constexpr float chainLightningBoltLife = 0.2F;
 
 constexpr float forwardDamageMult = 0.5F;
 // Laser Shots: each shot is a barrage of thin comet streaks that phase through enemies (each
-// enemy hit once). Evolved (Ricochet Web): long rays that bounce off the screen edges.
+// enemy hit once). Evolved (Heavy Streaks): twice the streaks, longer, pink and harder hitting.
 // ponytail: tuned by hand above Forward's single-target dps; re-run tools/balance_sim.
 constexpr float laserShotDamageMult = 0.26F;  // per streak; a barrage is 3 + level/4 streaks
 constexpr float laserShotSpeedMult = 1.8F;
@@ -447,11 +447,9 @@ constexpr float laserShotStreak = 62.0F;      // streak length, also the hit seg
 constexpr float laserShotHalfWidth = 1.5F;
 constexpr float laserShotSpreadDeg = 7.0F;      // each streak's random angle off the aim, +-
 constexpr float laserShotFieldHalfWidth = 18.0F; // random side offset at the nose, +-
-// Evolved Laser Shots (Ricochet Web): 2 + level/4 rays, each hitting everything along its path.
-constexpr float laserWebDamageMult = 0.5F; // per segment an enemy is crossed by
-constexpr float laserWebSpreadDeg = 14.0F;  // each ray's random angle off the aim, +-
-constexpr int32_t laserWebBounces = 3;
-constexpr float laserWebRayLife = 0.22F;
+constexpr int32_t laserEvoCountMult = 2;
+constexpr float laserEvoLengthMult = 1.5F;
+constexpr float laserEvoDamageMult = 1.6F;
 constexpr float mineDamageMult = 0.7F;
 constexpr float shockDamageMult = 1.5F;
 constexpr float shockKnockbackBase = 20.0F;

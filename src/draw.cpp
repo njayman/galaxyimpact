@@ -1021,23 +1021,11 @@ void drawWeaponIcon(WeaponType kind, Vector2 c, float s, Color color, bool evolv
                      Vector2{.x = c.x + s * 0.6F, .y = c.y - s}, color);
         break;
     case WeaponType::LaserShots:
-        if (evolved)
-        {
-            // A ray bouncing off two walls: a zigzag.
-            const std::array<Vector2, 4> zig{Vector2{.x = c.x - s, .y = c.y + s * 0.6F},
-                                             Vector2{.x = c.x - s * 0.3F, .y = c.y - s * 0.6F},
-                                             Vector2{.x = c.x + s * 0.3F, .y = c.y + s * 0.6F},
-                                             Vector2{.x = c.x + s, .y = c.y - s * 0.6F}};
-            for (size_t i = 0; i + 1 < zig.size(); i++)
-            {
-                DrawLineEx(zig.at(i), zig.at(i + 1), 2.0F, color);
-            }
-            break;
-        }
+        // Evolved: the same streaks, heavier.
         for (const float dy : {-0.5F, 0.0F, 0.5F})
         {
             DrawLineEx(Vector2{.x = c.x - s + (dy == 0 ? s * 0.4F : 0), .y = c.y + dy * s},
-                       Vector2{.x = c.x + s * (dy == 0 ? 1.0F : 0.6F), .y = c.y + dy * s}, 1.5F,
+                       Vector2{.x = c.x + s * (dy == 0 ? 1.0F : 0.6F), .y = c.y + dy * s}, evolved ? 2.5F : 1.5F,
                        color);
         }
         break;
@@ -2851,16 +2839,6 @@ void drawGameplayWorld(const Game& game)
     for (const auto& bolt : game.run.chainLightningBolts)
     {
         DrawLineEx(bolt.from, bolt.to, 2, Fade(Palette::Crit, bolt.timer / 0.2F));
-    }
-
-    // Evolved Laser Shots: thin matte sakura-pink rays over a soft rim, fading out.
-    for (const auto& ray : game.run.laserWebRays)
-    {
-        constexpr Color body{.r = 238, .g = 172, .b = 192, .a = 255};
-        const float fade = std::clamp(ray.timer / laserWebRayLife, 0.0F, 1.0F);
-        DrawLineEx(ray.from, ray.to, 6.0F, Fade(ColorLerp(body, Palette::Void, 0.45F), 0.35F * fade));
-        DrawLineEx(ray.from, ray.to, 2.0F, Fade(body, fade));
-        DrawCircleV(ray.to, 2.5F, Fade(body, fade)); // the bounce point
     }
 
     for (const auto& shot : game.run.sniperShots)
