@@ -599,6 +599,12 @@ constexpr float swarmCurveDeg = 40.0F;      // approach angle off the player, fa
 constexpr float swarmCurveFadeDist = 500.0F; // the curve straightens inside this distance
 constexpr float swarmSeparationDist = 34.0F; // beyond touching
 constexpr float swarmSeparationWeight = 1.4F;
+// Boss steering: bosses turn at a limited rate, so they glide in sweeping arcs instead of
+// sliding; charge dashes bend toward the player as they commit.
+constexpr float bossTurnRate = 1.4F;          // radians a second
+constexpr float wreckwormTurnRate = 2.2F;     // snakier
+constexpr float directorTurnRate = 2.6F;
+constexpr float bossChargeCurveRate = 0.9F;   // a charge dash bends toward the player this fast
 constexpr float dasherSpawnCooldown = 6.0F; // at least this long between dasher spawns
 // Ricochet Strafers: spawned one at a time round the player; a bullet relays between them.
 constexpr float ricochetStraferSpawnInterval = 6.0F;

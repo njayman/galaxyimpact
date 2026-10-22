@@ -1272,6 +1272,23 @@ void sendRushPlateHome(Boss& plate)
     plate.chargeVelocity = Vector2{};
 }
 
+// Turns `heading` toward `desired` by at most maxTurn radians; either may be zero length.
+auto steerHeading(Vector2 heading, Vector2 desired, float maxTurn) -> Vector2
+{
+    if (Vector2LengthSqr(desired) < 0.0001F)
+    {
+        return heading;
+    }
+    desired = Vector2Normalize(desired);
+    if (Vector2LengthSqr(heading) < 0.0001F)
+    {
+        return desired;
+    }
+    heading = Vector2Normalize(heading);
+    const float turn = std::atan2(heading.x * desired.y - heading.y * desired.x, Vector2DotProduct(heading, desired));
+    return Vector2Rotate(heading, std::clamp(turn, -maxTurn, maxTurn));
+}
+
 void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 {
     if (boss.hitFlashTimer > 0)
@@ -1478,9 +1495,12 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
         move = bossDirectorMove(game, boss, bossCenter);
         if (Vector2Length(move) > 0)
         {
+            // Keep the pattern's speed, but turn toward its direction instead of snapping to it.
+            const float magnitude = Vector2Length(move);
+            boss.moveHeading = steerHeading(boss.moveHeading, move, directorTurnRate * deltaTime);
             const float chaseSpeed = (game.run.player.speed * 1.15F + 1) * speedMult;
-            boss.position =
-                Vector2Add(boss.position, Vector2Scale(move, chaseSpeed * deltaTime * frameScale));
+            boss.position = Vector2Add(boss.position,
+                                       Vector2Scale(boss.moveHeading, magnitude * chaseSpeed * deltaTime * frameScale));
         }
         return;
     }
@@ -1490,16 +1510,19 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
     }
     else
     {
+        // Sweep round the player at the engage distance, the orbit slowly reversing.
         const float radialAmount =
             std::clamp((dist - bossEngageDistance) / bossEngageDistance, -1.5F, 1.5F);
-        const float strafe = std::sin(static_cast<float>(GetTime()) * 0.9F + boss.strafePhase);
-        move = Vector2Add(Vector2Scale(dirToPlayer, radialAmount), Vector2Scale(perp, strafe));
+        const float orbit = std::sin(static_cast<float>(GetTime()) * 0.35F + boss.strafePhase);
+        move = Vector2Add(Vector2Scale(dirToPlayer, radialAmount), Vector2Scale(perp, orbit * 1.4F));
     }
 
     if (Vector2Length(move) > 0)
     {
         const float chaseSpeed = (game.run.player.speed * 1.15F + 1) * speedMult;
-        move = Vector2Scale(Vector2Normalize(move), chaseSpeed);
+        boss.moveHeading = steerHeading(boss.moveHeading, move,
+                                        (boss.isWreckwormHead ? wreckwormTurnRate : bossTurnRate) * deltaTime);
+        move = Vector2Scale(boss.moveHeading, chaseSpeed);
         boss.position = Vector2Add(boss.position, Vector2Scale(move, deltaTime * frameScale));
 
         if (boss.isWreckwormHead && GetRandomValue(0, 3) == 0)
@@ -4176,6 +4199,14 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 
         if (boss.attack == BossAttack::ChargeDash)
         {
+            // The charge bends toward the player while they are still ahead of it.
+            const Vector2 toPlayer = Vector2Subtract(game.run.player.position, bossCenter);
+            if (!boss.isBeltbreakerPlate && Vector2DotProduct(toPlayer, boss.chargeVelocity) > 0)
+            {
+                const float speed = Vector2Length(boss.chargeVelocity);
+                boss.chargeVelocity = Vector2Scale(
+                    steerHeading(boss.chargeVelocity, toPlayer, bossChargeCurveRate * deltaTime), speed);
+            }
             const Vector2 step = Vector2Scale(boss.chargeVelocity,
                                               deltaTime * (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F));
             boss.position = Vector2Add(boss.position, step);
