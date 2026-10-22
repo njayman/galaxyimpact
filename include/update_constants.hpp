@@ -434,8 +434,10 @@ constexpr float flamethrowerRaySplayDeg = 7.0F; // each ray off the aim, at rest
 constexpr float flamethrowerRaySwayDeg = 4.0F;  // the splay breathes by this much
 constexpr float flamethrowerRayHalfWidthBase = 6.0F;
 constexpr float flamethrowerRayHalfWidthPerLevel = 1.5F;
-constexpr float chainLightningRange = 260.0F;
-constexpr float chainLightningBoltLife = 0.2F;
+// Chain Lightning: long crackling arcs from the ship, jumping far between targets.
+constexpr float chainLightningRange = 700.0F;     // ship to the first target
+constexpr float chainLightningJumpRange = 400.0F; // between targets
+constexpr float chainLightningBoltLife = 0.3F;
 
 constexpr float forwardDamageMult = 0.5F;
 // Laser Shots: each shot is a barrage of thin comet streaks that phase through enemies (each

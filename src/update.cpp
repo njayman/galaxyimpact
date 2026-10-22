@@ -4435,46 +4435,58 @@ void fireChainLightning(Game& game, const Weapon& weapon)
 {
     const auto dmg = static_cast<int32_t>(static_cast<float>(weaponDamage(game, weapon.level)) *
                                           chainLightningDamageMult);
-
-    auto target = nearestEnemyWithin(game, game.run.player.position, chainLightningRange);
-    if (!target.has_value())
-    {
-        return;
-    }
-
+    // Jumps 2 + level times, never back to an enemy it already struck.
+    std::vector<size_t> struck;
     Vector2 from = game.run.player.position;
-    for (int32_t hit = 0; hit < weapon.level; hit++)
+    float reach = chainLightningRange;
+    for (int32_t hit = 0; hit < 2 + weapon.level; hit++)
     {
-        if (!target.has_value())
+        std::optional<size_t> best;
+        float bestDist = reach;
+        for (size_t j = 0; j < game.run.enemies.size(); j++)
+        {
+            const auto& enemy = game.run.enemies.at(j);
+            const float dist = Vector2Distance(from, enemy.position);
+            if (enemy.active && !enemy.phased && dist <= bestDist && std::ranges::find(struck, j) == struck.end())
+            {
+                best = j;
+                bestDist = dist;
+            }
+        }
+        if (!best.has_value())
         {
             break;
         }
-        const Vector2 to = *target;
-
-        for (size_t j = 0; j < game.run.enemies.size(); j++)
+        struck.push_back(*best);
+        const Vector2 to = game.run.enemies.at(*best).position;
+        damageEnemy(game, *best, dmg);
+        recordDamage(game, DamageSource::ChainLightning, dmg);
+        if (!game.run.enemies.at(*best).active)
         {
-            auto& enemy = game.run.enemies.at(j);
-            if (enemy.active && !enemy.phased &&
-                Vector2Distance(enemy.position, to) <=
-                    enemyCollisionRadius(enemy))
-            {
-                damageEnemy(game, j, dmg);
-                recordDamage(game, DamageSource::ChainLightning, dmg);
-                if (!enemy.active)
-                {
-                    recordWeaponKill(game, WeaponType::ChainLightning);
-                }
-                break;
-            }
+            recordWeaponKill(game, WeaponType::ChainLightning);
         }
-
-        game.run.chainLightningBolts.push_back(
-            ChainLightningBolt{.from = from, .to = to, .timer = chainLightningBoltLife});
-
+        game.run.chainLightningBolts.push_back(ChainLightningBolt{.from = from, .to = to, .timer = chainLightningBoltLife});
         from = to;
-        target = nearestEnemyExcluding(game, to, to);
+        reach = chainLightningJumpRange;
     }
-    playSFX(game, game.resources.sounds.shoot);
+
+    // The chain ends in the nearest boss within reach (the first strike, when no enemy is near).
+    for (auto& boss : game.run.bosses)
+    {
+        const Vector2 center{.x = boss.position.x + boss.size.x / 2, .y = boss.position.y + boss.size.y / 2};
+        if (boss.health > 0 && Vector2Distance(from, center) <= reach + boss.size.x / 2)
+        {
+            damageBoss(game, boss, dmg);
+            recordDamage(game, DamageSource::ChainLightning, dmg);
+            game.run.chainLightningBolts.push_back(
+                ChainLightningBolt{.from = from, .to = center, .timer = chainLightningBoltLife});
+            break;
+        }
+    }
+    if (!game.run.chainLightningBolts.empty())
+    {
+        playSFX(game, game.resources.sounds.shoot);
+    }
 }
 
 void updateChainLightningBolts(Game& game, float deltaTime)

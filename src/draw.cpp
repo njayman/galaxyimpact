@@ -3031,9 +3031,46 @@ void drawGameplayWorld(const Game& game)
         }
     }
 
+    // Chain Lightning: a jagged bolt that re-crackles every few frames, with two short forks,
+    // a soft pale-blue halo under a near-white core, fading out over its life.
     for (const auto& bolt : game.run.chainLightningBolts)
     {
-        DrawLineEx(bolt.from, bolt.to, 2, Fade(Palette::Crit, bolt.timer / 0.2F));
+        const float fade = std::clamp(bolt.timer / chainLightningBoltLife, 0.0F, 1.0F);
+        const float seed = bolt.from.x * 0.13F + bolt.to.y * 0.71F + std::floor(static_cast<float>(GetTime()) * 30.0F);
+        const Vector2 span = Vector2Subtract(bolt.to, bolt.from);
+        const float length = Vector2Length(span);
+        if (length < 1.0F)
+        {
+            continue;
+        }
+        const Vector2 perp = Vector2Scale(Vector2{.x = -span.y, .y = span.x}, 1.0F / length);
+        const float jag = std::min(26.0F, length * 0.08F);
+        constexpr int32_t segments = 12;
+        std::array<Vector2, segments + 1> points{};
+        for (int32_t i = 0; i <= segments; i++)
+        {
+            const float f = static_cast<float>(i) / segments;
+            const float offset = i == 0 || i == segments ? 0.0F : (hashNoise(seed + static_cast<float>(i) * 1.7F) - 0.5F) * 2.0F * jag;
+            points.at(static_cast<size_t>(i)) = Vector2Add(Vector2Add(bolt.from, Vector2Scale(span, f)), Vector2Scale(perp, offset));
+        }
+        for (int32_t i = 0; i < segments; i++)
+        {
+            DrawLineEx(points.at(static_cast<size_t>(i)), points.at(static_cast<size_t>(i + 1)), 7.0F,
+                       Fade(Palette::ElementFreeze, 0.18F * fade));
+        }
+        for (int32_t i = 0; i < segments; i++)
+        {
+            DrawLineEx(points.at(static_cast<size_t>(i)), points.at(static_cast<size_t>(i + 1)), 2.0F,
+                       Fade(Palette::ElementStatic, fade));
+        }
+        for (const int32_t at : {4, 8})
+        {
+            const Vector2 base = points.at(static_cast<size_t>(at));
+            const float side = hashNoise(seed + static_cast<float>(at) * 5.3F) > 0.5F ? 1.0F : -1.0F;
+            const Vector2 fork = Vector2Add(Vector2Add(base, Vector2Scale(span, 0.06F)), Vector2Scale(perp, side * jag * 1.6F));
+            DrawLineEx(base, fork, 1.2F, Fade(Palette::ElementStatic, 0.7F * fade));
+        }
+        DrawCircleV(bolt.to, 4.0F * fade + 2.0F, Fade(Palette::ElementStatic, 0.8F * fade)); // the strike
     }
 
     for (const auto& shot : game.run.sniperShots)
