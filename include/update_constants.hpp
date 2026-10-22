@@ -557,6 +557,15 @@ constexpr int hiveNodeDeathSpawnCount = 5;
 
 constexpr int maxActiveRangedEnemies = 2;
 constexpr int maxActiveDashers = 2;          // Charger, Boarder, Rockhide
+// Two spawn tiers: an unlimited swarm of weak enemies, and capped, tough specials (dashers,
+// turrets and snipers, bombers, mines, spawners, laser fences) that force the player to fight.
+constexpr int specialCapBase = 2;     // alive at once at wave 1
+constexpr int specialCapMax = 6;
+constexpr int specialCapWavesPerStep = 20; // +1 every 20 waves: 6 from wave 81
+constexpr float specialSpawnGap = 3.0F;    // at least this long between special spawns
+constexpr float specialHealthMult = 2.5F;
+constexpr float swarmHealthMult = 0.6F;
+constexpr float swarmSpawnCountMult = 1.5F;
 constexpr float dasherSpawnCooldown = 6.0F; // at least this long between dasher spawns
 // Ricochet Strafers: spawned one at a time round the player; a bullet relays between them.
 constexpr float ricochetStraferSpawnInterval = 6.0F;

@@ -33,6 +33,29 @@ auto activeDasherCount(const Game& game) -> int
         { return enemy.active && isDasher(enemyKinds.at(static_cast<size_t>(enemy.kind))); }));
 }
 
+// Specials: the capped, tough tier. Everything else is swarm.
+auto isSpecialEnemy(int kindIndex) -> bool
+{
+    const auto& kind = enemyKinds.at(static_cast<size_t>(kindIndex));
+    if (kindIndex == enemyKindRockDebris)
+    {
+        return false;
+    }
+    return isDasher(kind) || kind.pattern == EnemyPattern::Turret || kind.pattern == EnemyPattern::Spawner ||
+           kind.pattern == EnemyPattern::Stationary || kind.fuseRadius > 0;
+}
+
+auto activeSpecialCount(const Game& game) -> int
+{
+    return static_cast<int>(std::ranges::count_if(game.run.enemies, [](const Enemy& enemy)
+                                                  { return enemy.active && isSpecialEnemy(enemy.kind); }));
+}
+
+auto specialCap(int32_t wave) -> int
+{
+    return std::min(specialCapMax, specialCapBase + (wave - 1) / specialCapWavesPerStep);
+}
+
 auto activeRangedEnemyCount(const Game& game) -> int
 {
     int count = 0;
@@ -54,13 +77,16 @@ void spawnEnemy(Game& game)
     const bool rangedSlotAvailable = activeRangedEnemyCount(game) < maxActiveRangedEnemies;
     const bool dasherSlotAvailable =
         game.run.dasherSpawnCooldown <= 0 && activeDasherCount(game) < maxActiveDashers;
+    const bool specialSlotAvailable =
+        game.run.specialSpawnCooldown <= 0 && activeSpecialCount(game) < specialCap(game.run.waveNumber);
 
     std::vector<int> eligible;
     eligible.reserve(enemyKinds.size() * static_cast<size_t>(biomeExclusiveWeight));
     for (size_t i = 0; i < enemyKinds.size(); i++)
     {
         if ((enemyKinds.at(i).pattern == EnemyPattern::Turret && !rangedSlotAvailable) ||
-            (isDasher(enemyKinds.at(i)) && !dasherSlotAvailable) || i == enemyKindRicochetStrafer)
+            (isDasher(enemyKinds.at(i)) && !dasherSlotAvailable) || i == enemyKindRicochetStrafer ||
+            (isSpecialEnemy(static_cast<int>(i)) && !specialSlotAvailable))
         {
             continue; // Ricochet Strafers come from updateRicochetRelay
         }
@@ -97,6 +123,10 @@ void spawnEnemy(Game& game)
     {
         game.run.dasherSpawnCooldown = dasherSpawnCooldown;
     }
+    if (isSpecialEnemy(kindIndex))
+    {
+        game.run.specialSpawnCooldown = specialSpawnGap;
+    }
     spawnEnemyAt(game, kindIndex, spawnRingPosition(game));
 }
 
@@ -124,6 +154,8 @@ void spawnEnemyAt(Game& game, int kindIndex, Vector2 pos)
     {
         health = static_cast<int32_t>(static_cast<float>(health) * punctumEnemyHealthMult);
     }
+    health = static_cast<int32_t>(static_cast<float>(health) *
+                                  (isSpecialEnemy(kindIndex) ? specialHealthMult : swarmHealthMult));
     if (elite)
     {
         health *= 2;
@@ -595,6 +627,7 @@ void updateRicochetRelay(Game& game, float deltaTime)
 void updateEnemies(Game& game, float deltaTime)
 {
     game.run.dasherSpawnCooldown = std::max(0.0F, game.run.dasherSpawnCooldown - deltaTime);
+    game.run.specialSpawnCooldown = std::max(0.0F, game.run.specialSpawnCooldown - deltaTime);
     game.run.sniperEventCooldown = std::max(0.0F, game.run.sniperEventCooldown - deltaTime);
     if (game.run.sniperEventPhase != 0 &&
         std::ranges::none_of(game.run.enemies, [&](const Enemy& enemy)

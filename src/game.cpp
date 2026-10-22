@@ -317,6 +317,7 @@ void resetRun(Game& game)
     game.run.solarForgeHeatTickTimer = 0;
     game.run.ricochetSpawnTimer = 0;
     game.run.dasherSpawnCooldown = 0;
+    game.run.specialSpawnCooldown = 0;
     game.run.ricochetRelayDelay = 0;
     game.run.solarForgeGelWobble = Vector2{};
     game.run.solarForgeGelWobbleVel = Vector2{};
