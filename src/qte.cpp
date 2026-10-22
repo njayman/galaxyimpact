@@ -362,11 +362,24 @@ void updateBossQte(Game& game, float deltaTime)
     Boss* owner = findBossById(game, run.qteBossId);
     if (owner != nullptr && run.qteFinisherPhase > 0)
     {
-        // A clean chain: the ship turns on the boss and fires everything it charged.
-        const Vector2 center{.x = owner->position.x + owner->size.x / 2, .y = owner->position.y + owner->size.y / 2};
+        // A clean chain: the ship turns on the boss and fires everything it charged. While the
+        // Beltbreaker still has plates, the shot goes into its healthiest plate instead.
+        Boss* target = owner;
+        if (static_cast<QteKind>(run.qteKind) == QteKind::PlateRush)
+        {
+            for (auto& plate : run.bosses)
+            {
+                if (plate.isBeltbreakerPlate && plate.plateOwnerId == owner->instanceId && plate.health > 0 &&
+                    (target == owner || plate.health > target->health))
+                {
+                    target = &plate;
+                }
+            }
+        }
+        const Vector2 center{.x = target->position.x + target->size.x / 2, .y = target->position.y + target->size.y / 2};
         if (qteUpdateFinisher(game, center, deltaTime))
         {
-            if (static_cast<QteKind>(run.qteKind) == QteKind::PlateRush)
+            if (target == owner && static_cast<QteKind>(run.qteKind) == QteKind::PlateRush)
             {
                 owner->beltbreakerShielded = false; // the shot is what shatters the shield
             }
@@ -379,9 +392,9 @@ void updateBossQte(Game& game, float deltaTime)
             else
             {
                 // The Kraken's core takes the shot, like a staggered tentacle's hit.
-                damageBoss(game, *owner,
-                           std::max(1, static_cast<int32_t>(static_cast<float>(owner->maxHealth) * run.qteFinisherCharge)),
-                           true, false, owner->isKraken);
+                damageBoss(game, *target,
+                           std::max(1, static_cast<int32_t>(static_cast<float>(target->maxHealth) * run.qteFinisherCharge)),
+                           true, false, target->isKraken);
             }
             if (owner->health > 0)
             {
