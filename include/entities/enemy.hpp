@@ -100,6 +100,14 @@ class Enemy
 
     float organicRadiusMult = 1.0F;
 
+    // Specials' behaviours (see updateEnemies).
+    float patternTimer = 0;   // turret: time to the next volley
+    float patternAngle = 0;   // turret: the spiral's turning angle
+    int32_t patternKind = 0;  // turret: 0 spiral, 1 rings
+    int32_t chainLeft = 0;    // dasher: lunges left in this chain
+    float dropDist = 0;       // bomber: distance since the last dropped bomb
+    Vector2 repositionTarget{}; // sniper: where it glides to between shots
+
     float fadeAlpha = 1.0F;
 
     // Stable per-run identity (0 = none); vector indices shift on compaction.
@@ -174,6 +182,9 @@ struct EnemyKind
 };
 
 constexpr int enemyKindSwarmling = 1;
+constexpr int enemyKindTurret = 7;
+constexpr int enemyKindSniper = 8;
+constexpr int enemyKindBomber = 10;
 
 constexpr int enemyKindRockDebris = 18;
 constexpr int enemyKindRicochetStrafer = 20;

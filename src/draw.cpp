@@ -3270,6 +3270,16 @@ void drawGameplayWorld(const Game& game)
         DrawLineEx(right, apex, 1.0F, Fade(Palette::Crit, 0.7F * fade));
     }
 
+    // Bomber bombs: a red ring closing in on a hot dot until it blows.
+    for (const auto& b : game.run.enemyBombs)
+    {
+        const float progress = 1.0F - b.life / b.maxLife;
+        const float radius = bomberBombRadius * (1.0F - 0.7F * progress);
+        DrawCircleV(b.position, bomberBombRadius, Fade(Palette::Accent, 0.06F + 0.1F * progress));
+        DrawRing(b.position, radius - 2.0F, radius, 0, 360, 36, Fade(Palette::Accent, 0.5F + 0.5F * progress));
+        DrawCircleV(b.position, 4.0F + 3.0F * progress, Palette::Accent);
+    }
+
     // Delayed blast markers: a ring closing in on a hot dot until it detonates.
     for (const auto& b : game.run.dashBlasts)
     {
@@ -3889,7 +3899,38 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
                            Fade(color, 0.35F - f * 0.07F));
         }
     }
-    if (kind.fuseRadius > 0 && enemy.telegraphing)
+    if (enemy.kind == enemyKindBomber && (enemy.telegraphing || enemy.charging))
+    {
+        // Dive: a tell line through the player, then a streak behind the dive.
+        if (enemy.telegraphing)
+        {
+            const float lock = 1.0F - std::clamp(enemy.stateTimer / bomberDiveTell, 0.0F, 1.0F);
+            const Vector2 dir = Vector2Normalize(Vector2Subtract(game.run.player.position, enemy.position));
+            DrawLineEx(enemy.position,
+                       Vector2Add(game.run.player.position, Vector2Scale(dir, bomberDiveOvershoot)), 1.0F + 3.0F * lock,
+                       Fade(Palette::Accent, 0.3F + 0.5F * lock));
+        }
+        else
+        {
+            const Vector2 back = Vector2Scale(Vector2Normalize(enemy.velocity), -kind.radius * 6.0F);
+            DrawLineEx(enemy.position, Vector2Add(enemy.position, back), kind.radius * 0.8F, Fade(color, 0.2F));
+        }
+    }
+    else if (kind.pattern == EnemyPattern::Turret && enemy.kind != enemyKindSniper && (enemy.telegraphing || enemy.charging))
+    {
+        // Turret: a ring closes in on it through the tell; a soft flash while it bursts.
+        if (enemy.telegraphing)
+        {
+            const float p = 1.0F - std::clamp(enemy.stateTimer / turretPatternTell, 0.0F, 1.0F);
+            const float r = kind.radius * (3.0F - 2.0F * p);
+            DrawRing(enemy.position, r - 2.0F, r, 0, 360, 32, Fade(Palette::Accent, 0.3F + 0.6F * p));
+        }
+        else
+        {
+            DrawCircleV(enemy.position, kind.radius * 1.6F, Fade(Palette::Accent, 0.15F + 0.1F * std::sin(t * 40.0F)));
+        }
+    }
+    else if (kind.fuseRadius > 0 && enemy.telegraphing)
     {
         // Lit fuse: the blast radius fills in while a countdown arc runs out round the body.
         const float p = 1.0F - std::clamp(enemy.stateTimer / kind.fuseTime, 0.0F, 1.0F);

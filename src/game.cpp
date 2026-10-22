@@ -275,6 +275,7 @@ void resetRun(Game& game)
     game.run.deathParticles.clear();
     game.run.dashWedges.clear();
     game.run.dashBlasts.clear();
+    game.run.enemyBombs.clear();
     game.run.flameParticles.clear();
     game.run.damageNumbers.clear();
     game.run.weaponDowngrade = std::nullopt;

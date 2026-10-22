@@ -515,6 +515,7 @@ class BossProjectile
 
     int32_t visualEnemyKind = -1;
     bool isEmber = false; // Slagmaw Seeker Ember
+    bool passesEnemies = false; // turret pattern shot: flies through enemies instead of killing them
 };
 
 class BossDeathShockwave

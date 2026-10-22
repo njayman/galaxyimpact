@@ -15,4 +15,10 @@
 4. **Enemy movement:** turn-rate steering with speed variance; swarmers flow in curving, separated streams instead of beelining.
 5. **Boss movement:** bosses glide around the player in sweeping arcs with turn-rate steering; wind-up lunges commit along a curve.
 
+## As built
+
+- Chain Lightning (2026-10-22): reaches 700, jumps 400, 2 + level strikes, never revisits an enemy, ends in a boss in reach; jagged bolts with two forks.
+- Tiers (2026-10-22): specials are dashers, turrets and snipers, bombers, mines, spawners and laser fences: 2.5x HP, cap 2 rising by one every 20 waves to 6, 3 s between spawns. Swarm: 0.6x HP, 1.5x spawn count.
+- Behaviours (2026-10-22): the Sniper keeps the shot QTE and glides to a new spot 450-600 from the player between shots. Turret, Solar Turret and Husk Sentinel no longer use the QTE: they rest 2.5-4.5 s, show a closing ring for 0.4 s, then fire a 1.4 s burst of either a turning four-armed spiral or gapped rings; their shots fly through other enemies. Dashers circle at 260, then chain 2 or 3 lunges with 0.3 s tells between. The Bomber dives through the player and 320 past after a 0.35 s line tell, dropping a bomb every 70 units (0.7 s fuse, 64 radius, 2 damage), then comes round again; it no longer uses the proximity fuse.
+
 Also from the trailer, after these: rotating spiral and ring patterns for boss barrages, a thin tell line before every beam, and short afterimage trails on fast movers.

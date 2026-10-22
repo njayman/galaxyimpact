@@ -566,6 +566,32 @@ constexpr float specialSpawnGap = 3.0F;    // at least this long between special
 constexpr float specialHealthMult = 2.5F;
 constexpr float swarmHealthMult = 0.6F;
 constexpr float swarmSpawnCountMult = 1.5F;
+// Specials: random timing, a short tell, then a fast commit.
+// Turret (not Sniper): plants and fires bursts of a turning spiral or gapped rings.
+constexpr float turretPatternTell = 0.4F;
+constexpr float turretBurstDuration = 1.4F;
+constexpr float turretSpiralInterval = 0.11F;
+constexpr int32_t turretSpiralArms = 4;
+constexpr float turretSpiralStepDeg = 13.0F;
+constexpr float turretRingInterval = 0.35F;
+constexpr int32_t turretRingCount = 14;
+constexpr float turretPatternShotSpeed = 4.0F;
+constexpr int32_t turretPatternRestMin = 25; // tenths of a second between bursts
+constexpr int32_t turretPatternRestMax = 45;
+// Dasher: circles at mid range, then chains 2 or 3 lunges with short tells between.
+constexpr float dasherCircleDist = 260.0F;
+constexpr float dasherChainTell = 0.3F;
+// Bomber: dives straight across the player, dropping bombs that blow a beat later.
+constexpr float bomberDiveTriggerDist = 380.0F;
+constexpr float bomberDiveTell = 0.35F;
+constexpr float bomberDiveSpeedMult = 3.2F;
+constexpr float bomberDiveOvershoot = 320.0F;
+constexpr float bomberDropSpacing = 70.0F;
+constexpr float bomberBombFuse = 0.7F;
+constexpr float bomberBombRadius = 64.0F;
+constexpr int32_t bomberBombDamage = 2;
+// Sniper: glides to a new spot 450-600 from the player between shots.
+constexpr float sniperRepositionSpeed = 2.4F;
 constexpr float dasherSpawnCooldown = 6.0F; // at least this long between dasher spawns
 // Ricochet Strafers: spawned one at a time round the player; a bullet relays between them.
 constexpr float ricochetStraferSpawnInterval = 6.0F;

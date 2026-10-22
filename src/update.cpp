@@ -5197,6 +5197,7 @@ void updateProjectiles(Game& game, float deltaTime)
         {
             auto& enemy = game.run.enemies.at(j);
             if (!projectile.active || !enemy.active || enemy.phased || projectile.relayTargetId != 0 ||
+                (projectile.passesEnemies && !projectile.fromPlayer) ||
                 (projectile.ricochetLastHit != 0 && enemy.id == projectile.ricochetLastHit) ||
                 !CheckCollisionCircles(projectile.position, projectile.radius, enemy.position,
                                        enemyCollisionRadius(enemy)))

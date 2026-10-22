@@ -624,10 +624,156 @@ void updateRicochetRelay(Game& game, float deltaTime)
     }
 }
 
+// Turret (not the Sniper): rests a random 2.5-4.5 s, flashes a 0.4 s tell, then fires a burst of
+// either a turning four-armed spiral or gapped rings, so the safe lanes keep moving. Its shots fly
+// through other enemies. While bursting `charging` is set.
+void fireTurretShot(Game& game, Vector2 from, float angle)
+{
+    const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
+    BossProjectile shot{.life = 5.0F,
+                        .position = Vector2Add(from, Vector2Scale(dir, 18.0F)),
+                        .velocity = Vector2Scale(dir, turretPatternShotSpeed),
+                        .radius = 6,
+                        .homing = false,
+                        .active = true,
+                        .fromPlayer = false,
+                        .damage = 1,
+                        .health = 1};
+    shot.passesEnemies = true;
+    game.run.bossProjectiles.push_back(shot);
+}
+
+void updateTurretPattern(Game& game, Enemy& enemy, float deltaTime)
+{
+    enemy.stateTimer -= deltaTime;
+    if (!enemy.telegraphing && !enemy.charging)
+    {
+        if (enemy.stateTimer <= 0 && Vector2Distance(enemy.position, game.run.player.position) < turretFireRange)
+        {
+            enemy.telegraphing = true;
+            enemy.stateTimer = turretPatternTell;
+            enemy.patternKind = GetRandomValue(0, 1);
+            enemy.patternAngle = std::atan2(game.run.player.position.y - enemy.position.y,
+                                            game.run.player.position.x - enemy.position.x);
+        }
+        return;
+    }
+    if (enemy.telegraphing)
+    {
+        if (enemy.stateTimer <= 0)
+        {
+            enemy.telegraphing = false;
+            enemy.charging = true;
+            enemy.stateTimer = turretBurstDuration;
+            enemy.patternTimer = 0;
+            playSFX(game, game.resources.sounds.spreadBurst);
+        }
+        return;
+    }
+    enemy.patternTimer -= deltaTime;
+    if (enemy.patternTimer <= 0)
+    {
+        constexpr float tau = 2.0F * std::numbers::pi_v<float>;
+        if (enemy.patternKind == 0)
+        {
+            enemy.patternTimer = turretSpiralInterval;
+            enemy.patternAngle += turretSpiralStepDeg * DEG2RAD * (enemy.id % 2 == 0 ? 1.0F : -1.0F);
+            for (int32_t arm = 0; arm < turretSpiralArms; arm++)
+            {
+                fireTurretShot(game, enemy.position, enemy.patternAngle + static_cast<float>(arm) * tau / turretSpiralArms);
+            }
+        }
+        else
+        {
+            // A ring with a two-shot gap that turns a little each ring.
+            enemy.patternTimer = turretRingInterval;
+            enemy.patternAngle += 20.0F * DEG2RAD;
+            for (int32_t shot = 2; shot < turretRingCount; shot++)
+            {
+                fireTurretShot(game, enemy.position, enemy.patternAngle + static_cast<float>(shot) * tau / turretRingCount);
+            }
+        }
+    }
+    if (enemy.stateTimer <= 0)
+    {
+        enemy.charging = false;
+        enemy.stateTimer = static_cast<float>(GetRandomValue(turretPatternRestMin, turretPatternRestMax)) / 10.0F;
+    }
+}
+
+// Bomber: chases; in range it flashes a 0.35 s dive line, then dives straight through where the
+// player stood and well past, dropping bombs that blow a beat later, then comes round again.
+void updateBomberDive(Game& game, Enemy& enemy, const EnemyKind& kind, float speedMod, float deltaTime)
+{
+    const Vector2 toPlayer = Vector2Subtract(game.run.player.position, enemy.position);
+    if (enemy.charging)
+    {
+        const Vector2 step = Vector2Scale(enemy.velocity, deltaTime * frameScale);
+        enemy.position = Vector2Add(enemy.position, step);
+        enemy.stateTimer -= Vector2Length(step);
+        enemy.dropDist += Vector2Length(step);
+        if (enemy.dropDist >= bomberDropSpacing)
+        {
+            enemy.dropDist = 0;
+            game.run.enemyBombs.push_back(
+                Particle{.position = enemy.position, .life = bomberBombFuse, .maxLife = bomberBombFuse, .color = Palette::Accent});
+        }
+        if (enemy.stateTimer <= 0)
+        {
+            enemy.charging = false;
+            enemy.stateTimer = static_cast<float>(GetRandomValue(10, 25)) / 10.0F;
+        }
+        return;
+    }
+    enemy.stateTimer -= deltaTime;
+    if (enemy.telegraphing)
+    {
+        enemy.velocity = Vector2Scale(Vector2Normalize(toPlayer), kind.speed * speedMod * bomberDiveSpeedMult);
+        if (enemy.stateTimer <= 0)
+        {
+            enemy.telegraphing = false;
+            enemy.charging = true;
+            enemy.dropDist = 0;
+            enemy.stateTimer = Vector2Length(toPlayer) + bomberDiveOvershoot;
+        }
+        return;
+    }
+    if (Vector2Length(toPlayer) > 0)
+    {
+        enemy.position =
+            Vector2Add(enemy.position, Vector2Scale(Vector2Normalize(toPlayer), kind.speed * speedMod * deltaTime * frameScale));
+    }
+    if (enemy.stateTimer <= 0 && Vector2Length(toPlayer) < bomberDiveTriggerDist)
+    {
+        enemy.telegraphing = true;
+        enemy.stateTimer = bomberDiveTell;
+    }
+}
+
+void updateEnemyBombs(Game& game, float deltaTime)
+{
+    for (auto& bomb : game.run.enemyBombs)
+    {
+        bomb.life -= deltaTime;
+        if (bomb.life > 0)
+        {
+            continue;
+        }
+        if (game.run.player.health > 0 &&
+            Vector2Distance(bomb.position, game.run.player.position) <= bomberBombRadius + game.run.player.radius)
+        {
+            damagePlayer(game, enemyDamage(game, bomberBombDamage));
+        }
+        spawnKillExplosion(game, bomb.position, Palette::Accent, 10, 0.9F);
+    }
+    std::erase_if(game.run.enemyBombs, [](const Particle& p) { return p.life <= 0; });
+}
+
 void updateEnemies(Game& game, float deltaTime)
 {
     game.run.dasherSpawnCooldown = std::max(0.0F, game.run.dasherSpawnCooldown - deltaTime);
     game.run.specialSpawnCooldown = std::max(0.0F, game.run.specialSpawnCooldown - deltaTime);
+    updateEnemyBombs(game, deltaTime);
     game.run.sniperEventCooldown = std::max(0.0F, game.run.sniperEventCooldown - deltaTime);
     if (game.run.sniperEventPhase != 0 &&
         std::ranges::none_of(game.run.enemies, [&](const Enemy& enemy)
@@ -694,6 +840,11 @@ void updateEnemies(Game& game, float deltaTime)
             {
             case EnemyPattern::Chase:
             {
+                if (enemy.kind == enemyKindBomber)
+                {
+                    updateBomberDive(game, enemy, kind, speedMod, deltaTime);
+                    break;
+                }
                 if (kind.fuseRadius > 0 && enemy.telegraphing)
                 {
                     break; // fuse lit: it stops and waits to blow
@@ -782,8 +933,18 @@ void updateEnemies(Game& game, float deltaTime)
                     if (enemy.stateTimer <= 0)
                     {
                         enemy.charging = false;
-                        enemy.stateTimer = 1.2F;
                         enemy.velocity = Vector2{};
+                        if (enemy.chainLeft > 0)
+                        {
+                            // Straight into the next lunge, after only a short tell.
+                            enemy.chainLeft--;
+                            enemy.telegraphing = true;
+                            enemy.stateTimer = dasherChainTell;
+                        }
+                        else
+                        {
+                            enemy.stateTimer = static_cast<float>(GetRandomValue(12, 30)) / 10.0F;
+                        }
                     }
                     break;
                 }
@@ -802,15 +963,21 @@ void updateEnemies(Game& game, float deltaTime)
                 }
                 if (Vector2Length(toPlayer) > 0)
                 {
-                    enemy.position = Vector2Add(
-                        enemy.position, Vector2Scale(Vector2Normalize(toPlayer),
-                                                     kind.speed * speedMod * deltaTime * frameScale));
+                    // Circle at mid range: close in or back off to dasherCircleDist while sliding round.
+                    const Vector2 dir = Vector2Normalize(toPlayer);
+                    const Vector2 around{.x = -dir.y, .y = dir.x};
+                    const float radial = std::clamp((Vector2Length(toPlayer) - dasherCircleDist) / 120.0F, -1.0F, 1.0F);
+                    const float spin = enemy.id % 2 == 0 ? 1.2F : -1.2F;
+                    const Vector2 move = Vector2Add(Vector2Scale(dir, radial), Vector2Scale(around, spin));
+                    enemy.position = Vector2Add(enemy.position, Vector2Scale(Vector2Normalize(move),
+                                                                             kind.speed * speedMod * deltaTime * frameScale));
                 }
                 if (enemy.stateTimer <= 0)
                 {
                     enemy.telegraphing = true;
                     enemy.stateTimer = chargeTelegraphDuration;
                     enemy.velocity = Vector2Scale(Vector2Normalize(toPlayer), chargeSpeed);
+                    enemy.chainLeft = GetRandomValue(1, 2); // 2 or 3 lunges in all
                 }
                 break;
             }
@@ -868,9 +1035,31 @@ void updateEnemies(Game& game, float deltaTime)
             }
             case EnemyPattern::Turret:
             {
-                // Every turret-type enemy fires the shot QTE (see sniperQteBegin).
+                if (enemy.kind != enemyKindSniper)
+                {
+                    updateTurretPattern(game, enemy, deltaTime);
+                    break;
+                }
+                // The Sniper fires the shot QTE (see sniperQteBegin); between shots it glides to a
+                // new spot so it never sits still.
                 if (game.run.sniperEventEnemyId != static_cast<int32_t>(enemy.id))
                 {
+                    const Vector2 toSpot = Vector2Subtract(enemy.repositionTarget, enemy.position);
+                    const float spotDist = Vector2Length(toSpot);
+                    const float fromPlayer = Vector2Distance(enemy.repositionTarget, game.run.player.position);
+                    if (spotDist < 8.0F || fromPlayer < 380.0F || fromPlayer > 700.0F)
+                    {
+                        const float a = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+                        const auto d = static_cast<float>(GetRandomValue(450, 600));
+                        enemy.repositionTarget =
+                            Vector2Add(game.run.player.position, Vector2{.x = std::cos(a) * d, .y = std::sin(a) * d});
+                    }
+                    else
+                    {
+                        enemy.position = Vector2Add(
+                            enemy.position,
+                            Vector2Scale(toSpot, std::min(1.0F, sniperRepositionSpeed * deltaTime * frameScale / spotDist)));
+                    }
                     enemy.stateTimer -= deltaTime;
                     if (enemy.stateTimer <= 0 && game.run.sniperEventPhase == 0 &&
                         game.run.sniperEventCooldown <= 0 && qteSlotFree(game) &&
@@ -980,7 +1169,7 @@ void updateEnemies(Game& game, float deltaTime)
             applyWormholeTransit(game, enemy.position, enemy.velocity, kind.radius);
         }
 
-        if (kind.fuseRadius > 0)
+        if (kind.fuseRadius > 0 && enemy.kind != enemyKindBomber) // the Bomber dives instead
         {
             if (!enemy.telegraphing)
             {
