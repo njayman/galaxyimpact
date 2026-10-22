@@ -537,8 +537,6 @@ auto browserParticleStyleName(int32_t index) -> std::string_view
     case 0:
         return "Flame";
     case 1:
-        return "Dash Trail";
-    case 2:
         return "Death Burst";
     default:
         return "";

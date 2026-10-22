@@ -205,7 +205,8 @@ struct GameplayState
     std::vector<Star> borderStars;
     std::vector<GasCloud> gasClouds;
     std::vector<Particle> deathParticles;
-    std::vector<Particle> dashTrailParticles;
+    std::vector<Particle> dashWedges; // afterimages; velocity holds the dash direction, radius the length
+    std::vector<Particle> dashBlasts; // markers along the dash path; life is the fuse
     std::vector<Particle> flameParticles;
     std::vector<DamageNumber> damageNumbers;
     std::optional<WeaponDowngrade> weaponDowngrade;

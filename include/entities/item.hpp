@@ -20,7 +20,6 @@ enum class PickupType : std::uint8_t
     Shield,
     Elemental,
     Regen,
-    DashTrail,
     MagnetPulse,
     Overcharge,
     SecondWind,
@@ -79,14 +78,12 @@ struct PickupCatalogEntry
     std::string_view name;
 };
 
-constexpr std::array<PickupCatalogEntry, 14> pickupCatalog{
+constexpr std::array<PickupCatalogEntry, 13> pickupCatalog{
     PickupCatalogEntry{PickupType::LifeOrb, ElementType::Static, ElementMechanism::Infusion,
                        "Life Orb"},
     PickupCatalogEntry{PickupType::Shield, ElementType::Static, ElementMechanism::Infusion,
                        "Shield"},
     PickupCatalogEntry{PickupType::Regen, ElementType::Static, ElementMechanism::Infusion, "Regen"},
-    PickupCatalogEntry{PickupType::DashTrail, ElementType::Static, ElementMechanism::Infusion,
-                       "Dash Trail"},
     PickupCatalogEntry{PickupType::MagnetPulse, ElementType::Static, ElementMechanism::Infusion,
                        "Magnet Pulse"},
     PickupCatalogEntry{PickupType::Overcharge, ElementType::Static, ElementMechanism::Infusion,

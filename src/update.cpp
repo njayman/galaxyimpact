@@ -3823,11 +3823,6 @@ void applyPickupEffect(Game& game, PickupType type, ElementType element, Element
         game.run.player.regenRate = regenRate;
         playSFX(game, game.resources.sounds.menuConfirm);
         break;
-    case PickupType::DashTrail:
-        game.run.player.dashTrailTimer =
-            pickupEffectDuration * pickupDurationScale(game.run.waveNumber);
-        playSFX(game, game.resources.sounds.menuConfirm);
-        break;
     case PickupType::MagnetPulse:
         for (auto& other : game.run.pickups)
         {
@@ -4985,15 +4980,12 @@ void spawnRareBonusPickup(Game& game, Vector2 position)
         spawnPickup(game, position, 0, PickupType::Regen);
         break;
     case 1:
-        spawnPickup(game, position, 0, PickupType::DashTrail);
-        break;
-    case 2:
         spawnPickup(game, position, 0, PickupType::MagnetPulse);
         break;
-    case 3:
+    case 2:
         spawnPickup(game, position, 0, PickupType::Overcharge);
         break;
-    case 4:
+    case 3:
         spawnPickup(game, position, 0, PickupType::SecondWind);
         break;
     default:

@@ -250,7 +250,6 @@ void resetRun(Game& game)
                              .regenTimer = 0,
                              .regenRate = 0,
                              .overchargeTimer = 0,
-                             .dashTrailTimer = 0,
                              .secondWindReady = false,
                              .overdriveTimer = 0};
 
@@ -274,7 +273,8 @@ void resetRun(Game& game)
     game.run.nerveBallProjectiles.clear();
     game.run.nerveSpiralProjectiles.clear();
     game.run.deathParticles.clear();
-    game.run.dashTrailParticles.clear();
+    game.run.dashWedges.clear();
+    game.run.dashBlasts.clear();
     game.run.flameParticles.clear();
     game.run.damageNumbers.clear();
     game.run.weaponDowngrade = std::nullopt;

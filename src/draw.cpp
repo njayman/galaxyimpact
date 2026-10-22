@@ -1119,8 +1119,6 @@ auto pickupChoiceDescription(PickupType type, ElementType element, ElementMechan
         return "+1 shield stack (blocks one hit).";
     case PickupType::Regen:
         return "Heals gradually for a while.";
-    case PickupType::DashTrail:
-        return "Dashing leaves a damaging trail behind you, for a while.";
     case PickupType::MagnetPulse:
         return "Instantly pulls every pickup on screen to you.";
     case PickupType::Overcharge:
@@ -3012,17 +3010,34 @@ void drawGameplayWorld(const Game& game)
         DrawCircleV(p.position, p.radius, Fade(p.color, p.life / p.maxLife));
     }
 
-    for (const auto& p : game.run.dashTrailParticles)
+    // Dash afterimages: sharp wedges pointing back along the dash, alternating a little side to
+    // side so the trail reads spiky; each shrinks and fades.
+    for (size_t i = 0; i < game.run.dashWedges.size(); i++)
     {
-        const float fade = p.life / p.maxLife;
-        const float flicker = 0.75F + 0.25F * std::sin(static_cast<float>(GetTime()) * 24.0F +
-                                                       p.position.x * 0.1F + p.position.y * 0.1F);
-
-        DrawCircleV(p.position, p.radius * fade, Fade(p.color, 0.18F * fade * flicker));
-        DrawCircleLines(static_cast<int32_t>(p.position.x), static_cast<int32_t>(p.position.y),
-                        p.radius * fade * 0.65F, Fade(Palette::Crit, 0.5F * fade));
-        DrawCircleV(p.position, p.radius * fade * 0.22F, Fade(WHITE, 0.6F * fade * flicker));
+        const auto& w = game.run.dashWedges.at(i);
+        const float fade = w.life / w.maxLife;
+        const Vector2 side{.x = -w.velocity.y, .y = w.velocity.x};
+        const float jog = (i % 2 == 0 ? 1.0F : -1.0F) * 4.0F;
+        const Vector2 base = Vector2Add(w.position, Vector2Scale(side, jog));
+        const float halfWidth = 10.0F * fade;
+        const Vector2 left = Vector2Add(base, Vector2Scale(side, halfWidth));
+        const Vector2 right = Vector2Subtract(base, Vector2Scale(side, halfWidth));
+        const Vector2 apex = Vector2Subtract(base, Vector2Scale(w.velocity, w.radius * (0.4F + 0.6F * fade)));
+        DrawTriangle(left, apex, right, Fade(w.color, 0.75F * fade));
+        DrawTriangle(left, right, apex, Fade(w.color, 0.75F * fade));
+        DrawLineEx(left, apex, 1.0F, Fade(Palette::Crit, 0.7F * fade));
+        DrawLineEx(right, apex, 1.0F, Fade(Palette::Crit, 0.7F * fade));
     }
+
+    // Delayed blast markers: a ring closing in on a hot dot until it detonates.
+    for (const auto& b : game.run.dashBlasts)
+    {
+        const float progress = 1.0F - b.life / b.maxLife;
+        const float radius = dashBlastRadius * (1.0F - 0.75F * progress);
+        DrawRing(b.position, radius - 2.0F, radius, 0, 360, 36, Fade(Palette::Accent, 0.4F + 0.5F * progress));
+        DrawCircleV(b.position, 3.0F + 3.0F * progress, Fade(Palette::Crit, 0.6F + 0.4F * progress));
+    }
+
 
     for (const auto& p : game.run.flameParticles)
     {
@@ -3161,8 +3176,7 @@ void drawShip(const Game& game)
     if (game.run.player.dashing)
     {
         const Vector2 dashDir = Vector2Normalize(game.run.player.dashVelocity);
-        const Color trailColor =
-            game.run.player.dashTrailTimer > 0 ? Palette::Accent : Palette::Crit;
+        const Color trailColor = Palette::Crit;
         for (int i = 1; i <= 3; i++)
         {
             const Vector2 trailPos =
@@ -6479,15 +6493,6 @@ void drawStatusRow(const Game& game, int32_t x, int32_t y)
                                       .label = "Second Wind ready"});
     }
 
-    if (player.dashTrailTimer > 0)
-    {
-        entries.push_back(StatusEntry{
-            .iconKind = StatusIconKind::Dot,
-            .color = Palette::Shield,
-            .fracRemaining = player.dashTrailTimer / pickupEffectDuration,
-            .label = std::format("Dash Trail {:.0f}s", std::ceil(player.dashTrailTimer))});
-    }
-
     if (player.overdriveTimer > 0)
     {
         entries.push_back(StatusEntry{
@@ -6587,24 +6592,6 @@ void drawBrowserParticleDemo(int32_t style, Vector2 center)
         }
         break;
     case 1:
-
-        for (int32_t i = 0; i < 8; i++)
-        {
-            const float phase = static_cast<float>(i) * 0.35F;
-            const float fade = 1.0F - std::fmod(t * 0.7F + phase, 1.0F);
-            const Vector2 pos{.x = center.x - (1.0F - fade) * 90.0F + 45,
-                              .y = center.y + std::sin(t * 3 + phase * 6) * 12};
-            const float flicker = 0.75F + 0.25F * std::sin(t * 24.0F + pos.x * 0.1F + pos.y * 0.1F);
-            constexpr float dashTrailRadiusDemo = 10.0F;
-            DrawCircleV(pos, dashTrailRadiusDemo * fade,
-                        Fade(Palette::Accent, 0.18F * fade * flicker));
-            DrawCircleLines(static_cast<int32_t>(pos.x), static_cast<int32_t>(pos.y),
-                            dashTrailRadiusDemo * fade * 0.65F, Fade(Palette::Crit, 0.5F * fade));
-            DrawCircleV(pos, dashTrailRadiusDemo * fade * 0.22F,
-                        Fade(WHITE, 0.6F * fade * flicker));
-        }
-        break;
-    case 2:
     default:
         for (int32_t i = 0; i < 16; i++)
         {
@@ -6735,10 +6722,6 @@ void drawPickupIcon(PickupType type, ElementType element, Vector2 position, floa
     case PickupType::Regen:
         DrawCircleV(position, 6, Fade(Palette::Heal, alpha));
         DrawCircleLinesV(position, 7, Fade(WHITE, 0.6F * alpha));
-        break;
-    case PickupType::DashTrail:
-        DrawPoly(position, 3, 7, static_cast<float>(GetTime()) * 60.0F,
-                 Fade(Palette::Accent, alpha));
         break;
     case PickupType::MagnetPulse:
         DrawCircleLinesV(position, 8, Fade(Palette::Shield, alpha));

@@ -41,7 +41,6 @@ class Player
     float regenRate;
     float overchargeTimer;
 
-    float dashTrailTimer;
     bool secondWindReady;
 
     float overdriveTimer;
@@ -66,6 +65,9 @@ class Player
 
     bool shieldDashing = false;
     bool shieldDashKill = false;
+    float dashWedgeTimer = 0; // next afterimage wedge while dashing
+    float dashBlastTimer = 0; // next delayed-blast marker while dashing
+    int32_t dashBlastCount = 0; // markers dropped this dash
     float shieldDashGraceTimer = 0;
 };
 

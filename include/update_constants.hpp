@@ -30,6 +30,16 @@ constexpr float pickupMagnetSpeed = 7;
 constexpr float dashSpeed = 22;
 constexpr float dashDuration = 0.18F;
 constexpr int32_t dashDamage = 15;
+// Dash afterimage wedges, so speed and direction read at a glance.
+constexpr float dashWedgeInterval = 0.025F;
+constexpr float dashWedgeLife = 0.24F;
+constexpr float dashWedgeLength = 54.0F;
+// Delayed blasts: markers dropped along the dash path detonate a beat later.
+constexpr float dashBlastInterval = 0.09F;
+constexpr int32_t dashBlastMax = 6; // per dash
+constexpr float dashBlastFuse = 0.55F;
+constexpr float dashBlastRadius = 64.0F;
+constexpr float dashBlastDamageMult = 1.0F; // x dashDamage
 
 constexpr float holdChunkBaseDuration = 1.0F;
 constexpr float holdChunkPerLevel = 0.03F;
@@ -67,9 +77,6 @@ constexpr float overdriveDuration = 8.0F;
 
 constexpr float rockClusterRotationSpeed = 12.0F;
 constexpr float overchargeDamageMult = 1.5F;
-constexpr float dashTrailRadius = 24.0F;
-constexpr int32_t dashTrailDamage = 4;
-constexpr float dashTrailParticleLife = 0.9F;
 constexpr float flameParticleLife = 0.35F;
 constexpr float flameParticleRadius = 16.0F;
 constexpr int32_t flameParticlesPerConePerSecond = 40;
@@ -79,8 +86,7 @@ constexpr float dangerDowngradeDuration = 10.0F;
 constexpr int32_t dangerPickupChance = 2;
 
 constexpr int32_t rareBonusDropChance = 3;
-constexpr int32_t rareBonusCategoryCount =
-    6;
+constexpr int32_t rareBonusCategoryCount = 5;
 constexpr float dashKillChargeRefund = 0.6F;
 constexpr float shieldKillChargeRefund = 0.6F;
 constexpr float shieldDashKillGraceDuration = 1.0F;

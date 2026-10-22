@@ -174,6 +174,7 @@ void fireNerveBladeTornado(Game& game);
 void fireNerveBall(Game& game);
 void sniperLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg, WeaponType weapon);
 void fireLaserWeb(Game& game, const Weapon& weapon, Vector2 nose, Vector2 aim);
+void updateDashWedgesAndBlasts(Game& game, float deltaTime);
 void updateSniperShots(Game& game, float deltaTime);
 void updateOrbitBladeContact(Game& game, float deltaTime);
 void updateOrbitBladeLaunch(Game& game, float deltaTime);

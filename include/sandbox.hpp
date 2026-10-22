@@ -43,7 +43,7 @@ auto sandboxToggleIndicatorRect(const Game& game) -> Rectangle;
 void updateSandboxMenuInput(Game& game);
 
 constexpr int32_t browserCategoryCount = 6;
-constexpr int32_t browserParticleStyleCount = 3;
+constexpr int32_t browserParticleStyleCount = 2;
 
 auto browserCategoryLabel(int32_t category) -> std::string_view;
 auto browserParticleStyleName(int32_t index) -> std::string_view;

@@ -1336,43 +1336,82 @@ void updatePlayerBuffs(Game& game, float deltaTime)
         player.overdriveTimer = std::max(0.0F, player.overdriveTimer - deltaTime);
     }
 
-    if (player.dashTrailTimer > 0)
+    updateDashWedgesAndBlasts(game, deltaTime);
+}
+
+// While dashing: sharp afterimage wedges behind the ship, and blast markers dropped along the
+// path that detonate a beat later.
+void updateDashWedgesAndBlasts(Game& game, float deltaTime)
+{
+    auto& player = game.run.player;
+    if (player.dashing && Vector2Length(player.dashVelocity) > 0.01F)
     {
-        player.dashTrailTimer = std::max(0.0F, player.dashTrailTimer - deltaTime);
+        const Vector2 dir = Vector2Normalize(player.dashVelocity);
+        player.dashWedgeTimer -= deltaTime;
+        if (player.dashWedgeTimer <= 0)
+        {
+            player.dashWedgeTimer = dashWedgeInterval;
+            game.run.dashWedges.push_back(Particle{.position = player.position,
+                                                   .velocity = dir,
+                                                   .radius = dashWedgeLength,
+                                                   .life = dashWedgeLife,
+                                                   .maxLife = dashWedgeLife,
+                                                   .color = Palette::Charge});
+        }
+        player.dashBlastTimer -= deltaTime;
+        if (player.dashBlastTimer <= 0 && player.dashBlastCount < dashBlastMax)
+        {
+            player.dashBlastTimer = dashBlastInterval;
+            player.dashBlastCount++;
+            game.run.dashBlasts.push_back(Particle{.position = player.position,
+                                                   .life = dashBlastFuse,
+                                                   .maxLife = dashBlastFuse,
+                                                   .color = Palette::Accent});
+        }
+    }
+    else
+    {
+        player.dashBlastCount = 0;
+        player.dashBlastTimer = dashBlastInterval * 0.5F; // the first marker lands just after the start
     }
 
-    if (player.dashing && player.dashTrailTimer > 0)
+    for (auto& wedge : game.run.dashWedges)
     {
-        const float jitterAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-        const float jitterSpeed = static_cast<float>(GetRandomValue(2, 8)) / 10.0F;
-        game.run.dashTrailParticles.push_back(
-            Particle{.position = player.position,
-                     .velocity = Vector2{.x = std::cos(jitterAngle) * jitterSpeed,
-                                         .y = std::sin(jitterAngle) * jitterSpeed},
-                     .radius = dashTrailRadius,
-                     .life = dashTrailParticleLife,
-                     .maxLife = dashTrailParticleLife,
-                     .color = Palette::Accent});
+        wedge.life -= deltaTime;
+    }
+    std::erase_if(game.run.dashWedges, [](const Particle& p) { return p.life <= 0; });
 
+    const auto dmg = static_cast<int32_t>(static_cast<float>(dashDamage) * dashBlastDamageMult *
+                                          currentShip(game).damageMult);
+    for (auto& blast : game.run.dashBlasts)
+    {
+        blast.life -= deltaTime;
+        if (blast.life > 0)
+        {
+            continue;
+        }
         for (size_t i = 0; i < game.run.enemies.size(); i++)
         {
             auto& enemy = game.run.enemies.at(i);
             if (enemy.active && !enemy.phased &&
-                CheckCollisionCircles(player.position, dashTrailRadius, enemy.position,
-                                      enemyCollisionRadius(enemy)))
+                CheckCollisionCircles(blast.position, dashBlastRadius, enemy.position, enemyCollisionRadius(enemy)))
             {
-                damageEnemy(game, i, dashTrailDamage);
-                recordDamage(game, DamageSource::Dash, dashTrailDamage);
+                damageEnemy(game, i, dmg);
+                recordDamage(game, DamageSource::Dash, dmg);
             }
         }
+        for (auto& boss : game.run.bosses)
+        {
+            const Vector2 center{.x = boss.position.x + boss.size.x / 2, .y = boss.position.y + boss.size.y / 2};
+            if (boss.health > 0 && Vector2Distance(center, blast.position) <= dashBlastRadius + boss.size.x / 2)
+            {
+                damageBoss(game, boss, dmg, false);
+                recordDamage(game, DamageSource::Dash, dmg);
+            }
+        }
+        spawnKillExplosion(game, blast.position, Palette::Charge, 10, 0.9F);
     }
-
-    for (auto& particle : game.run.dashTrailParticles)
-    {
-        particle.position = Vector2Add(particle.position, particle.velocity);
-        particle.life -= deltaTime;
-    }
-    std::erase_if(game.run.dashTrailParticles, [](const Particle& p) { return p.life <= 0; });
+    std::erase_if(game.run.dashBlasts, [](const Particle& p) { return p.life <= 0; });
 }
 
 void collectLifeOrb(Game& game)
