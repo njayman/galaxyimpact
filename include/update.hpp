@@ -325,6 +325,7 @@ void updateWreckwormConstrict(Game& game, Boss& head, float deltaTime);
 void tryBeginRushQte(Game& game, Boss& boss, Vector2 bossCenter);
 void updateRushQte(Game& game, Boss& boss, float deltaTime);
 void endBossQteClean(Game& game, Boss& boss);
+void sandboxForceBossQte(Game& game, Boss& boss, BossAttack attack);
 void updateKrakenSnatch(Game& game, Boss& kraken, float deltaTime);
 void updateKrakenDraggedUnder(Game& game, Boss& kraken, float deltaTime);
 void updateBanishedJuggled(Game& game, Boss& banished, float deltaTime);

@@ -291,6 +291,7 @@ class Boss
     Vector2 devourDir{};                   // the inhale cone's axis, locked when it starts
     float slagmawPunishTimer = 0;          // Punish Window after a clean Swallowed
     float qteStunTimer = 0;                // any other boss: stunned after a clean Rush QTE
+    bool sandboxForcedRush = false;        // sandbox: the forced rush starts its QTE before enrage
     int32_t swallowPromptsLeft = 0;
     float magmaTrailDist = 0;              // Magma Ram: distance since the last pool
 

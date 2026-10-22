@@ -16,6 +16,7 @@ void seedWreckwormTrail(Boss& head, Vector2 headCenter, Vector2 trailDir);
 void beginWreckwormConstrict(Game& game, Boss& head);
 void updateSlagmawDevour(Game& game, Boss& slagmaw, float deltaTime);
 void endKrakenDraggedUnder(Game& game, Boss& kraken, bool clean);
+void beginKrakenDraggedUnder(Game& game, Boss& kraken);
 auto wreckwormCoilSegmentDeg(const Boss& head, int32_t segmentIndex) -> float;
 
 auto isGenericMovesetAttack(BossAttack attack) -> bool
@@ -2230,7 +2231,8 @@ void tryBeginRushQte(Game& game, Boss& boss, Vector2 bossCenter)
     const bool enragedDash = boss.attack == BossAttack::ChargeDash && !boss.isWreckwormHead &&
                              !boss.isWreckwormSegment && !boss.isBeltbreakerPlate && !boss.isKraken &&
                              !boss.isBanished &&
-                             static_cast<float>(boss.health) <= static_cast<float>(boss.maxHealth) * enrageHealthFrac;
+                             (boss.sandboxForcedRush ||
+                              static_cast<float>(boss.health) <= static_cast<float>(boss.maxHealth) * enrageHealthFrac);
     if (!(wreckworm || enragedDash) || bossQteStunned(boss) || !bossQteCanStart(game, QteKind::Rush))
     {
         return;
@@ -2242,6 +2244,7 @@ void tryBeginRushQte(Game& game, Boss& boss, Vector2 bossCenter)
         return;
     }
     bossQteBegin(game, boss.instanceId, QteKind::Rush);
+    boss.sandboxForcedRush = false;
     game.run.qteThreatDir = Vector2Normalize(boss.chargeVelocity);
     boss.rushPromptsLeft = UpdateConstants::rushQtePrompts;
     playSFX(game, game.resources.sounds.bossWindUp);
@@ -2483,6 +2486,54 @@ void updateSlagmawSwallowed(Game& game, Boss& slagmaw, float deltaTime)
         return;
     }
     qteBeginFinisher(game); // every prompt answered
+}
+
+// Sandbox: forcing a boss move starts that move's QTE at once, ignoring the 20 s gap. Grab
+// moves skip their catch; rush moves still run, and their Rush QTE starts as they pass (even
+// before enrage). Beltbreaker, Kraken and Banished open their own QTE on any forced move.
+void sandboxForceBossQte(Game& game, Boss& boss, BossAttack attack)
+{
+    if (!qteSlotFree(game))
+    {
+        return;
+    }
+    game.run.qteCooldowns.fill(0);
+    const Vector2 player = game.run.player.position;
+    if (boss.isBeltbreaker)
+    {
+        beginBeltbreakerPlateRush(game, boss);
+        detachBeltbreakerPlates(game, boss);
+    }
+    else if (boss.isKraken)
+    {
+        boss.snatchSlot = 0;
+        boss.snatchPhase = 0;
+        boss.tentaclePhase[0] = 5;
+        boss.tentaclePortalPos[0] = Vector2Add(player, Vector2{.x = 180.0F, .y = 0});
+        boss.snatchPos = player;
+        beginKrakenDraggedUnder(game, boss);
+    }
+    else if (boss.isBanished)
+    {
+        beginBanishedJuggled(game, boss, 0);
+    }
+    else if (boss.isWreckwormHead && !boss.krakenSnakeVariant && attack == BossAttack::CoilClamp)
+    {
+        boss.attack = BossAttack::CoilClamp;
+        boss.state = BossState::SHOOTING;
+        boss.stateTimer = 3.0F;
+        boss.targetPosition = player;
+        beginWreckwormConstrict(game, boss);
+    }
+    else if (boss.isSlagmaw && attack == BossAttack::Devour)
+    {
+        boss.devourDir = Vector2Normalize(Vector2Subtract(player, slagmawMawCenter(boss)));
+        beginSlagmawSwallowed(game, boss);
+    }
+    else if (attack == BossAttack::BurrowCharge || attack == BossAttack::DashRush || attack == BossAttack::ChargeDash)
+    {
+        boss.sandboxForcedRush = true; // tryBeginRushQte skips the enrage check
+    }
 }
 
 // After the finisher lands: each Boss QTE's own clean-clear payoff.

@@ -163,13 +163,15 @@ void sandboxToggleEvolve(Game& game)
 
 void sandboxForceAttackNearestBoss(Game& game)
 {
-    // Body parts (segments, plates) have no moveset; only a boss that picks attacks counts.
+    // Body parts (segments, plates) never count, even with a moveset of their own.
     Boss* nearest = nullptr;
     float bestDist = 0;
     for (auto& boss : game.run.bosses)
     {
         const float dist = Vector2Distance(game.run.player.position, boss.position);
-        if (!boss.moveset.empty() && (nearest == nullptr || dist < bestDist))
+        const bool hasQte = boss.isKraken || boss.isBanished || boss.isBeltbreaker;
+        if ((!boss.moveset.empty() || hasQte) && !boss.isBeltbreakerPlate && !boss.isWreckwormSegment &&
+            boss.health > 0 && (nearest == nullptr || dist < bestDist))
         {
             bestDist = dist;
             nearest = &boss;
@@ -179,7 +181,12 @@ void sandboxForceAttackNearestBoss(Game& game)
     {
         return;
     }
-    forceBossAttack(game, *nearest, static_cast<BossAttack>(game.sandboxBossAttackIndex));
+    const auto attack = static_cast<BossAttack>(game.sandboxBossAttackIndex);
+    if (!nearest->moveset.empty() && !nearest->isBanished)
+    {
+        forceBossAttack(game, *nearest, attack);
+    }
+    sandboxForceBossQte(game, *nearest, attack);
 }
 
 auto sandboxNearestDirectorBoss(Game& game) -> Boss*
