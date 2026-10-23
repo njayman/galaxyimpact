@@ -17,6 +17,7 @@ set(GALAXYIMPACT_SOURCES
     src/main.cpp
     src/menu.cpp
     src/platform.cpp
+    src/progression.cpp
     src/qte.cpp
     src/raygui_impl.cpp
     src/sandbox.cpp

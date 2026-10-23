@@ -10,6 +10,7 @@
 #include "guitheme.hpp"
 #include "menu.hpp"
 #include "palette.hpp"
+#include "progression.hpp"
 #include "raygui.h"
 #include "raylib.h"
 #include "raymath.h"
@@ -310,7 +311,7 @@ void drawTitle(const Game& game)
     windowText(game, "GALAXY IMPACT", game.resources.windowWidth / 2, layout.titleY, 100,
               Palette::Accent);
 
-    drawMenu(game, "", {"Start", "Achievements", "Bestiary", "Settings", "Exit"}, layout.menuY);
+    drawMenu(game, "", {"Start", "Skill Tree", "Achievements", "Bestiary", "Settings", "Exit"}, layout.menuY);
     drawHighScores(game, game.resources.windowWidth / 2, layout.highScoreY,
                    game.resources.highScores);
 }
@@ -355,6 +356,11 @@ void drawShipSelect(const Game& game)
 
     windowText(game, std::string(highlighted.description).c_str(), game.resources.windowWidth / 2,
               layout.descY, 18, Palette::StructLight);
+    if (!isShipUnlocked(game, shipClass))
+    {
+        windowText(game, "LOCKED - unlock it in the Skill Tree", game.resources.windowWidth / 2, layout.descY - 34, 20,
+                   Palette::Accent);
+    }
 
     const std::string stats = std::format(
         "HP {:.0f}   Armor {:.0f}   Dmg {:+.0f}%   Shields {}", highlighted.maxHealth,
@@ -490,8 +496,10 @@ auto overGameplay(const Game& game, GameState state) -> bool
     case GameState::SETTINGS:
     case GameState::ACHIEVEMENTS:
     case GameState::BESTIARY:
+    case GameState::SKILL_TREE:
         return game.settingsReturnState == GameState::PAUSED ||
-               game.settingsReturnState == GameState::GAME_OVER;
+               game.settingsReturnState == GameState::GAME_OVER ||
+               game.settingsReturnState == GameState::SANDBOX_MENU;
     default:
         return false;
     }
@@ -695,236 +703,236 @@ void drawSettings(const Game& game)
                game.resources.windowWidth / 2, hintY, 16, Palette::StructMid);
 }
 
-auto findEnemyKindIndex(std::string_view name) -> int32_t
-{
-    for (size_t i = 0; i < enemyKinds.size(); i++)
-    {
-        if (enemyKinds.at(i).name == name)
-        {
-            return static_cast<int32_t>(i);
-        }
-    }
-    return -1;
-}
-
-struct UnlockHint
-{
-    std::string condition;
-    std::string progress;
-};
-
-auto weaponUnlockHint(const Game& game, WeaponType weapon) -> UnlockHint
-{
-    const auto& ach = game.resources.achievements;
-
-    auto dashKillsFor = [&](std::string_view kindName) -> int32_t
-    {
-        const int32_t idx = findEnemyKindIndex(kindName);
-        return idx >= 0 ? ach.dashKillsByEnemyKind.at(static_cast<size_t>(idx)) : 0;
-    };
-    auto skillProgress = [&](SkillType id) -> std::string
-    {
-        return std::format("Lv {}/{}", game.run.skillLevels.at(static_cast<size_t>(id)),
-                           Skills.at(static_cast<size_t>(id)).maxLevel);
-    };
-
-    switch (weapon)
-    {
-    case WeaponType::Forward:
-        return {"Ranger's default weapon", ""};
-    case WeaponType::Orbit:
-        return {"Bastion's default weapon", ""};
-    case WeaponType::Beam:
-        return {"Max the Laser Shots skill", skillProgress(SkillType::LaserShots)};
-    case WeaponType::LaserShots:
-        return {"Interceptor's default weapon", ""};
-    case WeaponType::Homing:
-        return {"Reach wave 3", std::format("Best: wave {}", ach.highestWaveReached)};
-    case WeaponType::Mine:
-        return {"Reach wave 7", std::format("Best: wave {}", ach.highestWaveReached)};
-    case WeaponType::Shock:
-        return {"Reach wave 12", std::format("Best: wave {}", ach.highestWaveReached)};
-    case WeaponType::Ricochet:
-        return {"Dash-kill a Turret enemy",
-                std::format("{} dash kills so far", dashKillsFor("Turret"))};
-    case WeaponType::FollowerDrone:
-        return {"Dash-kill an Orbiter enemy",
-                std::format("{} dash kills so far", dashKillsFor("Orbiter"))};
-    case WeaponType::LaserDrone:
-        return {"Dash-kill a Laser Fence enemy",
-                std::format("{} dash kills so far", dashKillsFor("Laser Fence"))};
-    case WeaponType::FlakCannon:
-        return {"200 dash/nerve-burst kills total",
-                std::format("{}/{}", ach.dashOrNerveKills, flakCannonUnlockKillCount)};
-    case WeaponType::Railgun:
-        return {"Max the Forward Shot skill", skillProgress(SkillType::ForwardShot)};
-    case WeaponType::ChainLightning:
-        return {"Max the Orbit Blades skill", skillProgress(SkillType::OrbitBlades)};
-    case WeaponType::TurretDeploy:
-        return {"Max the Beam Sweep skill", skillProgress(SkillType::BeamSweep)};
-    case WeaponType::Flamethrower:
-        return {"Max the Homing Missiles skill", skillProgress(SkillType::HomingMissiles)};
-    case WeaponType::Sniper:
-        return {"Max the Railgun skill", skillProgress(SkillType::Railgun)};
-    case WeaponType::Count:
-        break;
-    }
-    return {"", ""};
-}
-
+// Achievements: every one earned is a skill point (see progression.hpp). Two columns; earned
+// rows bright with a tick, the rest dim with their progress where there is a count to show.
 void drawAchievements(Game& game)
 {
     applyGuiScale(game);
     const auto& ach = game.resources.achievements;
     const float scale = guiUiScale(game);
 
-    constexpr int32_t rowsPerColumn = 7;
-    constexpr int32_t rowHeight = 46;
-    constexpr int32_t columnWidth = 520;
-    constexpr int32_t iconBoxSize = 30;
-
-    // Whole screen (title through hint) is one invisible container, centered
-    // in the space above the Back button - and, if it's ever taller than
-    // that space, scrollable instead of overflowing.
+    constexpr int32_t columns = 2;
+    constexpr int32_t rowHeight = 30;
+    constexpr int32_t columnWidth = 470;
+    constexpr int32_t rows = (achievementCount + columns - 1) / columns;
     constexpr float titleYRel = 20.0F;
     constexpr float summaryYRel = titleYRel + 50.0F;
-    constexpr float gridTopYRel = summaryYRel + 60.0F;
-    constexpr float gridHeight = static_cast<float>(rowsPerColumn * rowHeight);
-    constexpr float hintYRel = gridTopYRel + gridHeight + 30.0F;
-    constexpr float contentHeightBase = hintYRel + 40.0F;
+    constexpr float gridTopYRel = summaryYRel + 45.0F;
+    constexpr float contentHeightBase = gridTopYRel + static_cast<float>(rows * rowHeight) + 30.0F;
 
     const float viewportHeight = static_cast<float>(game.resources.windowHeight) - 150.0F * scale;
     const float contentHeight = contentHeightBase * scale;
     game.achievementsScroll.maxOffset = std::max(0.0F, contentHeight - viewportHeight);
-    const float blockTop = std::max(0.0F, (viewportHeight - contentHeight) / 2) -
-                           game.achievementsScroll.offset;
+    const float blockTop = std::max(0.0F, (viewportHeight - contentHeight) / 2) - game.achievementsScroll.offset;
 
-    BeginScissorMode(0, 0, game.resources.windowWidth,
-                     static_cast<int32_t>(viewportHeight));
-
+    BeginScissorMode(0, 0, game.resources.windowWidth, static_cast<int32_t>(viewportHeight));
     windowText(game, "ACHIEVEMENTS", game.resources.windowWidth / 2,
-              static_cast<int32_t>((blockTop + titleYRel * scale) / scale), 34, Palette::Accent);
-
+               static_cast<int32_t>((blockTop + titleYRel * scale) / scale), 34, Palette::Accent);
+    const auto earned = static_cast<int32_t>(std::ranges::count(ach.earned, true));
     const std::string summary =
-        std::format("Weapon Slots: {} / 6   Highest Wave: {}   Infinite Mode: {}", ach.slotCap,
-                    ach.highestWaveReached, ach.infiniteModeUnlocked ? "Unlocked" : "Locked");
+        std::format("{} / {} earned   Skill points to spend: {}   Highest wave: {}", earned, achievementCount,
+                    skillPoints(game), ach.highestWaveReached);
     windowText(game, summary.c_str(), game.resources.windowWidth / 2,
-              static_cast<int32_t>((blockTop + summaryYRel * scale) / scale), 18,
-              Palette::StructLight);
+               static_cast<int32_t>((blockTop + summaryYRel * scale) / scale), 18, Palette::StructLight);
 
-    const int32_t leftX = game.resources.windowWidth / 2 -
-                          static_cast<int32_t>(static_cast<float>(columnWidth) * scale);
+    const float leftX = static_cast<float>(game.resources.windowWidth) / 2 - static_cast<float>(columnWidth) * scale;
     const float topY = blockTop + gridTopYRel * scale;
-
-    const Vector2 mouse = GetMousePosition();
-    std::optional<WeaponType> hovered;
-    Rectangle hoveredRect{};
-
-    for (size_t i = 0; i < static_cast<size_t>(WeaponType::Count); i++)
+    for (int32_t id = 0; id < achievementCount; id++)
     {
-        const auto weapon = static_cast<WeaponType>(i);
-        const bool unlocked = isWeaponTypeUnlocked(game, weapon);
-        const int32_t column = static_cast<int32_t>(i) / rowsPerColumn;
-        const int32_t row = static_cast<int32_t>(i) % rowsPerColumn;
-        const auto x = static_cast<float>(leftX) +
-                       static_cast<float>(column) * static_cast<float>(columnWidth) * scale;
-        const auto y = static_cast<float>(topY) +
-                       static_cast<float>(row) * static_cast<float>(rowHeight) * scale;
-        const Color color = unlocked ? Palette::StructLight : Palette::StructMid;
-
-        const Rectangle rowRect{.x = x,
-                                .y = y,
-                                .width = static_cast<float>(columnWidth) * scale,
-                                .height = static_cast<float>(rowHeight) * scale};
-        if (hoverActive(game) && CheckCollisionPointRec(mouse, rowRect))
+        const bool done = ach.earned.at(static_cast<size_t>(id));
+        const float x = leftX + static_cast<float>(id / rows) * static_cast<float>(columnWidth) * scale;
+        const float y = topY + static_cast<float>(id % rows) * static_cast<float>(rowHeight) * scale;
+        std::string line = achievementName(id);
+        if (!done && id < achievementWeaponMaxed)
         {
-            hovered = weapon;
-            hoveredRect = rowRect;
+            line += std::format("  ({}/{})", ach.killsByWeapon.at(static_cast<size_t>(id)), evolutionKillThreshold);
         }
-
-        const Vector2 iconCenter{.x = x + static_cast<float>(iconBoxSize) * scale / 2,
-                                 .y = y + static_cast<float>(iconBoxSize) * scale / 2};
-        DrawRectangleLines(static_cast<int32_t>(x), static_cast<int32_t>(y),
-                           static_cast<int32_t>(static_cast<float>(iconBoxSize) * scale),
-                           static_cast<int32_t>(static_cast<float>(iconBoxSize) * scale),
-                           Fade(Palette::StructMid, 0.6F));
-        drawWeaponIcon(weapon, iconCenter, static_cast<float>(iconBoxSize) * scale * 0.32F, color);
-
-        std::string line = std::string(weaponDisplayName(weapon)) + ": " +
-                           (unlocked ? "Unlocked" : "Locked") +
-                           std::format(" ({} kills)", ach.killsByWeapon.at(i));
-        if (weaponEvolves.at(i))
+        else if (!done && id == achievementDashNerveKills)
         {
-            line += ach.evolutionUnlocked.at(i) ? "  [Evo unlocked]" : "  [Evo locked]";
+            line += std::format("  ({}/{})", ach.dashOrNerveKills, flakCannonUnlockKillCount);
         }
-        drawText(game, line.c_str(),
-                 static_cast<int32_t>(x + static_cast<float>(iconBoxSize) * scale + 8 * scale),
-                 static_cast<int32_t>(y + static_cast<float>(iconBoxSize) * scale / 2 - 9 * scale),
-                 18, color);
+        const Color color = done ? Palette::Crit : Palette::StructMid;
+        const Vector2 mark{.x = x + 10.0F * scale, .y = y + 10.0F * scale};
+        if (done)
+        {
+            DrawLineEx(Vector2{.x = mark.x - 6 * scale, .y = mark.y}, Vector2{.x = mark.x - 2 * scale, .y = mark.y + 5 * scale},
+                       2.0F * scale, color);
+            DrawLineEx(Vector2{.x = mark.x - 2 * scale, .y = mark.y + 5 * scale}, Vector2{.x = mark.x + 6 * scale, .y = mark.y - 5 * scale},
+                       2.0F * scale, color);
+        }
+        else
+        {
+            DrawCircleLines(static_cast<int32_t>(mark.x), static_cast<int32_t>(mark.y), 5.0F * scale, color);
+        }
+        drawText(game, line.c_str(), static_cast<int32_t>(x + 24.0F * scale), static_cast<int32_t>(y), 17, color);
     }
-
-    if (hovered.has_value())
-    {
-        const bool unlocked = isWeaponTypeUnlocked(game, *hovered);
-        const auto hint = weaponUnlockHint(game, *hovered);
-        const size_t idx = static_cast<size_t>(*hovered);
-
-        std::vector<std::string> lines;
-        lines.push_back(std::string(weaponDisplayName(*hovered)) +
-                        (unlocked ? "  (Unlocked)" : "  (Locked)"));
-        if (!unlocked && !hint.condition.empty())
-        {
-            lines.push_back("Unlocks by: " + hint.condition);
-            if (!hint.progress.empty())
-            {
-                lines.push_back(hint.progress);
-            }
-        }
-        if (weaponEvolves.at(idx))
-        {
-            lines.push_back(ach.evolutionUnlocked.at(idx)
-                                ? "Evolution: unlocked"
-                                : std::format("Evolution: {}/{} kills with this weapon",
-                                              ach.killsByWeapon.at(idx), evolutionKillThreshold));
-        }
-
-        constexpr int32_t lineFontSize = 15;
-        constexpr int32_t lineHeight = 20;
-        int32_t boxWidth = 0;
-        for (const auto& l : lines)
-        {
-            boxWidth = std::max(boxWidth, measureText(game, l.c_str(), lineFontSize));
-        }
-        boxWidth += 16;
-        const int32_t boxHeight = static_cast<int32_t>(lines.size()) * lineHeight + 12;
-
-        auto tipX = static_cast<int32_t>(hoveredRect.x);
-        if (tipX + boxWidth > game.resources.windowWidth)
-        {
-            tipX = game.resources.windowWidth - boxWidth;
-        }
-        const auto tipY = static_cast<int32_t>(hoveredRect.y + hoveredRect.height);
-
-        DrawRectangle(tipX, tipY, boxWidth, boxHeight, Fade(Palette::Void, 0.92F));
-        DrawRectangleLines(tipX, tipY, boxWidth, boxHeight, Palette::StructMid);
-        for (size_t li = 0; li < lines.size(); li++)
-        {
-            drawText(game, lines.at(li).c_str(), tipX + 8,
-                     tipY + 6 + static_cast<int32_t>(li) * lineHeight, lineFontSize,
-                     li == 0 ? Palette::Accent : Palette::StructLight);
-        }
-    }
-
-    windowText(game,
-               touchInputActive(game) ? "Tap & hold a weapon for unlock details"
-                                      : "Hover a weapon for unlock details",
-               game.resources.windowWidth / 2, static_cast<int32_t>((blockTop + hintYRel * scale) / scale),
-               16, Palette::StructMid);
-
     EndScissorMode();
 
     const Rectangle back = backButtonRect(game);
-    if (hoverActive(game) && CheckCollisionPointRec(mouse, back))
+    if (hoverActive(game) && CheckCollisionPointRec(GetMousePosition(), back))
+    {
+        GuiSetState(STATE_FOCUSED);
+    }
+    GuiButton(back, "Back");
+    GuiSetState(STATE_NORMAL);
+}
+
+// Skill tree: matte discs joined to their prerequisites. Owned nodes are lit, buyable ones pulse
+// in the accent, the rest stay dark until a neighbour is bought.
+void drawSkillTree(const Game& game)
+{
+    applyGuiScale(game);
+    const float r = skillTreeNodeRadius(game);
+    const float t = static_cast<float>(GetTime());
+
+    const int32_t points = skillPoints(game);
+    windowText(game, "SKILL TREE", game.resources.windowWidth / 2, 28, 34, Palette::Accent);
+    const std::string header = game.sandbox ? std::string("Points: unlimited (sandbox)")
+                                            : std::format("Points: {}", points);
+    windowText(game, header.c_str(), game.resources.windowWidth / 2, 72, 20,
+               points > 0 || game.sandbox ? Palette::Crit : Palette::StructLight);
+
+    // Branch labels, beside the first node of each branch.
+    const auto label = [&](const char* text, int32_t node, Vector2 off)
+    {
+        const Vector2 p = Vector2Add(skillTreeNodePos(game, node), Vector2Scale(off, r));
+        const int32_t w = MeasureText(text, static_cast<int32_t>(r * 0.5F));
+        DrawText(text, static_cast<int32_t>(p.x) - w / 2, static_cast<int32_t>(p.y), static_cast<int32_t>(r * 0.5F),
+                 Palette::StructMid);
+    };
+    label("OFFENCE", 1, Vector2{.x = 0, .y = -2.2F});
+    label("DEFENCE", 14, Vector2{.x = 0, .y = -2.2F});
+    label("UTILITY", 25, Vector2{.x = 2.3F, .y = -0.25F});
+
+    // Edges first, under the nodes.
+    for (int32_t i = 0; i < skillNodeCount; i++)
+    {
+        for (const int8_t req : skillTree.at(static_cast<size_t>(i)).prereqs)
+        {
+            if (req < 0)
+            {
+                continue;
+            }
+            const Vector2 a = skillTreeNodePos(game, req);
+            const Vector2 b = skillTreeNodePos(game, i);
+            const Vector2 dir = Vector2Normalize(Vector2Subtract(b, a));
+            const Vector2 from = Vector2Add(a, Vector2Scale(dir, r));
+            const Vector2 to = Vector2Subtract(b, Vector2Scale(dir, r));
+            const bool lit = skillNodeOwned(game, i);
+            const bool open = skillNodeOwned(game, req);
+            const Color color =
+                lit ? Fade(Palette::Crit, 0.7F) : open ? Fade(Palette::Accent, 0.55F) : Palette::StructDark;
+            const float len = Vector2Distance(from, to);
+            if (len < r * 8.0F)
+            {
+                DrawLineEx(from, to, lit ? 3.0F : 2.0F, color);
+                continue;
+            }
+            // A long link across branches is dotted, so it reads as a cross-link, not a path.
+            for (float d = 0; d < len; d += r * 0.5F)
+            {
+                DrawCircleV(Vector2Add(from, Vector2Scale(dir, d)), lit ? 1.8F : 1.4F, color);
+            }
+        }
+    }
+
+    for (int32_t i = 0; i < skillNodeCount; i++)
+    {
+        const SkillNode& node = skillTree.at(static_cast<size_t>(i));
+        const Vector2 c = skillTreeNodePos(game, i);
+        const bool owned = skillNodeOwned(game, i);
+        const bool available = skillNodeAvailable(game, i);
+        const bool selected = i == game.skillTreeSelected;
+        float s = popScale(game, i % 8);
+        if (i == game.skillTreePopNode && game.skillTreePopTimer > 0)
+        {
+            s *= 1.0F + 0.35F * std::sin(game.skillTreePopTimer / 0.45F * PI);
+        }
+        if (s <= 0)
+        {
+            continue;
+        }
+        beginPop(c, s);
+        const float pulse = 0.5F + 0.5F * std::sin(t * 4.0F + static_cast<float>(i));
+        const Color ring = owned ? Palette::Crit : available ? Palette::Accent : Palette::StructMid;
+        const Color icon = owned ? Palette::Crit : available ? Palette::Haze : Palette::StructMid;
+        const float nodeR = node.kind == NodeKind::Ship ? r * 1.25F : r;
+        if (available)
+        {
+            DrawCircleV(c, nodeR * (1.25F + 0.1F * pulse), Fade(Palette::Accent, 0.12F + 0.12F * pulse));
+        }
+        DrawCircleV(c, nodeR, owned ? Palette::StructDark : Palette::Void);
+        DrawRing(c, nodeR - (selected ? 4.0F : 2.0F), nodeR, 0, 360, 48, ring);
+        if (selected)
+        {
+            DrawRing(c, nodeR + 5.0F, nodeR + 7.0F, t * 90.0F, t * 90.0F + 300.0F, 40, Palette::Haze);
+        }
+        const float iconS = nodeR * 0.48F;
+        switch (node.kind)
+        {
+        case NodeKind::Ship:
+            drawShipHull(static_cast<ShipClass>(node.value), c, nodeR * 0.55F, -PI / 2, icon);
+            break;
+        case NodeKind::Weapon:
+            drawWeaponIcon(static_cast<WeaponType>(node.value), c, iconS, icon);
+            break;
+        case NodeKind::Evolution:
+            drawWeaponIcon(static_cast<WeaponType>(node.value), c, iconS, icon, true);
+            DrawRing(c, nodeR * 0.78F, nodeR * 0.82F, 0, 360, 40, Fade(icon, 0.6F)); // evolved: inner ring
+            break;
+        case NodeKind::Passive:
+            drawPassiveIcon(static_cast<SkillType>(node.value), c, iconS, icon);
+            break;
+        case NodeKind::Slot:
+        {
+            const float h = iconS * 0.8F;
+            DrawRectangleLinesEx(Rectangle{.x = c.x - h, .y = c.y - h, .width = h * 2, .height = h * 2}, 2.0F, icon);
+            const std::string n = std::to_string(node.value);
+            const auto fs = static_cast<int32_t>(h * 1.2F);
+            DrawText(n.c_str(), static_cast<int32_t>(c.x) - MeasureText(n.c_str(), fs) / 2,
+                     static_cast<int32_t>(c.y) - fs / 2, fs, icon);
+            break;
+        }
+        }
+        endPop();
+    }
+
+    // The selected node, described along the bottom.
+    const int32_t sel = game.skillTreeSelected;
+    const SkillNode& node = skillTree.at(static_cast<size_t>(sel));
+    constexpr std::array<const char*, 5> kinds{"Ship (with its signature weapon and Nerve burst)", "Weapon",
+                                               "Upgrade helper", "Evolution", "Weapon slot"};
+    std::string state;
+    if (skillNodeOwned(game, sel))
+    {
+        state = "Unlocked";
+    }
+    else if (skillNodeAvailable(game, sel))
+    {
+        state = game.sandbox || points > 0 ? "Click or Enter: unlock for 1 point" : "Needs 1 point: earn achievements";
+    }
+    else
+    {
+        state = "Needs: ";
+        bool first = true;
+        for (const int8_t req : node.prereqs)
+        {
+            if (req >= 0 && !skillNodeOwned(game, req))
+            {
+                state += (first ? "" : ", ") + skillNodeName(req);
+                first = false;
+            }
+        }
+    }
+    const float scale = guiUiScale(game);
+    const Rectangle back = backButtonRect(game);
+    const auto infoY = static_cast<int32_t>((back.y - 70.0F * scale) / scale);
+    const std::string title = std::format("{}  -  {}", skillNodeName(sel), kinds.at(static_cast<size_t>(node.kind)));
+    windowText(game, title.c_str(), game.resources.windowWidth / 2, infoY, 22, Palette::Haze);
+    windowText(game, state.c_str(), game.resources.windowWidth / 2, infoY + 30, 17,
+               skillNodeOwned(game, sel) ? Palette::Crit : Palette::StructLight);
+
+    if (hoverActive(game) && CheckCollisionPointRec(GetMousePosition(), back))
     {
         GuiSetState(STATE_FOCUSED);
     }
@@ -7421,8 +7429,8 @@ auto drawGame(Game& game) -> void
     case GameState::SETTINGS:
     case GameState::ACHIEVEMENTS:
     case GameState::BESTIARY:
-        if (game.settingsReturnState == GameState::PAUSED ||
-            game.settingsReturnState == GameState::GAME_OVER)
+    case GameState::SKILL_TREE:
+        if (overGameplay(game, game.state))
         {
             beginWorldCamera(game);
             drawGameplayWorld(game);
@@ -7496,6 +7504,7 @@ auto drawGame(Game& game) -> void
     case GameState::SETTINGS:
     case GameState::ACHIEVEMENTS:
     case GameState::BESTIARY:
+    case GameState::SKILL_TREE:
         if (game.settingsReturnState == GameState::PAUSED)
         {
             drawHUD(game);
@@ -7557,6 +7566,10 @@ auto drawGame(Game& game) -> void
     case GameState::BESTIARY:
         drawOverlay(game);
         drawBestiary(game);
+        break;
+    case GameState::SKILL_TREE:
+        drawOverlay(game);
+        drawSkillTree(game);
         break;
     case GameState::ENDING:
         drawEnding(game);

@@ -2,6 +2,7 @@
 
 #include "entities/enemy.hpp"
 #include "entities/item.hpp"
+#include "progression.hpp"
 #include <array>
 #include <cstdint>
 #include <string_view>
@@ -12,9 +13,8 @@ struct Achievements
     std::array<int32_t, enemyKinds.size()> dashKillsByEnemyKind{};
     int32_t dashOrNerveKills{};
     int32_t highestWaveReached{};
-    int32_t slotCap{3};
-    std::array<bool, static_cast<size_t>(WeaponType::Count)> typeUnlocked{};
-    std::array<bool, static_cast<size_t>(WeaponType::Count)> evolutionUnlocked{};
+    std::array<bool, achievementCount> earned{};    // each is worth one skill point
+    std::array<bool, skillNodeCount> owned{};       // skill tree nodes bought
 
     bool infiniteModeUnlocked{false};
 };

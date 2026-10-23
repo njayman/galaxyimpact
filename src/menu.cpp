@@ -33,7 +33,7 @@ auto backButtonRect(const Game& game) -> Rectangle
 
 auto titleLayout() -> TitleLayout
 {
-    constexpr int32_t menuCount = 5; // Start, Achievements, Bestiary, Settings, Exit
+    constexpr int32_t menuCount = 6; // Start, Skill Tree, Achievements, Bestiary, Settings, Exit
     constexpr int32_t menuHeight =
         MenuLayout::buttonHeight * menuCount + MenuLayout::buttonGap * (menuCount - 1);
     constexpr int32_t highScoreHeight = 170; // "Top Scores" heading + up to 5 rows

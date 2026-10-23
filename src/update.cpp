@@ -11,6 +11,7 @@
 #include "raymath.h"
 #include "sandbox.hpp"
 #include "update_constants.hpp"
+#include "progression.hpp"
 #include <algorithm>
 #include <array>
 #include <cfloat>
@@ -170,7 +171,7 @@ void duckBGM(Game& game) { game.resources.bgm.duckTimer = bgmDuckDuration; }
 auto updateTitle(Game& game) -> bool
 {
     const auto [index, confirmed] = updateMenuSelectionWindow(
-        game, game.menuIndex, 5, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
+        game, game.menuIndex, 6, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
         MenuLayout::buttonGap, titleLayout().menuY);
     playMenuSounds(game, index, confirmed);
     game.menuIndex = index;
@@ -186,18 +187,22 @@ auto updateTitle(Game& game) -> bool
             break;
         case 1:
             game.settingsReturnState = GameState::TITLE;
-            game.state = GameState::ACHIEVEMENTS;
+            game.state = GameState::SKILL_TREE;
             break;
         case 2:
             game.settingsReturnState = GameState::TITLE;
-            game.state = GameState::BESTIARY;
+            game.state = GameState::ACHIEVEMENTS;
             break;
         case 3:
+            game.settingsReturnState = GameState::TITLE;
+            game.state = GameState::BESTIARY;
+            break;
+        case 4:
             game.settingsReturnState = GameState::TITLE;
             game.menuIndex = 0;
             game.state = GameState::SETTINGS;
             break;
-        case 4:
+        case 5:
             return true;
         default:
             break;
@@ -223,6 +228,86 @@ auto updateAchievements(Game& game) -> bool
     {
         game.state = game.settingsReturnState;
         game.achievementsScroll.offset = 0;
+    }
+    return false;
+}
+
+// Skill tree: hover or arrow keys pick a node, click or Enter buys it.
+auto updateSkillTree(Game& game) -> bool
+{
+    if (game.skillTreePopTimer > 0)
+    {
+        game.skillTreePopTimer -= GetFrameTime();
+    }
+    if (IsKeyPressed(KEY_ESCAPE) || (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+                                     CheckCollisionPointRec(GetMousePosition(), backButtonRect(game))))
+    {
+        game.state = game.settingsReturnState;
+        return false;
+    }
+
+    const int32_t before = game.skillTreeSelected;
+    bool buy = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
+    const float radius = skillTreeNodeRadius(game);
+    const Vector2 mouse = GetMousePosition();
+    for (int32_t i = 0; i < skillNodeCount; i++)
+    {
+        if (Vector2Distance(mouse, skillTreeNodePos(game, i)) < radius * 1.2F)
+        {
+            // Hover only when the mouse moves, so a resting cursor doesn't fight the arrow keys.
+            if ((hoverActive(game) && Vector2Length(GetMouseDelta()) > 0) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                game.skillTreeSelected = i;
+            }
+            buy = buy || IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+        }
+    }
+
+    // Arrow keys: the nearest node roughly in that direction.
+    const auto axis = [](int32_t plus, int32_t plusAlt, int32_t minus, int32_t minusAlt)
+    {
+        return (IsKeyPressed(plus) || IsKeyPressed(plusAlt) ? 1.0F : 0.0F) -
+               (IsKeyPressed(minus) || IsKeyPressed(minusAlt) ? 1.0F : 0.0F);
+    };
+    const Vector2 dir{.x = axis(KEY_RIGHT, KEY_D, KEY_LEFT, KEY_A), .y = axis(KEY_DOWN, KEY_S, KEY_UP, KEY_W)};
+    if (dir.x != 0 || dir.y != 0)
+    {
+        const Vector2 from = skillTreeNodePos(game, game.skillTreeSelected);
+        float best = 1e9F;
+        for (int32_t i = 0; i < skillNodeCount; i++)
+        {
+            const Vector2 to = Vector2Subtract(skillTreeNodePos(game, i), from);
+            const float along = Vector2DotProduct(to, Vector2Normalize(dir));
+            const float dist = Vector2Length(to);
+            if (i == before || along < dist * 0.5F)
+            {
+                continue;
+            }
+            const float score = dist + (dist - along) * 2.0F; // prefer straight ahead
+            if (score < best)
+            {
+                best = score;
+                game.skillTreeSelected = i;
+            }
+        }
+    }
+    if (game.skillTreeSelected != before)
+    {
+        playSFX(game, game.resources.sounds.menuMove);
+    }
+
+    if (buy)
+    {
+        if (buySkillNode(game, game.skillTreeSelected))
+        {
+            playSFX(game, game.resources.sounds.menuConfirm);
+            game.skillTreePopNode = game.skillTreeSelected;
+            game.skillTreePopTimer = 0.45F;
+        }
+        else if (!skillNodeOwned(game, game.skillTreeSelected))
+        {
+            playSFX(game, game.resources.sounds.nerveFizzle);
+        }
     }
     return false;
 }
@@ -284,6 +369,11 @@ auto updateShipSelect(Game& game) -> bool
     playMenuSounds(game, newIndex, confirmed);
     game.menuIndex = newIndex;
 
+    if (confirmed && !isShipUnlocked(game, static_cast<ShipClass>(newIndex)))
+    {
+        confirmed = false; // locked: unlocked in the skill tree
+        playSFX(game, game.resources.sounds.nerveFizzle);
+    }
     if (confirmed)
     {
         game.resources.settings.shipIndex = newIndex;
@@ -3939,6 +4029,10 @@ auto sampleDistinct(std::vector<SkillType> ids, int count) -> std::vector<SkillT
 
 auto demoSkillAllowed(const Game& game, SkillType id) -> bool
 {
+    if (!isPassiveUnlocked(game, id))
+    {
+        return false; // a helper not yet bought in the skill tree
+    }
     for (size_t i = 0; i < weaponGrantSkill.size(); i++)
     {
         const auto kind = static_cast<WeaponType>(i);
@@ -5911,6 +6005,8 @@ auto UpdateGame(Game& game, float deltaTime) -> bool
         return updateAchievements(game);
     case GameState::BESTIARY:
         return updateBestiary(game);
+    case GameState::SKILL_TREE:
+        return updateSkillTree(game);
     case GameState::SANDBOX_MENU:
         updateSandboxMenuInput(game);
         break;

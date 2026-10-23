@@ -1,4 +1,5 @@
 #include "update.hpp"
+#include "progression.hpp"
 
 #include "democonfig.hpp"
 #include "entities/ship.hpp"
@@ -905,6 +906,7 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
     if (boss.health <= 0)
     {
         boss.banishedDefeated = true;
+        earnBossAchievement(game, BossAchievement::Banished);
         boss.banishedStage = 3;
         game.run.player.grabbed = false;
         game.run.player.grabbingTentacle = -1;

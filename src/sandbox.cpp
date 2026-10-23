@@ -340,6 +340,13 @@ auto sandboxMenuButtons() -> const std::vector<SandboxMenuButton>&
         {[](const Game& game)
          { return std::format("Kill Box: {}", game.sandboxKillBoxArmed ? "ARMED" : "OFF"); },
          sandboxArmKillBox},
+        {[](const Game&) { return std::string("Skill Tree (free)"); },
+         [](Game& game)
+         {
+             game.settingsReturnState = GameState::SANDBOX_MENU;
+             game.state = GameState::SKILL_TREE;
+         }},
+        {[](const Game&) { return std::string("Reset Progress"); }, resetProgression},
     };
     return buttons;
 }

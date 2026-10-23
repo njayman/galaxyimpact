@@ -15,12 +15,6 @@ namespace
 {
 auto achievementsFilePath() -> std::string { return getSaveDataDir() + "achievements.txt"; }
 
-void showToast(Game& game, std::string_view message)
-{
-    constexpr float toastDuration = 4.0F;
-    game.run.achievementToast = message;
-    game.run.achievementToastTimer = toastDuration;
-}
 
 auto enemyKindIndexByName(std::string_view name) -> int32_t
 {
@@ -34,17 +28,6 @@ auto enemyKindIndexByName(std::string_view name) -> int32_t
     return -1;
 }
 
-void unlockType(Game& game, Achievements& achievements, WeaponType weapon, std::string_view label)
-{
-    const auto idx = static_cast<size_t>(weapon);
-    if (achievements.typeUnlocked.at(idx))
-    {
-        return;
-    }
-    achievements.typeUnlocked.at(idx) = true;
-    showToast(game, std::string("Achievement unlocked: ") + std::string(label) + "!");
-    saveAchievements(achievements);
-}
 }
 
 auto weaponDisplayName(WeaponType weapon) -> std::string_view
@@ -140,8 +123,6 @@ auto parseLegacyAchievements(const std::vector<int32_t>& v) -> std::optional<Ach
             for (size_t i = 0; i < w && i < a.killsByWeapon.size(); i++)
             {
                 a.killsByWeapon.at(i) = v.at(i);
-                a.typeUnlocked.at(i) = v.at(types + i) != 0;
-                a.evolutionUnlocked.at(i) = v.at(evos + i) != 0;
             }
             for (size_t i = 0; i < e; i++)
             {
@@ -149,7 +130,6 @@ auto parseLegacyAchievements(const std::vector<int32_t>& v) -> std::optional<Ach
             }
             a.dashOrNerveKills = v.at(stats);
             a.highestWaveReached = v.at(stats + 1);
-            a.slotCap = slotCap;
             a.infiniteModeUnlocked = flag != 0 && v.back() != 0;
             return a;
         }
@@ -170,7 +150,7 @@ auto loadAchievements() -> Achievements
 
     std::string marker;
     file >> marker;
-    if (marker != "v2")
+    if (marker != "v2" && marker != "v3")
     {
         file.clear();
         file.seekg(0);
@@ -192,16 +172,26 @@ auto loadAchievements() -> Achievements
     {
         achievements.highestWaveReached = value;
     }
-    if (int32_t value = 0; file >> value)
+    if (marker == "v2")
     {
-        achievements.slotCap = value;
+        // Before the skill tree: the old direct unlocks are dropped (progress resets), stats stay.
+        std::array<int32_t, 2 * static_cast<size_t>(WeaponType::Count) + 1> oldUnlocks{};
+        int32_t slotCap = 0;
+        file >> slotCap;
+        readSizedInts(file, oldUnlocks);
+        readSizedInts(file, oldUnlocks);
+        if (int32_t value = 0; file >> value)
+        {
+            achievements.infiniteModeUnlocked = value != 0;
+        }
+        return achievements;
     }
-    readSizedInts(file, achievements.typeUnlocked);
-    readSizedInts(file, achievements.evolutionUnlocked);
     if (int32_t value = 0; file >> value)
     {
         achievements.infiniteModeUnlocked = value != 0;
     }
+    readSizedInts(file, achievements.earned);
+    readSizedInts(file, achievements.owned);
 
     return achievements;
 }
@@ -214,38 +204,73 @@ void saveAchievements(const Achievements& achievements)
         return;
     }
 
-    file << "v2";
+    file << "v3";
     writeSizedInts(file, achievements.killsByWeapon);
     writeSizedInts(file, achievements.dashKillsByEnemyKind);
     file << ' ' << achievements.dashOrNerveKills << ' ' << achievements.highestWaveReached << ' '
-         << achievements.slotCap;
-    writeSizedInts(file, achievements.typeUnlocked);
-    writeSizedInts(file, achievements.evolutionUnlocked);
-    file << ' ' << (achievements.infiniteModeUnlocked ? 1 : 0);
+         << (achievements.infiniteModeUnlocked ? 1 : 0);
+    writeSizedInts(file, achievements.earned);
+    writeSizedInts(file, achievements.owned);
 
     file.close();
     platformSyncSaveData();
 }
 
-// Sandbox treats every weapon, evolution and slot as unlocked without touching the save.
+// The skill tree gates weapons, evolutions and slots; the sandbox treats everything as unlocked.
+// A ship's signature weapon comes with the ship.
 auto isWeaponTypeUnlocked(const Game& game, WeaponType weapon) -> bool
 {
-    if (game.sandbox || currentShip(game).defaultWeapon == weapon)
+    if (game.sandbox || weapon == WeaponType::Forward || currentShip(game).defaultWeapon == weapon)
     {
         return true;
     }
-    return game.resources.achievements.typeUnlocked.at(static_cast<size_t>(weapon));
+    for (int32_t n = 0; n < skillNodeCount; n++)
+    {
+        const SkillNode& node = skillTree.at(static_cast<size_t>(n));
+        const bool unlocks = (node.kind == NodeKind::Weapon && node.value == static_cast<int32_t>(weapon)) ||
+                             (node.kind == NodeKind::Ship &&
+                              ships.at(static_cast<size_t>(node.value)).defaultWeapon == weapon);
+        if (unlocks && skillNodeOwned(game, n))
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 auto isEvolutionUnlocked(const Game& game, WeaponType weapon) -> bool
 {
-    return game.sandbox ||
-           game.resources.achievements.evolutionUnlocked.at(static_cast<size_t>(weapon));
+    if (game.sandbox)
+    {
+        return true;
+    }
+    for (int32_t n = 0; n < skillNodeCount; n++)
+    {
+        const SkillNode& node = skillTree.at(static_cast<size_t>(n));
+        if (node.kind == NodeKind::Evolution && node.value == static_cast<int32_t>(weapon))
+        {
+            return skillNodeOwned(game, n);
+        }
+    }
+    return false;
 }
 
 auto weaponSlotCap(const Game& game) -> int32_t
 {
-    return game.sandbox ? maxWeaponSlotCap : game.resources.achievements.slotCap;
+    if (game.sandbox)
+    {
+        return maxWeaponSlotCap;
+    }
+    int32_t cap = 3;
+    for (int32_t n = 0; n < skillNodeCount; n++)
+    {
+        const SkillNode& node = skillTree.at(static_cast<size_t>(n));
+        if (node.kind == NodeKind::Slot && skillNodeOwned(game, n))
+        {
+            cap = std::max(cap, node.value);
+        }
+    }
+    return cap;
 }
 
 void recordWeaponKill(Game& game, WeaponType weapon)
@@ -253,18 +278,9 @@ void recordWeaponKill(Game& game, WeaponType weapon)
     Achievements& achievements = game.resources.achievements;
     const auto idx = static_cast<size_t>(weapon);
     achievements.killsByWeapon.at(idx)++;
-
-    if (achievements.evolutionUnlocked.at(idx))
-    {
-        return;
-    }
-
     if (achievements.killsByWeapon.at(idx) >= evolutionKillThreshold)
     {
-        achievements.evolutionUnlocked.at(idx) = true;
-        saveAchievements(achievements);
-        showToast(game, std::string("Achievement unlocked: ") +
-                            std::string(weaponDisplayName(weapon)) + " evolution!");
+        earnAchievement(game, achievementWeaponKills + static_cast<int32_t>(weapon));
     }
 }
 
@@ -279,15 +295,15 @@ void recordDashKill(Game& game, int32_t enemyKindIndex)
 
     if (enemyKindIndex == enemyKindIndexByName("Turret"))
     {
-        unlockType(game, achievements, WeaponType::Ricochet, "Ricochet");
+        earnAchievement(game, achievementDashTurret);
     }
     else if (enemyKindIndex == enemyKindIndexByName("Orbiter"))
     {
-        unlockType(game, achievements, WeaponType::FollowerDrone, "Follower Drone");
+        earnAchievement(game, achievementDashOrbiter);
     }
     else if (enemyKindIndex == enemyKindIndexByName("Laser Fence"))
     {
-        unlockType(game, achievements, WeaponType::LaserDrone, "Laser Drone");
+        earnAchievement(game, achievementDashLaserFence);
     }
 }
 
@@ -297,36 +313,18 @@ void recordDashOrNerveKill(Game& game)
     achievements.dashOrNerveKills++;
     if (achievements.dashOrNerveKills >= flakCannonUnlockKillCount)
     {
-        unlockType(game, achievements, WeaponType::FlakCannon, "Flak Cannon");
+        earnAchievement(game, achievementDashNerveKills);
     }
 }
 
 void recordSkillMaxed(Game& game, SkillType id)
 {
-    Achievements& achievements = game.resources.achievements;
-    if (id == SkillType::ForwardShot)
+    for (size_t w = 0; w < weaponGrantSkill.size(); w++)
     {
-        unlockType(game, achievements, WeaponType::Railgun, "Railgun");
-    }
-    else if (id == SkillType::OrbitBlades)
-    {
-        unlockType(game, achievements, WeaponType::ChainLightning, "Chain Lightning");
-    }
-    else if (id == SkillType::BeamSweep)
-    {
-        unlockType(game, achievements, WeaponType::TurretDeploy, "Turret Deploy");
-    }
-    else if (id == SkillType::HomingMissiles)
-    {
-        unlockType(game, achievements, WeaponType::Flamethrower, "Flamethrower");
-    }
-    else if (id == SkillType::Railgun)
-    {
-        unlockType(game, achievements, WeaponType::Sniper, "Sniper");
-    }
-    else if (id == SkillType::LaserShots)
-    {
-        unlockType(game, achievements, WeaponType::Beam, "Beam Sweep");
+        if (weaponGrantSkill.at(w) == id)
+        {
+            earnAchievement(game, achievementWeaponMaxed + static_cast<int32_t>(w));
+        }
     }
 }
 
@@ -338,47 +336,12 @@ void recordWaveReached(Game& game, int32_t wave)
         return;
     }
     achievements.highestWaveReached = wave;
-
-    bool changed = false;
-    if (wave >= 3 && !achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Homing)))
+    saveAchievements(achievements);
+    for (size_t i = 0; i < achievementWaveMilestones.size(); i++)
     {
-        achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Homing)) = true;
-        showToast(game, "Achievement unlocked: Homing Missiles!");
-        changed = true;
-    }
-    if (wave >= 8 && achievements.slotCap < 4)
-    {
-        achievements.slotCap = 4;
-        showToast(game, "Achievement unlocked: 4th weapon slot!");
-        changed = true;
-    }
-    if (wave >= 7 && !achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Mine)))
-    {
-        achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Mine)) = true;
-        showToast(game, "Achievement unlocked: Mine Layer!");
-        changed = true;
-    }
-    if (wave >= 12 && !achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Shock)))
-    {
-        achievements.typeUnlocked.at(static_cast<size_t>(WeaponType::Shock)) = true;
-        showToast(game, "Achievement unlocked: Shockwave!");
-        changed = true;
-    }
-    if (wave >= 35 && achievements.slotCap < 5)
-    {
-        achievements.slotCap = 5;
-        showToast(game, "Achievement unlocked: 5th weapon slot!");
-        changed = true;
-    }
-    if (wave >= 55 && achievements.slotCap < 6)
-    {
-        achievements.slotCap = 6;
-        showToast(game, "Achievement unlocked: 6th weapon slot!");
-        changed = true;
-    }
-
-    if (changed)
-    {
-        saveAchievements(achievements);
+        if (wave >= achievementWaveMilestones.at(i))
+        {
+            earnAchievement(game, achievementWaves + static_cast<int32_t>(i));
+        }
     }
 }

@@ -62,6 +62,7 @@ enum class GameState : std::uint8_t
     SETTINGS,
     ACHIEVEMENTS,
     BESTIARY,
+    SKILL_TREE,
     SANDBOX_MENU,
     ENDING
 };
@@ -354,6 +355,9 @@ struct Game
     PointerHold pointerHold;
     ContentScroll achievementsScroll;
     ContentScroll bestiaryScroll;
+    int32_t skillTreeSelected = 0;
+    int32_t skillTreePopNode = -1; // the node just bought, popping
+    float skillTreePopTimer = 0;
 };
 
 auto InitGame() -> Game;

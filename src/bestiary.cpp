@@ -3,6 +3,7 @@
 #include "game.hpp"
 #include "palette.hpp"
 #include "platform.hpp"
+#include "progression.hpp"
 #include <fstream>
 #include <string>
 
@@ -181,6 +182,22 @@ void recordEnemyKilled(Game& game, int32_t enemyKindIndex)
 
 void recordBossKilled(Game& game, const Boss& boss)
 {
+    if (boss.isBeltbreaker)
+    {
+        earnBossAchievement(game, BossAchievement::Beltbreaker);
+    }
+    else if (boss.isWreckwormHead && !boss.krakenSnakeVariant)
+    {
+        earnBossAchievement(game, BossAchievement::Wreckworm);
+    }
+    else if (boss.isSlagmaw)
+    {
+        earnBossAchievement(game, BossAchievement::Slagmaw);
+    }
+    else if (boss.isKraken)
+    {
+        earnBossAchievement(game, BossAchievement::Kraken);
+    }
     const int32_t index = bossBestiaryIndex(boss);
     if (index < 0 || static_cast<size_t>(index) >= bestiaryBossKindCount)
     {
