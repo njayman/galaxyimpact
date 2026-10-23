@@ -16,7 +16,7 @@
   - **Defence (left, toward the Bastion):** Mine, Shock, Turret Deploy, Follower Drone, Laser Drone, Ricochet; Barrier, Max HP; Shock evolution; Bastion; then the Orbit evolution.
   - **Utility (below):** Move Speed, Pickup Radius, weapon slots 4, 5 and 6, Mine evolution.
   - Passives that are not in the tree are always available.
-- **Screen:** Skill Tree on the title menu only (not in a run). Hover or the arrow keys pick a node; click or Enter buys it. Owned nodes are lit, buyable ones pulse, long cross-branch links are dotted.
+- **Screen:** Skill Tree on the title menu only (not in a run). Hover, a click or the arrow keys pick a node and show its description; holding the mouse on it (or Enter/Space) for 0.7 s, shown by a filling ring, buys it. Owned nodes are lit, buyable ones pulse, long cross-branch links are dotted.
 - **Sandbox:** every gate is open. The sandbox menu has "Skill Tree (free)", which buys without points, and "Reset Progress", which clears earned achievements and owned nodes.
 - **Saves:** the v3 save holds earned achievements and owned nodes. Old saves keep their stats (kills, highest wave) but lose their unlocks.
 

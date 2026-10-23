@@ -62,6 +62,28 @@ auto skillNodeName(int32_t node) -> std::string
     return "";
 }
 
+auto skillNodeDescription(int32_t node) -> std::string
+{
+    const SkillNode& n = skillTree.at(static_cast<size_t>(node));
+    switch (n.kind)
+    {
+    case NodeKind::Ship:
+        return std::format("{} Comes with its signature weapon and Nerve burst.",
+                           ships.at(static_cast<size_t>(n.value)).description);
+    case NodeKind::Weapon:
+        return std::format("Can be offered on level up. {}",
+                           Skills.at(static_cast<size_t>(weaponGrantSkill.at(static_cast<size_t>(n.value)))).description);
+    case NodeKind::Passive:
+        return std::format("Can be offered on level up. {}", Skills.at(static_cast<size_t>(n.value)).description);
+    case NodeKind::Evolution:
+        return std::format("Lets {} evolve into {} during a run.", weaponDisplayName(static_cast<WeaponType>(n.value)),
+                           evolvedWeaponName.at(static_cast<size_t>(n.value)));
+    case NodeKind::Slot:
+        return std::format("Carry up to {} weapons and helpers in a run.", n.value);
+    }
+    return "";
+}
+
 auto skillNodeOwned(const Game& game, int32_t node) -> bool
 {
     return node == 0 || game.resources.achievements.owned.at(static_cast<size_t>(node));

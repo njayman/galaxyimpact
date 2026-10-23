@@ -866,6 +866,11 @@ void drawSkillTree(const Game& game)
         if (selected)
         {
             DrawRing(c, nodeR + 5.0F, nodeR + 7.0F, t * 90.0F, t * 90.0F + 300.0F, 40, Palette::Haze);
+            if (game.skillTreeHold > 0) // unlock filling clockwise from the top
+            {
+                const float fill = std::min(game.skillTreeHold / skillTreeHoldDuration, 1.0F);
+                DrawRing(c, nodeR + 4.0F, nodeR + 9.0F, -90.0F, -90.0F + 360.0F * fill, 64, Palette::Crit);
+            }
         }
         const float iconS = nodeR * 0.48F;
         switch (node.kind)
@@ -909,7 +914,7 @@ void drawSkillTree(const Game& game)
     }
     else if (skillNodeAvailable(game, sel))
     {
-        state = game.sandbox || points > 0 ? "Click or Enter: unlock for 1 point" : "Needs 1 point: earn achievements";
+        state = game.sandbox || points > 0 ? "Hold to unlock for 1 point" : "Needs 1 point: earn achievements";
     }
     else
     {
@@ -926,11 +931,13 @@ void drawSkillTree(const Game& game)
     }
     const float scale = guiUiScale(game);
     const Rectangle back = backButtonRect(game);
-    const auto infoY = static_cast<int32_t>((back.y - 70.0F * scale) / scale);
+    const auto infoY = static_cast<int32_t>((back.y - 98.0F * scale) / scale);
     const std::string title = std::format("{}  -  {}", skillNodeName(sel), kinds.at(static_cast<size_t>(node.kind)));
     windowText(game, title.c_str(), game.resources.windowWidth / 2, infoY, 22, Palette::Haze);
-    windowText(game, state.c_str(), game.resources.windowWidth / 2, infoY + 30, 17,
-               skillNodeOwned(game, sel) ? Palette::Crit : Palette::StructLight);
+    windowText(game, skillNodeDescription(sel).c_str(), game.resources.windowWidth / 2, infoY + 30, 17,
+               Palette::StructLight);
+    windowText(game, state.c_str(), game.resources.windowWidth / 2, infoY + 56, 17,
+               skillNodeOwned(game, sel) ? Palette::Crit : Palette::Accent);
 
     if (hoverActive(game) && CheckCollisionPointRec(GetMousePosition(), back))
     {

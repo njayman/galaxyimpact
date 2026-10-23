@@ -247,7 +247,7 @@ auto updateSkillTree(Game& game) -> bool
     }
 
     const int32_t before = game.skillTreeSelected;
-    bool buy = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
+    bool pointerOnSelected = false;
     const float radius = skillTreeNodeRadius(game);
     const Vector2 mouse = GetMousePosition();
     for (int32_t i = 0; i < skillNodeCount; i++)
@@ -259,7 +259,7 @@ auto updateSkillTree(Game& game) -> bool
             {
                 game.skillTreeSelected = i;
             }
-            buy = buy || IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+            pointerOnSelected = pointerOnSelected || i == game.skillTreeSelected;
         }
     }
 
@@ -296,18 +296,31 @@ auto updateSkillTree(Game& game) -> bool
         playSFX(game, game.resources.sounds.menuMove);
     }
 
-    if (buy)
+    // A click only selects (to read it); holding the mouse on the node, or Enter/Space, unlocks.
+    const int32_t sel = game.skillTreeSelected;
+    const bool canBuy = skillNodeAvailable(game, sel) && (game.sandbox || skillPoints(game) > 0);
+    const bool holding = (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && pointerOnSelected) || IsKeyDown(KEY_ENTER) ||
+                         IsKeyDown(KEY_SPACE);
+    const bool pressed = (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && pointerOnSelected && sel == before) ||
+                         IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE);
+    if (pressed && !canBuy && !skillNodeOwned(game, sel))
     {
-        if (buySkillNode(game, game.skillTreeSelected))
+        playSFX(game, game.resources.sounds.nerveFizzle);
+    }
+    if (holding && canBuy && sel == before)
+    {
+        game.skillTreeHold += GetFrameTime();
+        if (game.skillTreeHold >= skillTreeHoldDuration && buySkillNode(game, sel))
         {
             playSFX(game, game.resources.sounds.menuConfirm);
-            game.skillTreePopNode = game.skillTreeSelected;
+            game.skillTreePopNode = sel;
             game.skillTreePopTimer = 0.45F;
+            game.skillTreeHold = 0;
         }
-        else if (!skillNodeOwned(game, game.skillTreeSelected))
-        {
-            playSFX(game, game.resources.sounds.nerveFizzle);
-        }
+    }
+    else
+    {
+        game.skillTreeHold = 0;
     }
     return false;
 }

@@ -358,6 +358,7 @@ struct Game
     int32_t skillTreeSelected = 0;
     int32_t skillTreePopNode = -1; // the node just bought, popping
     float skillTreePopTimer = 0;
+    float skillTreeHold = 0; // seconds the unlock has been held
 };
 
 auto InitGame() -> Game;

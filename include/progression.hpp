@@ -102,6 +102,8 @@ constexpr std::array<SkillNode, 31> skillTree{{
 constexpr int32_t skillNodeCount = static_cast<int32_t>(skillTree.size());
 
 auto skillNodeName(int32_t node) -> std::string;
+auto skillNodeDescription(int32_t node) -> std::string;
+constexpr float skillTreeHoldDuration = 0.7F; // hold to unlock
 auto skillNodeOwned(const Game& game, int32_t node) -> bool;
 auto skillNodeAvailable(const Game& game, int32_t node) -> bool; // not owned, prerequisites owned
 auto skillPoints(const Game& game) -> int32_t;                    // earned minus spent
