@@ -136,13 +136,9 @@ void drawPanelHex(Vector2 center, float radius, float rotationDeg, Color baseCol
 void drawHUD(const Game& game);
 void drawTouchControls(const Game& game);
 void drawStatusRow(const Game& game, int32_t x, int32_t y);
-void drawDownwardTriangleIcon(float cx, int32_t y, float size, Color fillColor, bool filled);
-void drawHealthBar(const Game& game, int32_t x, int32_t y);
-auto healthBarWidthWithLabel() -> int32_t;
-void drawShieldStackPips(const Game& game, int32_t x, int32_t y);
-void drawNerveBar(const Game& game, int32_t x, int32_t y);
-auto drawDamageMeter(const Game& game, int32_t x, int32_t y) -> int32_t;
-void drawChargePips(const Game& game, int32_t x, int32_t y);
+auto drawVitals(const Game& game, int32_t x, int32_t y) -> int32_t;
+void drawRunNumbers(const Game& game, int32_t right, int32_t y);
+void drawBossLines(const Game& game, int32_t width, int32_t height);
 void drawOrganicEnemyShape(Vector2 center, float baseRadius, float seed, Color color);
 void drawHuskSentinelShape(Vector2 center, float radius, float seed, Vector2 aim, Color color);
 void drawCarrionSpots(Vector2 center, float radius, float seed, Color color);
@@ -1357,7 +1353,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
 {
     constexpr float boxSize = 28;
     constexpr float gap = 34;
-    constexpr float iconScale = 0.32F;
+    constexpr float iconScale = 0.4F;
 
     struct Slot
     {
@@ -1404,55 +1400,40 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
     std::optional<SkillType> hovered;
     Vector2 hoveredBoxPos{};
 
+    // Bare icons, level dots under each, no boxes; an empty slot is a faint dot.
     for (int32_t i = 0; i < weaponSlotCap(game); i++)
     {
         const float bx = static_cast<float>(x) + static_cast<float>(i) * gap;
         const auto by = static_cast<float>(y);
-        DrawRectangleLines(static_cast<int32_t>(bx), static_cast<int32_t>(by),
-                           static_cast<int32_t>(boxSize), static_cast<int32_t>(boxSize),
-                           Fade(Palette::StructMid, 0.6F));
-
-        if (static_cast<size_t>(i) < slots.size())
+        const Vector2 center{.x = bx + boxSize / 2, .y = by + boxSize / 2};
+        if (static_cast<size_t>(i) >= slots.size())
         {
-            const Slot& slot = slots.at(static_cast<size_t>(i));
-            const Vector2 center{.x = bx + boxSize / 2, .y = by + boxSize / 2};
-            drawSkillIcon(slot.id, center, boxSize * iconScale, slot.color, slot.evolved);
-
-            if (slot.level > 0)
-            {
-                const std::string levelText = std::to_string(slot.level);
-                constexpr int32_t levelFontSize = 10;
-                const auto badgeX = static_cast<int32_t>(bx + boxSize) - 11;
-                const auto badgeY = static_cast<int32_t>(by + boxSize) - 11;
-                DrawRectangle(badgeX, badgeY, 11, 11, Fade(Palette::Void, 0.85F));
-                drawText(game, levelText.c_str(), badgeX + 2, badgeY, levelFontSize, WHITE);
-            }
-
-            if (slot.stolen)
-            {
-                const auto tx = static_cast<int32_t>(bx);
-                const auto ty = static_cast<int32_t>(by);
-                DrawTriangle(Vector2{.x = static_cast<float>(tx), .y = static_cast<float>(ty)},
-                             Vector2{.x = static_cast<float>(tx) + 9, .y = static_cast<float>(ty)},
-                             Vector2{.x = static_cast<float>(tx), .y = static_cast<float>(ty) + 9},
-                             Palette::Accent);
-            }
-
-            if (slot.evolutionReady)
-            {
-                const auto ax = bx + boxSize - 8;
-                const auto ay = by + 1;
-                DrawTriangle(Vector2{.x = ax, .y = ay + 7}, Vector2{.x = ax + 4, .y = ay},
-                             Vector2{.x = ax + 8, .y = ay + 7}, Palette::Heal);
-            }
-
-            if (hoverActive(game) &&
-                CheckCollisionPointRec(
-                    mouse, Rectangle{.x = bx, .y = by, .width = boxSize, .height = boxSize}))
-            {
-                hovered = slot.id;
-                hoveredBoxPos = Vector2{.x = bx, .y = by};
-            }
+            DrawCircleLinesV(center, 2.5F, Fade(Palette::StructMid, 0.6F));
+            continue;
+        }
+        const Slot& slot = slots.at(static_cast<size_t>(i));
+        const Color color = slot.stolen ? Palette::Accent : slot.color;
+        if (slot.evolved)
+        {
+            DrawCircleV(center, boxSize * 0.5F, Fade(Palette::Crit, 0.08F));
+        }
+        drawSkillIcon(slot.id, center, boxSize * iconScale, color, slot.evolved);
+        for (int32_t l = 0; l < slot.level; l++) // level dots, two rows of four past level 4
+        {
+            const float dx = center.x - 7.5F + static_cast<float>(l % 4) * 5.0F;
+            const float dy = by + boxSize + 4 + static_cast<float>(l / 4) * 4.0F;
+            DrawRectangleRec(Rectangle{.x = dx - 1, .y = dy - 1, .width = 2, .height = 2}, Fade(color, 0.8F));
+        }
+        if (slot.evolutionReady)
+        {
+            DrawTriangle(Vector2{.x = center.x - 3, .y = by - 2}, Vector2{.x = center.x + 3, .y = by - 2},
+                         Vector2{.x = center.x, .y = by - 6}, Palette::Heal);
+        }
+        if (hoverActive(game) &&
+            CheckCollisionPointRec(mouse, Rectangle{.x = bx, .y = by, .width = boxSize, .height = boxSize}))
+        {
+            hovered = slot.id;
+            hoveredBoxPos = Vector2{.x = bx, .y = by};
         }
     }
 
@@ -1481,11 +1462,10 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
         {
             tipX = scaledScreenWidth - boxWidth;
         }
-        const int32_t tipY =
-            static_cast<int32_t>(hoveredBoxPos.y) + static_cast<int32_t>(boxSize) + 6;
+        const int32_t tipY = static_cast<int32_t>(hoveredBoxPos.y) - 52; // above: the slots sit at the bottom
 
-        DrawRectangle(tipX, tipY, boxWidth, 46, Fade(Palette::Void, 0.9F));
-        DrawRectangleLines(tipX, tipY, boxWidth, 46, Palette::StructMid);
+        DrawRectangle(tipX, tipY, boxWidth, 46, Fade(Palette::Void, 0.85F));
+        DrawRectangle(tipX, tipY, 2, 46, Palette::Accent);
         drawText(game, name.c_str(), tipX + 8, tipY + 6, nameFontSize, Palette::Accent);
         drawText(game, desc.c_str(), tipX + 8, tipY + 26, descFontSize, Palette::StructLight);
     }
@@ -6372,68 +6352,6 @@ void drawWormholeMouth(Vector2 position, WormholeFacing facing, float radius, Co
                  Vector2Subtract(base, Vector2Scale(perp, 6)), Palette::Crit);
 }
 
-void drawBossHealthBars(const Game& game)
-{
-    const auto scaledScreenWidth =
-        static_cast<int32_t>(static_cast<float>(game.resources.screenWidth) / hudScale(game));
-    const auto scaledScreenHeight =
-        static_cast<int32_t>(static_cast<float>(game.resources.screenHeight) / hudScale(game));
-
-    constexpr int32_t barWidth = 520;
-    constexpr int32_t barHeight = 20;
-    constexpr int32_t barGap = 8;
-    const int32_t barX = (scaledScreenWidth - barWidth) / 2;
-    int32_t barY = scaledScreenHeight - 70;
-
-    if (currentBiome(game.run.waveNumber) == Biome::SolarForge)
-    {
-        const float heatFrac =
-            std::clamp(game.run.solarForgeHeatMeter / solarForgeMeltThreshold, 0.0F, 1.0F);
-        const bool melting = game.run.solarForgeHeatMeter > solarForgeMeltThreshold;
-        DrawRectangle(barX, barY, barWidth, barHeight, Fade(Palette::StructMid, 0.5F));
-        const Color fireColor = ColorLerp(Palette::ElementBurn, Palette::Crit, heatFrac);
-        DrawRectangle(barX, barY, static_cast<int32_t>(static_cast<float>(barWidth) * heatFrac),
-                      barHeight, fireColor);
-        DrawRectangleLines(barX, barY, barWidth, barHeight, Palette::StructDark);
-        if (melting)
-        {
-            constexpr const char* meltingLabel = "MELTING";
-            const auto textWidth =
-                static_cast<int32_t>(MeasureTextEx(game.resources.font, meltingLabel, 16, 1).x);
-            const float pulse = 0.6F + 0.4F * std::sin(static_cast<float>(GetTime()) * 10.0F);
-            drawText(game, meltingLabel, barX + (barWidth - textWidth) / 2, barY + 1, 16,
-                     Fade(Palette::StructLight, pulse));
-        }
-        barY -= barHeight + barGap;
-    }
-
-    for (const auto& boss : game.run.bosses)
-    {
-        if (boss.health <= 0 || boss.isBeltbreakerPlate || boss.isWreckwormSegment)
-        {
-            continue;
-        }
-
-        const float frac = std::clamp(
-            static_cast<float>(boss.health) / static_cast<float>(boss.maxHealth), 0.0F, 1.0F);
-        DrawRectangle(barX, barY, barWidth, barHeight, Fade(Palette::StructMid, 0.5F));
-        DrawRectangle(barX, barY, static_cast<int32_t>(static_cast<float>(barWidth) * frac),
-                      barHeight, boss.color);
-        DrawRectangleLines(barX, barY, barWidth, barHeight, Palette::StructDark);
-
-        if (boss.isBeltbreaker && boss.beltbreakerShielded)
-        {
-            constexpr const char* shieldedLabel = "SHIELDED";
-            const auto textWidth =
-                static_cast<int32_t>(MeasureTextEx(game.resources.font, shieldedLabel, 16, 1).x);
-            drawText(game, shieldedLabel, barX + (barWidth - textWidth) / 2, barY + 1, 16,
-                     Palette::StructLight);
-        }
-
-        barY -= barHeight + barGap;
-    }
-}
-
 // Boss QTE cutscene HUD ----------------------------------------------------
 
 void drawQteArrow(Vector2 center, Vector2 dir, float size, Color color)
@@ -6642,54 +6560,33 @@ void drawHUD(const Game& game)
         return;
     }
 
-    drawBossHealthBars(game);
-    drawHealthBar(game, 10, 10);
-    drawShieldStackPips(game, 10 + healthBarWidthWithLabel() + 20, 10);
+    const auto width = static_cast<int32_t>(static_cast<float>(game.resources.screenWidth) / hudScale(game));
+    const auto height = static_cast<int32_t>(static_cast<float>(game.resources.screenHeight) / hudScale(game));
+    constexpr int32_t margin = 22;
 
-    const std::string statsText = std::format("Score: {}   Wave: {}   Lv: {}", game.run.score,
-                                              game.run.waveNumber, game.run.level);
-    drawText(game, statsText.c_str(), 10, 38, 20, Palette::StructLight);
+    // XP: a hairline along the very top edge.
+    const float xpFrac = std::min(static_cast<float>(game.run.xp) / static_cast<float>(game.run.xpToNext), 1.0F);
+    DrawRectangle(0, 0, width, 2, Fade(Palette::StructDark, 0.8F));
+    DrawRectangle(0, 0, static_cast<int32_t>(static_cast<float>(width) * xpFrac), 2, Fade(Palette::Charge, 0.85F));
 
-    const float xpFrac =
-        std::min(static_cast<float>(game.run.xp) / static_cast<float>(game.run.xpToNext), 1.0F);
-    DrawRectangle(10, 64, 300, 10, Fade(Palette::StructMid, 0.5F));
-    DrawRectangle(10, 64, static_cast<int32_t>(300 * xpFrac), 10, Palette::Charge);
-    DrawRectangleLines(10, 64, 300, 10, Palette::StructDark);
+    const int32_t vitalsBottom = drawVitals(game, margin, margin);
+    drawStatusRow(game, margin, vitalsBottom + 10);
+    drawRunNumbers(game, width - margin, margin - 6);
+    drawBossLines(game, width, height);
+    drawAbilitySlots(game, margin, height - margin - 26);
 
-    constexpr int32_t nerveBarHeight = 18;
-    constexpr int32_t damageMeterX = 210;
-    drawNerveBar(game, 10, 82);
-    const int32_t meterHeight = drawDamageMeter(game, damageMeterX, 82);
-
-    int32_t y = 82 + std::max(nerveBarHeight, meterHeight) + 6;
-    drawChargePips(game, 10, y);
-
-    constexpr int32_t abilitySlotCount = ItemConstants::maxAbilitySlots;
-    constexpr int32_t abilityBoxSize = 28;
-    constexpr int32_t abilityGap = 34;
-    const int32_t abilitySlotsWidth = (abilitySlotCount - 1) * abilityGap + abilityBoxSize;
-    const auto scaledScreenWidth =
-        static_cast<int32_t>(static_cast<float>(game.resources.screenWidth) / hudScale(game));
-    const auto scaledScreenHeight =
-        static_cast<int32_t>(static_cast<float>(game.resources.screenHeight) / hudScale(game));
-    const int32_t abilitySlotsX = scaledScreenWidth - abilitySlotsWidth - 10;
-    drawAbilitySlots(game, abilitySlotsX, 10);
-    drawStatusRow(game, abilitySlotsX, 10 + abilityBoxSize + 10);
-
-    const char* controlHint =
-        touchInputActive(game)
-            ? "Move: Left Stick | Aim: Right Stick | Shield/Combo/Dash: Either Panel | "
-              "Burst: Nerve | Pause: Top Button"
-            : "Move: WASD | Dash: L-Click | Shield: R-Click | Burst: Space | Pause: Esc | F11: "
-              "Fullscreen";
-    drawText(game, controlHint, 10, scaledScreenHeight - 28, 18, Palette::StructMid);
-
-    if (game.run.achievementToastTimer > 0)
+    // Controls: top centre, only at the start of a run, then gone.
+    constexpr float hintTime = 8.0F;
+    if (game.run.runTime < hintTime)
     {
-        const auto textWidth = static_cast<int32_t>(
-            MeasureTextEx(game.resources.font, game.run.achievementToast.c_str(), 24, 1).x);
-        drawText(game, game.run.achievementToast.c_str(), (scaledScreenWidth - textWidth) / 2, 100,
-                 24, Palette::Charge);
+        const char* controlHint =
+            touchInputActive(game)
+                ? "Move: Left Stick | Aim: Right Stick | Shield/Combo/Dash: Either Panel | Burst: Nerve | Pause: Top Button"
+                : "Move: WASD | Dash: L-Click | Shield: R-Click | Burst: Space | Pause: Esc | F11: Fullscreen";
+        const float alpha = std::clamp((hintTime - game.run.runTime) / 2.0F, 0.0F, 1.0F);
+        constexpr int32_t hintSize = 14;
+        drawText(game, controlHint, (width - measureText(game, controlHint, hintSize)) / 2, game.sandbox ? 60 : margin,
+                 hintSize, Fade(Palette::StructLight, 0.7F * alpha));
     }
 }
 
@@ -6796,137 +6693,212 @@ void drawTouchControls(const Game& game)
                   Palette::StructLight);
 }
 
-void drawDownwardTriangleIcon(float cx, int32_t y, float size, Color fillColor, bool filled)
-{
-    const Vector2 bottom{.x = cx, .y = static_cast<float>(y) + size * 2};
-    const Vector2 topLeft{.x = cx - size * 0.8F, .y = static_cast<float>(y)};
-    const Vector2 topRight{.x = cx + size * 0.8F, .y = static_cast<float>(y)};
+// --- Minimal HUD (docs/design/ui.md): bare lines and small numbers at the edges ---------
 
-    if (filled)
-    {
-        DrawTriangle(bottom, topRight, topLeft, fillColor);
-    }
-    else
-    {
-        DrawTriangleLines(bottom, topRight, topLeft, Fade(Palette::StructMid, 0.6F));
-    }
+// Vitals dim to this when nothing has changed for a while.
+auto hudCalmAlpha(const Game& game) -> float
+{
+    const float t = std::clamp((game.run.hud.calmTimer - 3.0F) / 1.5F, 0.0F, 1.0F);
+    return 1.0F - 0.55F * t;
 }
 
-constexpr int32_t healthBarWidth = 200;
-constexpr int32_t healthBarHeight = 14;
-
-void drawHealthBar(const Game& game, int32_t x, int32_t y)
+auto withThousands(int32_t value) -> std::string
 {
-    const float frac = std::clamp(game.run.player.health / game.run.player.maxHealth, 0.0F, 1.0F);
-
-    DrawRectangle(x, y, healthBarWidth, healthBarHeight, Fade(Palette::StructMid, 0.5F));
-    DrawRectangle(x, y, static_cast<int32_t>(static_cast<float>(healthBarWidth) * frac),
-                  healthBarHeight, Palette::Accent);
-    DrawRectangleLines(x, y, healthBarWidth, healthBarHeight, Palette::StructDark);
-
-    const std::string label =
-        std::format("{:.0f}/{:.0f}", game.run.player.health, game.run.player.maxHealth);
-    drawText(game, label.c_str(), x + healthBarWidth + 8, y - 3, 16, Palette::StructLight);
-}
-
-auto healthBarWidthWithLabel() -> int32_t { return healthBarWidth + 60; }
-
-void drawShieldStackPips(const Game& game, int32_t x, int32_t y)
-{
-    constexpr float size = 11;
-    constexpr float gap = 24;
-
-    for (int32_t i = 0; i < currentShip(game).maxShieldStacks; i++)
+    std::string digits = std::to_string(value);
+    for (auto i = static_cast<int32_t>(digits.size()) - 3; i > 0; i -= 3)
     {
-        const float cx = static_cast<float>(x) + size + static_cast<float>(i) * gap;
-        const Color fillColor = Fade(Palette::Shield, 0.85F);
-
-        drawDownwardTriangleIcon(cx, y, size, fillColor, i < game.run.player.shieldStacks);
+        digits.insert(static_cast<size_t>(i), ",");
     }
+    return digits;
 }
 
-void drawNerveBar(const Game& game, int32_t x, int32_t y)
+// HP as one thin segment per hit point, Nerve as a hairline under it, dash charges and shield
+// stacks as pips after the count. Returns the bottom y.
+auto drawVitals(const Game& game, int32_t x, int32_t y) -> int32_t
 {
-    constexpr int32_t width = 120;
-    constexpr int32_t height = 8;
+    const Player& player = game.run.player;
+    const HudState& hud = game.run.hud;
+    const float alpha = hudCalmAlpha(game);
+    const auto time = static_cast<float>(GetTime());
+    const int32_t segments = std::max(1, static_cast<int32_t>(std::ceil(player.maxHealth)));
+    constexpr float lineWidth = 190.0F;
+    constexpr float gap = 3.0F;
+    const float segW = std::min(26.0F, (lineWidth - gap * static_cast<float>(segments - 1)) / static_cast<float>(segments));
+    const float hpWidth = segW * static_cast<float>(segments) + gap * static_cast<float>(segments - 1);
+    const bool low = player.health <= player.maxHealth / 3.0F;
+    const float lowPulse = low ? 0.5F + 0.5F * std::sin(time * 7.0F) : 0.0F;
+    const auto fx = static_cast<float>(x);
+    const auto fy = static_cast<float>(y);
+
+    for (int32_t i = 0; i < segments; i++)
+    {
+        const float sx = fx + static_cast<float>(i) * (segW + gap);
+        const float fill = std::clamp(player.health - static_cast<float>(i), 0.0F, 1.0F);
+        DrawRectangleRec(Rectangle{.x = sx, .y = fy, .width = segW, .height = 4}, Fade(Palette::StructDark, alpha));
+        const Color hp = ColorLerp(Palette::Accent, Palette::Crit, lowPulse * 0.6F);
+        DrawRectangleRec(Rectangle{.x = sx, .y = fy, .width = segW * fill, .height = 4}, Fade(hp, alpha));
+        // Lost this hit: flashes white, then fades.
+        const float lost = std::clamp(hud.hitFrom - static_cast<float>(i), 0.0F, 1.0F) - fill;
+        if (hud.hitFlashTimer > 0 && lost > 0)
+        {
+            DrawRectangleRec(Rectangle{.x = sx + segW * fill, .y = fy - 1, .width = segW * lost, .height = 6},
+                             Fade(WHITE, hud.hitFlashTimer / 0.6F));
+        }
+    }
+    const std::string count = std::format("{:.0f}", std::ceil(player.health));
+    drawText(game, count.c_str(), static_cast<int32_t>(fx + hpWidth + 8), y - 6, 16,
+             Fade(low ? Palette::Crit : Palette::Haze, alpha));
+
+    // Nerve hairline.
     const float frac = nerveFrac(game);
     const bool ready = frac >= 1.0F;
-    const float pulse = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 8.0F);
-
-    DrawRectangle(x, y, width, height, Fade(Palette::StructMid, 0.5F));
-    DrawRectangle(x, y, static_cast<int32_t>(static_cast<float>(width) * frac), height,
-                  ready ? ColorLerp(Palette::Charge, WHITE, pulse * 0.5F)
-                        : ColorLerp(Palette::Charge, Palette::Crit, frac));
-    DrawRectangleLines(x, y, width, height, Palette::StructDark);
-
-    if (ready)
+    const float readyPulse = 0.5F + 0.5F * std::sin(time * 8.0F);
+    const float ny = fy + 9;
+    DrawRectangleRec(Rectangle{.x = fx, .y = ny, .width = hpWidth, .height = 1.5F}, Fade(Palette::StructDark, alpha));
+    const Color nerve = ready ? ColorLerp(Palette::Charge, WHITE, readyPulse * 0.5F)
+                              : ColorLerp(Palette::Charge, Palette::Crit, frac);
+    DrawRectangleRec(Rectangle{.x = fx, .y = ny, .width = hpWidth * frac, .height = 1.5F},
+                     Fade(nerve, ready ? 1.0F : alpha));
+    if (player.nerveCharging)
     {
-        DrawRectangleLines(x - 2, y - 2, width + 4, height + 4, Fade(Palette::Charge, pulse));
-    }
-
-    drawText(game, "Nerve", x + width + 8, y - 6, 16, Palette::StructMid);
-
-    if (game.run.player.nerveCharging)
-    {
-        const float chargeProgress =
-            1.0F - game.run.player.nerveChargeTimer / UpdateConstants::nerveBurstWindup;
-        DrawRectangle(x, y + height + 3,
-                      static_cast<int32_t>(static_cast<float>(width) * chargeProgress), 3,
-                      Palette::Crit);
-        drawText(game, "CHARGING...", x, y + height + 8, 14, Palette::Crit);
+        const float charge = 1.0F - player.nerveChargeTimer / UpdateConstants::nerveBurstWindup;
+        DrawRectangleRec(Rectangle{.x = fx, .y = ny - 1, .width = hpWidth * charge, .height = 3.5F}, Palette::Crit);
     }
     else if (ready)
     {
-        drawText(game, "SPACE", x, y + height + 8, 14, Fade(Palette::Charge, 0.6F + 0.4F * pulse));
+        drawText(game, "SPACE", static_cast<int32_t>(fx + hpWidth + 8), static_cast<int32_t>(ny) - 2, 11,
+                 Fade(Palette::Charge, 0.5F + 0.5F * readyPulse));
+    }
+
+    // Dash charges (dots, the next one refilling as a ring) and shield stacks (small chevrons).
+    float px = fx + 3;
+    const float py = ny + 11;
+    for (int32_t i = 0; i < UpdateConstants::maxCharges; i++, px += 11)
+    {
+        const Vector2 c{.x = px, .y = py};
+        if (i < player.charges)
+        {
+            DrawCircleV(c, 3.0F, Fade(Palette::Shield, alpha));
+            continue;
+        }
+        DrawCircleLinesV(c, 3.0F, Fade(Palette::StructMid, alpha));
+        if (i == player.charges)
+        {
+            const float d = chargeRegenDuration(game);
+            const float progress = d > 0 ? 1 - player.chargeRegenTimer / d : 1;
+            DrawRing(c, 2.0F, 3.6F, -90, -90 + 360 * progress, 16,
+                     Fade(isNerveChargeFeeding(game) ? Palette::Charge : Palette::Shield, alpha));
+        }
+    }
+    px += 6;
+    for (int32_t i = 0; i < currentShip(game).maxShieldStacks; i++, px += 11)
+    {
+        const bool full = i < player.shieldStacks;
+        const Vector2 a{.x = px - 3.5F, .y = py - 2.5F};
+        const Vector2 b{.x = px + 3.5F, .y = py - 2.5F};
+        const Vector2 tip{.x = px, .y = py + 3.0F};
+        if (full)
+        {
+            DrawTriangle(tip, b, a, Fade(Palette::Shield, 0.85F * alpha));
+        }
+        else
+        {
+            DrawTriangleLines(tip, b, a, Fade(Palette::StructMid, alpha));
+        }
+    }
+    return static_cast<int32_t>(py + 4);
+}
+
+// Top right, right-aligned: score, then wave and level, DMG, the biome name when it changes,
+// and the toast.
+void drawRunNumbers(const Game& game, int32_t right, int32_t y)
+{
+    const auto line = [&](const std::string& text, int32_t size, Color color, int32_t yy)
+    { drawText(game, text.c_str(), right - measureText(game, text.c_str(), size), yy, size, color); };
+
+    line(withThousands(game.run.score), 24, Palette::StructLight, y);
+    y += 26;
+    line(std::format("WAVE {}   LV {}", game.run.waveNumber, game.run.level), 13, Palette::StructMid, y);
+    y += 17;
+    const auto& meter = game.run.damageMeterDisplay;
+    if (meter.total > 0)
+    {
+        line(std::format("DMG {}", withThousands(meter.total)), 13, Fade(Palette::Crit, 0.85F), y);
+        y += 17;
+    }
+    if (game.run.hud.biomeTimer > 0)
+    {
+        const float t = game.run.hud.biomeTimer;
+        const float alpha = std::min({1.0F, (4.0F - t) / 0.5F, t / 1.0F});
+        std::string name(biomeName(static_cast<Biome>(game.run.hud.biome)));
+        std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+        line(name, 13, Fade(Palette::Haze, alpha), y);
+        y += 17;
+    }
+    if (game.run.achievementToastTimer > 0)
+    {
+        const float t = game.run.achievementToastTimer;
+        const float alpha = std::min(1.0F, t / 0.6F);
+        const auto drift = static_cast<int32_t>((1.0F - alpha) * -8.0F);
+        line(game.run.achievementToast, 15, Fade(Palette::Charge, alpha), y + 6 + drift);
     }
 }
 
-auto drawDamageMeter(const Game& game, int32_t x, int32_t y) -> int32_t
+// One hairline per boss along the bottom centre: name in small caps above, a pale trail of
+// recent damage behind the fill, ticks where director bosses change phase.
+void drawBossLines(const Game& game, int32_t width, int32_t height)
 {
-    const auto& meter = game.run.damageMeterDisplay;
-    const std::string totalText = std::format("DMG: {}", meter.total);
-    drawText(game, totalText.c_str(), x, y, 18,
-             meter.total > 0 ? Palette::Crit : Palette::StructMid);
-
-    return 22;
-}
-
-void drawChargePips(const Game& game, int32_t x, int32_t y)
-{
-    constexpr float pipRadius = 9;
-    constexpr float gap = 24;
-
-    for (int32_t i = 0; i < UpdateConstants::maxCharges; i++)
+    constexpr float lineWidth = 560.0F;
+    const float x = (static_cast<float>(width) - lineWidth) / 2;
+    float y = static_cast<float>(height) - 34;
+    const auto label = [&](const std::string& left, const std::string& right, Color color)
     {
-        const Vector2 center{.x = static_cast<float>(x) + pipRadius + static_cast<float>(i) * gap,
-                             .y = static_cast<float>(y) + pipRadius};
-
-        if (i < game.run.player.charges)
+        drawText(game, left.c_str(), static_cast<int32_t>(x), static_cast<int32_t>(y) - 18, 13, color);
+        if (!right.empty())
         {
-            DrawCircleV(center, pipRadius, Palette::Shield);
-            DrawCircleLines(static_cast<int32_t>(center.x), static_cast<int32_t>(center.y),
-                            pipRadius, Palette::StructDark);
+            drawText(game, right.c_str(), static_cast<int32_t>(x + lineWidth) - measureText(game, right.c_str(), 13),
+                     static_cast<int32_t>(y) - 18, 13, color);
+        }
+    };
+
+    if (currentBiome(game.run.waveNumber) == Biome::SolarForge)
+    {
+        const float heat = std::clamp(game.run.solarForgeHeatMeter / solarForgeMeltThreshold, 0.0F, 1.0F);
+        const bool melting = game.run.solarForgeHeatMeter > solarForgeMeltThreshold;
+        const float pulse = 0.6F + 0.4F * std::sin(static_cast<float>(GetTime()) * 10.0F);
+        DrawRectangleRec(Rectangle{.x = x, .y = y, .width = lineWidth, .height = 2}, Fade(Palette::StructDark, 0.9F));
+        DrawRectangleRec(Rectangle{.x = x, .y = y, .width = lineWidth * heat, .height = 2},
+                         ColorLerp(Palette::ElementBurn, Palette::Crit, heat));
+        label("HEAT", melting ? "MELTING" : "", melting ? Fade(Palette::Crit, pulse) : Palette::StructMid);
+        y -= 34;
+    }
+
+    for (const auto& boss : game.run.bosses)
+    {
+        if (boss.health <= 0 || boss.isBeltbreakerPlate || boss.isWreckwormSegment)
+        {
             continue;
         }
-
-        DrawCircleLines(static_cast<int32_t>(center.x), static_cast<int32_t>(center.y), pipRadius,
-                        Fade(Palette::StructMid, 0.6F));
-        if (i == game.run.player.charges)
+        const auto maxHp = static_cast<float>(boss.maxHealth);
+        const float frac = std::clamp(static_cast<float>(boss.health) / maxHp, 0.0F, 1.0F);
+        const float trail = std::clamp(std::max(boss.trailHealth, 0.0F) / maxHp, frac, 1.0F);
+        DrawRectangleRec(Rectangle{.x = x, .y = y, .width = lineWidth, .height = 3}, Fade(Palette::StructDark, 0.9F));
+        DrawRectangleRec(Rectangle{.x = x + lineWidth * frac, .y = y, .width = lineWidth * (trail - frac), .height = 3},
+                         Fade(Palette::Crit, 0.55F));
+        DrawRectangleRec(Rectangle{.x = x, .y = y, .width = lineWidth * frac, .height = 3}, Palette::Accent);
+        if (boss.usesDirector)
         {
-            float progress = 1;
-            if (const float d = chargeRegenDuration(game); d > 0)
+            for (const float tick : {0.5F, 0.2F})
             {
-                progress = 1 - game.run.player.chargeRegenTimer / d;
-            }
-            const Color ringColor = isNerveChargeFeeding(game) ? Palette::Charge : Palette::Shield;
-            DrawRing(center, pipRadius - 3, pipRadius, -90, -90 + 360 * progress, 16, ringColor);
-            if (isNerveChargeFeeding(game))
-            {
-                const float pulse = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 10.0F);
-                DrawCircleLines(static_cast<int32_t>(center.x), static_cast<int32_t>(center.y),
-                                pipRadius + 3, Fade(Palette::Charge, 0.5F * pulse));
+                DrawRectangleRec(Rectangle{.x = x + lineWidth * tick - 0.5F, .y = y - 3, .width = 1, .height = 9},
+                                 Palette::StructLight);
             }
         }
+        std::string name(bossBestiaryName(bossBestiaryIndex(boss)));
+        std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+        const bool shielded = boss.isBeltbreaker && boss.beltbreakerShielded;
+        label(name, shielded ? "SHIELDED" : "", Palette::Haze);
+        y -= 34;
     }
 }
 
@@ -7281,8 +7253,9 @@ void drawPickupIcon(PickupType type, ElementType element, Vector2 position, floa
 
 void drawSandboxToggleIndicator(const Game& game)
 {
+    applyGuiScale(game);
     const Rectangle rect = sandboxToggleIndicatorRect(game);
-    GuiButton(rect, "Instructions [TAB]");
+    GuiButton(rect, "Sandbox [TAB]");
 
     // M12 director debug panel: what the bot/player is doing and how each boss is responding.
     const float scale = guiUiScale(game);
@@ -7294,7 +7267,7 @@ void drawSandboxToggleIndicator(const Game& game)
     const int32_t panelW = labelW + barW + px(170);
     // Right side, under the ability icons: the left side holds the HP/score HUD.
     const int32_t x = game.resources.windowWidth - panelW - px(6);
-    int32_t y = px(64);
+    int32_t y = px(150); // under the score block
 
     int32_t directorBosses = 0;
     for (const auto& boss : game.run.bosses)

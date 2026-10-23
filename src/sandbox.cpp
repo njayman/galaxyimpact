@@ -520,7 +520,11 @@ auto sandboxMenuCloseButtonRect(const Game& game) -> Rectangle
 auto sandboxToggleIndicatorRect(const Game& game) -> Rectangle
 {
     const float scale = guiUiScale(game);
-    return Rectangle{.x = 10 * scale, .y = 10 * scale, .width = 200 * scale, .height = 34 * scale};
+    // Top centre: the minimal HUD keeps the corners.
+    return Rectangle{.x = static_cast<float>(game.resources.windowWidth) / 2 - 100 * scale,
+                     .y = 10 * scale,
+                     .width = 200 * scale,
+                     .height = 34 * scale};
 }
 
 auto browserCategoryLabel(int32_t category) -> std::string_view

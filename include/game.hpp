@@ -172,6 +172,19 @@ struct RustPatch
     bool active;
 };
 
+// What the minimal HUD remembers between frames (docs/design/ui.md).
+struct HudState
+{
+    float calmTimer = 0;     // seconds since the vitals last changed; they dim when calm
+    float lastHealth = -1;
+    float hitFlashTimer = 0; // the segments just lost flash white
+    float hitFrom = 0;       // health before the hit
+    int32_t lastCharges = -1;
+    bool lastNerveReady = false;
+    int32_t biome = -1;
+    float biomeTimer = 0; // biome name showing under the score
+};
+
 struct GameplayState
 {
     Player player;
@@ -279,6 +292,7 @@ struct GameplayState
     float shakeIntensity;
     float hitPauseTimer;
     std::string achievementToast;
+    HudState hud;
     float achievementToastTimer;
     float punctumThunderTimer;
     float punctumThunderFlashTimer;

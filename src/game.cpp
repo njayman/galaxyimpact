@@ -215,6 +215,7 @@ void syncScreenSize(Game& game)
 
 void resetRun(Game& game)
 {
+    game.run.hud = HudState{};
     const ShipDef& ship = currentShip(game);
 
     // Random start anywhere in the inner arena, so a run doesn't always begin in the same spot.

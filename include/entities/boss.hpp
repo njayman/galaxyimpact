@@ -348,6 +348,7 @@ class Boss
     bool chainConnected = false;
     float dazedTimer = 0;
     int32_t phase = 0;
+    float trailHealth = -1; // HUD damage trail, lagging behind health
     float phaseInvulnTimer = 0;
     float readTellTimer = 0;
 

@@ -1049,6 +1049,44 @@ auto updateBossCutscene(Game& game, float deltaTime) -> bool
     return true;
 }
 
+// Minimal HUD bookkeeping: calm timer, hit flash, biome name, boss damage trails.
+void updateHud(Game& game, float deltaTime)
+{
+    HudState& hud = game.run.hud;
+    const Player& player = game.run.player;
+    const bool nerveReady = nerveFrac(game) >= 1.0F;
+    hud.calmTimer += deltaTime;
+    hud.hitFlashTimer = std::max(0.0F, hud.hitFlashTimer - deltaTime);
+    hud.biomeTimer = std::max(0.0F, hud.biomeTimer - deltaTime);
+    if (hud.lastHealth >= 0 && player.health < hud.lastHealth)
+    {
+        hud.hitFrom = hud.hitFlashTimer > 0 ? std::max(hud.hitFrom, hud.lastHealth) : hud.lastHealth;
+        hud.hitFlashTimer = 0.6F;
+    }
+    if (player.health != hud.lastHealth || player.charges != hud.lastCharges || nerveReady != hud.lastNerveReady ||
+        player.nerveCharging)
+    {
+        hud.calmTimer = 0;
+    }
+    hud.lastHealth = player.health;
+    hud.lastCharges = player.charges;
+    hud.lastNerveReady = nerveReady;
+
+    const auto biome = static_cast<int32_t>(currentBiome(game.run.waveNumber));
+    if (biome != hud.biome)
+    {
+        hud.biome = biome;
+        hud.biomeTimer = 4.0F;
+    }
+
+    for (auto& boss : game.run.bosses)
+    {
+        const auto health = static_cast<float>(boss.health);
+        boss.trailHealth = boss.trailHealth < health ? health
+                                                     : std::max(health, boss.trailHealth - static_cast<float>(boss.maxHealth) * 0.3F * deltaTime);
+    }
+}
+
 void updateGameplay(Game& game, float deltaTime)
 {
 
@@ -1065,6 +1103,7 @@ void updateGameplay(Game& game, float deltaTime)
     deltaTime *= bossQteSlowdown(game);
 
     game.run.runTime += deltaTime;
+    updateHud(game, deltaTime);
 
     if (game.sandbox)
     {
