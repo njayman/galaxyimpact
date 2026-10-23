@@ -6575,7 +6575,7 @@ void drawHUD(const Game& game)
     drawBossLines(game, width, height);
     drawAbilitySlots(game, margin, height - margin - 26);
 
-    // Controls: top centre, only at the start of a run, then gone.
+    // Controls: below the ship, clear of the HUD, only at the start of a run, then gone.
     constexpr float hintTime = 8.0F;
     if (game.run.runTime < hintTime)
     {
@@ -6585,7 +6585,7 @@ void drawHUD(const Game& game)
                 : "Move: WASD | Dash: L-Click | Shield: R-Click | Burst: Space | Pause: Esc | F11: Fullscreen";
         const float alpha = std::clamp((hintTime - game.run.runTime) / 2.0F, 0.0F, 1.0F);
         constexpr int32_t hintSize = 14;
-        drawText(game, controlHint, (width - measureText(game, controlHint, hintSize)) / 2, game.sandbox ? 60 : margin,
+        drawText(game, controlHint, (width - measureText(game, controlHint, hintSize)) / 2, height * 3 / 4,
                  hintSize, Fade(Palette::StructLight, 0.7F * alpha));
     }
 }

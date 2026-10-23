@@ -29,7 +29,7 @@ No panels or boxes: thin lines and small numbers at the screen edges, fading bac
 - Weapon slots show bare icons with level dots and an evolved glow; there is no cooldown underline. The tooltip opens above the slots.
 - Boss lines are all drawn in the accent red (a boss's own colour changes with its state), with ticks at 50% and 20% for director bosses, which change phase there.
 - One toast at a time, under the top-right numbers.
-- The controls line sits at the top centre for the first 8 s of a run. The sandbox button moved to the top centre.
+- The controls line sits centred three quarters of the way down the screen, below the ship and clear of the HUD, for the first 8 s of a run. The sandbox button moved to the top centre.
 
 ## Phase 2: menus and popups
 
