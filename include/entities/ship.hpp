@@ -40,7 +40,7 @@ struct ShipDef
 constexpr std::array<ShipDef, static_cast<size_t>(ShipClass::Count)> ships{
     ShipDef{.name = "Bastion",
             .description = "Orbit blades spin much faster.",
-            .color = Palette::Shield,
+            .color = Palette::Teal,
             .radius = 15,
             .speed = 5,
             .maxHealth = 5,

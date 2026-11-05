@@ -243,7 +243,7 @@ void drawOrbitShot(Vector2 pos, float radius, bool evolved)
     const float angle = static_cast<float>(GetTime()) * 720.0F;
     if (!evolved)
     {
-        DrawPoly(pos, 4, radius, angle, Palette::Shield);
+        DrawPoly(pos, 4, radius, angle, weaponColor(WeaponType::Orbit));
         DrawCircleV(pos, radius * 0.4F, Fade(WHITE, 0.8F));
         return;
     }
@@ -260,7 +260,7 @@ void drawNerveBall(Vector2 pos, float radius, bool evolved)
 {
     if (!evolved)
     {
-        DrawCircleV(pos, radius, Fade(Palette::Accent, 0.55F));
+        DrawCircleV(pos, radius, Fade(weaponColor(WeaponType::Forward), 0.55F));
         DrawCircleLines(static_cast<int32_t>(pos.x), static_cast<int32_t>(pos.y), radius, Fade(WHITE, 0.8F));
         return;
     }
@@ -288,7 +288,7 @@ void drawSpiralBlade(Vector2 pos, bool evolved)
 {
     if (!evolved)
     {
-        DrawCircleV(pos, 7, Palette::Shield);
+        DrawCircleV(pos, 7, weaponColor(WeaponType::Orbit));
         return;
     }
     const Color gold = evolvedWeaponColor(WeaponType::Orbit);
@@ -1089,7 +1089,7 @@ void drawWeaponGallery(const Game& game)
         const float cx = 180.0F + static_cast<float>(i % perRow) * 222.0F;
         const float cy = 120.0F + static_cast<float>(i / perRow) * 120.0F;
         const bool evolves = weaponEvolves.at(static_cast<size_t>(i));
-        drawWeaponIcon(type, Vector2{.x = cx - (evolves ? 30.0F : 0.0F), .y = cy}, 16.0F, Palette::Shield);
+        drawWeaponIcon(type, Vector2{.x = cx - (evolves ? 30.0F : 0.0F), .y = cy}, 16.0F, weaponColor(type));
         if (evolves)
         {
             drawWeaponIcon(type, Vector2{.x = cx + 30.0F, .y = cy}, 16.0F, evolvedWeaponColor(type), true);
@@ -1122,7 +1122,7 @@ void drawWeaponGallery(const Game& game)
                 Bullet b{.position = Vector2Add(at, Vector2{.x = static_cast<float>(k) * 70.0F, .y = 0}),
                          .velocity = flight,
                          .radius = projectileSize,
-                         .color = evolved ? evolvedWeaponColor(WeaponType::Forward) : Palette::Accent,
+                         .color = evolved ? evolvedWeaponColor(WeaponType::Forward) : weaponColor(WeaponType::Forward),
                          .active = true,
                          .damage = 0,
                          .evolved = evolved};
@@ -1146,7 +1146,7 @@ void drawWeaponGallery(const Game& game)
             drawPlayerBullet(b);
         }
     };
-    row("Laser Shots (Interceptor)", [&](Vector2 at, bool evolved) { streaks(at, evolved, Palette::ElementStatic, 1.0F, laserShotHalfWidth); });
+    row("Laser Shots (Interceptor)", [&](Vector2 at, bool evolved) { streaks(at, evolved, weaponColor(WeaponType::LaserShots), 1.0F, laserShotHalfWidth); });
     row("Orbit blades (Bastion)", [&](Vector2 at, bool evolved)
         {
             drawShipHull(ShipClass::Bastion, at, 16.0F, 0, Palette::StructMid);
@@ -1154,7 +1154,7 @@ void drawWeaponGallery(const Game& game)
             {
                 const float a = static_cast<float>(k) * PI / 3 + static_cast<float>(GetTime());
                 drawOrbitRingBlade(Vector2Add(at, Vector2{.x = std::cos(a) * 38.0F, .y = std::sin(a) * 38.0F}),
-                                   evolved ? evolvedWeaponColor(WeaponType::Orbit) : Palette::Shield, evolved);
+                                   evolved ? evolvedWeaponColor(WeaponType::Orbit) : weaponColor(WeaponType::Orbit), evolved);
             }
         });
     row("Orbit shots (Bastion)", [&](Vector2 at, bool evolved)
@@ -1165,7 +1165,7 @@ void drawWeaponGallery(const Game& game)
             }
         });
     row("Nerve: Ball (Ranger)", [&](Vector2 at, bool evolved) { drawNerveBall(at, 34.0F, evolved); });
-    row("Nerve: Laser Storm (Interceptor)", [&](Vector2 at, bool evolved) { streaks(at, evolved, Palette::ElementStatic, 1.8F, 2.0F); });
+    row("Nerve: Laser Storm (Interceptor)", [&](Vector2 at, bool evolved) { streaks(at, evolved, weaponColor(WeaponType::LaserShots), 1.8F, 2.0F); });
     row("Nerve: Blade Tornado (Bastion)", [&](Vector2 at, bool evolved)
         {
             for (int32_t k = 0; k < 6; k++)
@@ -1605,7 +1605,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
 
     for (const auto& w : game.run.weapons)
     {
-        const Color color = w.evolved ? evolvedWeaponColor(w.type) : Palette::Shield;
+        const Color color = w.evolved ? evolvedWeaponColor(w.type) : weaponColor(w.type);
         const auto typeIndex = static_cast<size_t>(w.type);
         const bool evolutionReady = weaponEvolves.at(typeIndex) && !w.evolved && isEvolutionUnlocked(game, w.type);
         const bool stolen =
@@ -5282,7 +5282,7 @@ void drawOrbitBlades(const Game& game)
 {
     for (const auto& w : game.run.weapons)
     {
-        const Color color = w.evolved ? evolvedWeaponColor(w.type) : Palette::Shield;
+        const Color color = w.evolved ? evolvedWeaponColor(w.type) : weaponColor(w.type);
 
         switch (w.type)
         {

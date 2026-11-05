@@ -258,10 +258,37 @@ constexpr std::array<std::string_view, static_cast<size_t>(WeaponType::Count)> e
     "Railgun",       "Chain Lightning", "Turret Deploy",  "Flamethrower",    "Sniper",
     "Heavy Lance"};
 
-// The colour an evolved weapon takes everywhere: its shots, its HUD icon and its ship's Nerve burst.
+// A weapon's own colour, a darker tone (its shots and HUD icon), and once evolved a lighter tone,
+// used for its shots, its HUD icon and its ship's Nerve burst: Ranger red to pink, Interceptor amber
+// to light yellow, Bastion deep teal to light teal, the other weapons deep to pale blue.
+constexpr auto weaponColor(WeaponType type) -> Color
+{
+    switch (type)
+    {
+    case WeaponType::Forward:
+        return Palette::RangerRed;
+    case WeaponType::LaserShots:
+        return Palette::Amber;
+    case WeaponType::Orbit:
+        return Palette::Teal;
+    default:
+        return Palette::ShieldDeep;
+    }
+}
+
 constexpr auto evolvedWeaponColor(WeaponType type) -> Color
 {
-    return type == WeaponType::LaserShots ? Color{.r = 238, .g = 172, .b = 192, .a = 255} : Palette::Crit;
+    switch (type)
+    {
+    case WeaponType::Forward:
+        return Palette::Pink;
+    case WeaponType::LaserShots:
+        return Palette::YellowLight;
+    case WeaponType::Orbit:
+        return Palette::TealLight;
+    default:
+        return Palette::ShieldLight;
+    }
 }
 
 // Which weapons have an evolution at all. Beam lost its (Lance Sweep) when Laser Shots replaced it

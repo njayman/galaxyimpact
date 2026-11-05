@@ -29,6 +29,16 @@ constexpr Color ElementBurn{.r = 230, .g = 120, .b = 40, .a = 255};
 
 constexpr Color Heal{.r = 110, .g = 200, .b = 120, .a = 255};
 
+// Weapon identities: each ship's fire has a darker base tone and a lighter evolved tone.
+constexpr Color RangerRed{.r = 176, .g = 44, .b = 52, .a = 255};
+constexpr Color Pink{.r = 238, .g = 172, .b = 192, .a = 255}; // evolved Ranger
+constexpr Color Amber{.r = 204, .g = 158, .b = 48, .a = 255};       // Interceptor
+constexpr Color YellowLight{.r = 255, .g = 236, .b = 140, .a = 255}; // evolved Interceptor
+constexpr Color Teal{.r = 40, .g = 140, .b = 132, .a = 255};        // Bastion
+constexpr Color TealLight{.r = 168, .g = 232, .b = 222, .a = 255};  // evolved Bastion
+constexpr Color ShieldDeep{.r = 104, .g = 134, .b = 160, .a = 255}; // the other weapons
+constexpr Color ShieldLight{.r = 208, .g = 221, .b = 230, .a = 255};
+
 constexpr Color ShatteredBeltAccent{.r = 217, .g = 165, .b = 91, .a = 255}; // amber dust
 
 constexpr Color RustbloomVoid{.r = 16, .g = 14, .b = 10, .a = 255};

@@ -2180,7 +2180,7 @@ void updateWeapons(Game& game, float deltaTime)
             constexpr float spread = 10;
             auto dmg = static_cast<int32_t>(static_cast<float>(weaponDamage(game, w.level)) *
                                             forwardDamageMult);
-            Color color = Palette::Accent;
+            Color color = weaponColor(w.type);
             if (w.evolved)
             {
                 dmg = static_cast<int32_t>(static_cast<float>(dmg) * 1.5F);
@@ -2380,7 +2380,7 @@ void updateWeapons(Game& game, float deltaTime)
                     .position = start,
                     .velocity = Vector2Scale(d, projectileSpeed * laserShotSpeedMult * (1.0F + jitter(0.06F))),
                     .radius = laserShotHalfWidth,
-                    .color = w.evolved ? evolvedWeaponColor(w.type) : Palette::ElementStatic,
+                    .color = w.evolved ? evolvedWeaponColor(w.type) : weaponColor(w.type),
                     .active = true,
                     .damage = dmg,
                     .source = DamageSource::LaserShots,
@@ -3229,7 +3229,7 @@ void updateNerveLaserStorm(Game& game, float deltaTime)
     game.run.nerveStormTimer -= deltaTime;
     game.run.nerveStormEmit += static_cast<float>(nerveStormStreaks) / nerveStormDuration * deltaTime;
     const bool evolved = signatureEvolved(game);
-    const Color color = evolved ? evolvedWeaponColor(WeaponType::LaserShots) : Palette::ElementStatic;
+    const Color color = evolved ? evolvedWeaponColor(WeaponType::LaserShots) : weaponColor(WeaponType::LaserShots);
     const Vector2 dir = aimAtMouse(game);
     const Vector2 nose =
         Vector2Add(game.run.player.position, Vector2Scale(dir, game.run.player.radius * 1.05F));
