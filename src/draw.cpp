@@ -255,7 +255,7 @@ void drawOrbitShot(Vector2 pos, float radius, bool evolved)
 }
 
 // Nerve bursts' own shapes: Ranger's ball and Bastion's tornado blades; evolved, in the signature
-// weapon's evolved colour with a star inside.
+// weapon's evolved colour (a hot core in the ball, star blades for the tornado).
 void drawNerveBall(Vector2 pos, float radius, bool evolved)
 {
     if (!evolved)
@@ -265,10 +265,8 @@ void drawNerveBall(Vector2 pos, float radius, bool evolved)
         return;
     }
     const Color gold = evolvedWeaponColor(WeaponType::Forward);
-    const float spin = static_cast<float>(GetTime()) * 90.0F;
     DrawCircleV(pos, radius, Fade(gold, 0.45F));
-    DrawPolyLinesEx(pos, 4, radius * 0.8F, spin, 2.0F, Fade(WHITE, 0.8F));
-    DrawPolyLinesEx(pos, 4, radius * 0.8F, spin + 45.0F, 2.0F, Fade(WHITE, 0.8F));
+    DrawCircleV(pos, radius * 0.45F, Fade(WHITE, 0.35F)); // a hot core
     DrawCircleLines(static_cast<int32_t>(pos.x), static_cast<int32_t>(pos.y), radius, gold);
 }
 
