@@ -13,10 +13,11 @@ namespace
 constexpr float parallax = 0.3F;
 constexpr int32_t maxObjects = 6;
 constexpr float spawnInterval = 2.5F;
-constexpr float breakRadius = 700.0F;  // facets inside this distance of the centre come loose
-constexpr float swallowRadius = 30.0F; // loose facets vanish here
+constexpr float breakRadius = 700.0F;  // tiles inside this distance of the centre come loose
+constexpr float swallowRadius = 30.0F; // loose tiles vanish here
 constexpr float looseLife = 2.2F;
-constexpr float visibility = 0.35F; // how far toward full colour the wreckage is drawn
+constexpr int32_t tilesAcross = 24;
+constexpr Color dim{.r = 125, .g = 120, .b = 140, .a = 255}; // background strength, a little lavender
 constexpr float tau = 2.0F * std::numbers::pi_v<float>;
 
 auto rnd(float lo, float hi) -> float
@@ -24,83 +25,84 @@ auto rnd(float lo, float hi) -> float
     return lo + (hi - lo) * static_cast<float>(GetRandomValue(0, 10000)) / 10000.0F;
 }
 
-enum class Wreck : std::uint8_t
+struct InfallSprite
 {
-    PlanetChunk, // Shattered Belt: faceted stone with amber, a wedge broken out
-    Derelict,    // Rustbloom: a rusted hull snapped in two, bloom along its edges
-    BasaltSlab   // Solar Forge: dark basalt split by a gold seam
+    RenderTexture2D target;
+    float size;
+    std::vector<Rectangle> tiles; // drawn-orientation tiles that hold some of the object
 };
 
-// A mosaic of facets filling the wreck's silhouette, lit from one side.
-auto buildWreck(Wreck kind, float size) -> InfallObject
+// ponytail: built once on first entering Punctum and kept for the process; a dozen small textures.
+std::vector<InfallSprite> sprites;
+
+struct SpriteSpec
 {
-    InfallObject obj{.pos = {}, .angle = rnd(0, tau), .spin = rnd(-0.08F, 0.08F), .pieces = {}};
-    const float spacing = size / 7.0F;
-    const Vector2 light = Vector2Rotate(Vector2{.x = 1, .y = 0}, rnd(0, tau));
-    const float cutStart = rnd(0, tau);
-    const float breakX = rnd(-0.25F, 0.25F) * size;
-    const float seamAngle = rnd(0, tau);
-    const Color stone = GetRandomValue(0, 1) == 0 ? Palette::StructLight : Palette::RustbloomHaze;
-
-    for (float y = -size; y <= size; y += spacing)
-    {
-        for (float x = -size; x <= size; x += spacing)
-        {
-            const Vector2 p{.x = x + rnd(-0.25F, 0.25F) * spacing, .y = y + rnd(-0.25F, 0.25F) * spacing};
-            const float r = Vector2Length(p);
-            const float a = std::atan2(p.y, p.x);
-            bool inside = false;
-            Color color = stone;
-            switch (kind)
-            {
-            case Wreck::PlanetChunk:
-            {
-                const float rel = std::fmod(a - cutStart + 2 * tau, tau);
-                inside = r < size * (0.85F + 0.12F * std::sin(a * 5.0F)) && rel > 1.1F;
-                color = GetRandomValue(0, 9) == 0 ? Palette::ShatteredBeltAccent : stone;
-                break;
-            }
-            case Wreck::Derelict:
-            {
-                const float half = size * 0.24F * (1.0F - 0.45F * (p.x / size) * (p.x / size));
-                inside = std::abs(p.y) < half && std::abs(p.x - breakX) > spacing * 0.7F;
-                color = std::abs(p.y) > half - spacing && GetRandomValue(0, 2) == 0 ? Palette::RustbloomAccent
-                                                                                 : Palette::RustbloomHaze;
-                break;
-            }
-            case Wreck::BasaltSlab:
-            {
-                inside = (p.x * p.x) / (size * size) + (p.y * p.y) / (size * size * 0.36F) <
-                         0.85F + 0.15F * std::sin(a * 3.0F);
-                const float seam = std::abs(p.x * std::sin(seamAngle) - p.y * std::cos(seamAngle));
-                color = seam < spacing * 0.7F ? Palette::Charge : Color{.r = 52, .g = 40, .b = 36, .a = 255};
-                break;
-            }
-            }
-            if (!inside)
-            {
-                continue;
-            }
-            const float lit = 0.55F + 0.45F * Vector2DotProduct(r > 0 ? Vector2Scale(p, 1.0F / r) : p, light);
-            obj.pieces.push_back(InfallPiece{.local = p,
-                                             .radius = spacing * rnd(0.55F, 0.72F),
-                                             .rotation = rnd(0, 360),
-                                             .sides = GetRandomValue(4, 6),
-                                             .color = ColorBrightness(color, -0.5F + 0.5F * lit)});
-        }
-    }
-    return obj;
-}
-
-auto toned(Color c) -> Color { return ColorLerp(Palette::PunctumVoid, c, visibility); }
+    InfallKind kind;
+    int32_t count;
+    float size;
+};
+constexpr std::array<SpriteSpec, 5> spriteSpecs{{{InfallKind::BeltPlanet, 3, 320},
+                                                 {InfallKind::Derelict, 3, 400},
+                                                 {InfallKind::HullFragment, 3, 150},
+                                                 {InfallKind::BloomPods, 2, 220},
+                                                 {InfallKind::GelBlobs, 3, 220}}};
 
 auto layerView(const Game& game) -> Vector2 { return Vector2Scale(game.run.player.position, parallax); }
 } // namespace
 
+void preparePunctumInfallSprites(const Game& game)
+{
+    if (!sprites.empty() || currentBiome(game.run.waveNumber) != Biome::Punctum)
+    {
+        return;
+    }
+    for (const auto& spec : spriteSpecs)
+    {
+        for (int32_t v = 0; v < spec.count; v++)
+        {
+            const auto px = static_cast<int32_t>(spec.size);
+            InfallSprite sprite{.target = LoadRenderTexture(px, px), .size = spec.size, .tiles = {}};
+            BeginTextureMode(sprite.target);
+            ClearBackground(BLANK);
+            drawInfallSprite(spec.kind, rnd(1, 1000), Vector2{.x = spec.size / 2, .y = spec.size / 2}, spec.size);
+            EndTextureMode();
+
+            // Keep only the tiles the object actually covers.
+            Image image = LoadImageFromTexture(sprite.target.texture);
+            ImageFlipVertical(&image); // render textures are stored upside down
+            const auto* pixels = static_cast<const Color*>(image.data);
+            const int32_t tile = px / tilesAcross;
+            for (int32_t ty = 0; ty + tile <= px; ty += tile)
+            {
+                for (int32_t tx = 0; tx + tile <= px; tx += tile)
+                {
+                    int32_t covered = 0;
+                    for (int32_t y = ty; y < ty + tile; y++)
+                    {
+                        for (int32_t x = tx; x < tx + tile; x++)
+                        {
+                            covered += static_cast<int32_t>(pixels[y * px + x].a > 40);
+                        }
+                    }
+                    if (covered * 4 > tile * tile)
+                    {
+                        sprite.tiles.push_back(Rectangle{.x = static_cast<float>(tx),
+                                                         .y = static_cast<float>(ty),
+                                                         .width = static_cast<float>(tile),
+                                                         .height = static_cast<float>(tile)});
+                    }
+                }
+            }
+            UnloadImage(image);
+            sprites.push_back(std::move(sprite));
+        }
+    }
+}
+
 void updatePunctumInfall(Game& game, float deltaTime)
 {
     PunctumInfall& infall = game.run.punctumInfall;
-    if (currentBiome(game.run.waveNumber) != Biome::Punctum)
+    if (currentBiome(game.run.waveNumber) != Biome::Punctum || sprites.empty())
     {
         infall.objects.clear();
         return;
@@ -110,22 +112,33 @@ void updatePunctumInfall(Game& game, float deltaTime)
     const float viewR = std::hypot(static_cast<float>(game.resources.screenWidth),
                                    static_cast<float>(game.resources.screenHeight)) / 2;
 
-    // Spawn upstream (on the far side of the view from the centre) so wreckage streams through
-    // the screen on its way in; near the centre it arrives from all round.
+    // Spawn upstream (on the far side of the view from the centre) so objects stream through the
+    // screen on their way in; near the centre they arrive from all round.
     infall.spawnTimer -= deltaTime;
     if (infall.spawnTimer <= 0 && static_cast<int32_t>(infall.objects.size()) < maxObjects)
     {
         infall.spawnTimer = spawnInterval * rnd(0.6F, 1.4F);
-        const float size = rnd(90, 190);
+        const auto index = GetRandomValue(0, static_cast<int32_t>(sprites.size()) - 1);
+        const InfallSprite& sprite = sprites.at(static_cast<size_t>(index));
+        const float scale = rnd(0.8F, 1.25F);
+        const float reach = sprite.size * scale / 2;
         const float base = Vector2Length(view) > 1500 ? std::atan2(view.y, view.x) : rnd(0, tau);
         const float a = base + rnd(-1.0F, 1.0F);
-        Vector2 at = Vector2Add(view, Vector2Scale(Vector2{.x = std::cos(a), .y = std::sin(a)}, viewR + size + rnd(0, 400)));
-        if (Vector2Length(at) < breakRadius + size * 2) // never born inside the break zone
+        Vector2 at = Vector2Add(view, Vector2Scale(Vector2{.x = std::cos(a), .y = std::sin(a)}, viewR + reach + rnd(0, 400)));
+        if (Vector2Length(at) < breakRadius + reach * 2) // never born inside the break zone
         {
-            at = Vector2Scale(Vector2Normalize(at), breakRadius + size * 2);
+            at = Vector2Scale(Vector2Normalize(at), breakRadius + reach * 2);
         }
-        InfallObject obj = buildWreck(static_cast<Wreck>(GetRandomValue(0, 2)), size);
-        obj.pos = at;
+        InfallObject obj{.sprite = index, .pos = at, .angle = rnd(0, tau), .spin = rnd(-0.08F, 0.08F), .pieces = {}};
+        for (const auto& tile : sprite.tiles)
+        {
+            obj.pieces.push_back(InfallPiece{
+                .src = tile,
+                .local = Vector2Scale(Vector2{.x = tile.x + tile.width / 2 - sprite.size / 2,
+                                              .y = tile.y + tile.height / 2 - sprite.size / 2},
+                                      scale),
+                .size = tile.width * scale});
+        }
         infall.objects.push_back(std::move(obj));
     }
 
@@ -146,12 +159,12 @@ void updatePunctumInfall(Game& game, float deltaTime)
                 const Vector2 at = Vector2Add(obj.pos, Vector2Rotate(piece.local, obj.angle));
                 if (Vector2Length(at) < breakRadius)
                 {
-                    // Comes away, keeping the wreck's fall plus a little spin-off.
+                    // Comes away, keeping the object's fall plus a little spin-off.
                     piece.loose = true;
                     piece.pos = at;
+                    piece.rotation = obj.angle * RAD2DEG;
                     piece.vel = Vector2Add(Vector2Scale(obj.pos, -speed / std::max(dist, 1.0F)),
-                                           Vector2Rotate(Vector2Normalize(at), tau / 4 * (obj.spin > 0 ? 1.0F : -1.0F)));
-                    piece.vel = Vector2Add(piece.vel, Vector2Scale(Vector2Normalize(at), rnd(-30, 30)));
+                                           Vector2Scale(Vector2Normalize(at), rnd(-30, 30)));
                     piece.life = looseLife;
                 }
                 continue;
@@ -160,7 +173,7 @@ void updatePunctumInfall(Game& game, float deltaTime)
             {
                 continue;
             }
-            // Loose facets spiral in: pulled to the centre, swirled sideways, shrinking.
+            // Loose tiles spiral in: pulled to the centre, swirled sideways, shrinking.
             const float d = std::max(Vector2Length(piece.pos), 1.0F);
             const Vector2 inward = Vector2Scale(piece.pos, -1.0F / d);
             const Vector2 swirl{.x = -inward.y, .y = inward.x};
@@ -176,7 +189,7 @@ void updatePunctumInfall(Game& game, float deltaTime)
         }
     }
 
-    // Gone once every facet has burnt out, or once it drifts far from view.
+    // Gone once every tile has burnt out, or once it drifts far from view.
     std::erase_if(infall.objects,
                   [&](const InfallObject& obj)
                   {
@@ -188,7 +201,7 @@ void updatePunctumInfall(Game& game, float deltaTime)
 
 void drawPunctumInfall(const Game& game)
 {
-    if (currentBiome(game.run.waveNumber) != Biome::Punctum)
+    if (currentBiome(game.run.waveNumber) != Biome::Punctum || sprites.empty())
     {
         return;
     }
@@ -196,25 +209,38 @@ void drawPunctumInfall(const Game& game)
     const Vector2 shift = Vector2Scale(game.run.player.position, 1.0F - parallax);
     for (const auto& obj : game.run.punctumInfall.objects)
     {
+        const InfallSprite& sprite = sprites.at(static_cast<size_t>(obj.sprite));
+        const Texture2D& texture = sprite.target.texture;
         for (const auto& piece : obj.pieces)
         {
+            // Render textures are upside down: flip the source rectangle.
+            const Rectangle src{.x = piece.src.x,
+                                .y = sprite.size - piece.src.y - piece.src.height,
+                                .width = piece.src.width,
+                                .height = -piece.src.height};
             if (!piece.loose)
             {
                 const Vector2 at = Vector2Add(shift, Vector2Add(obj.pos, Vector2Rotate(piece.local, obj.angle)));
-                DrawPoly(at, piece.sides, piece.radius, piece.rotation + obj.angle * RAD2DEG, toned(piece.color));
+                const float s = piece.size + 1.0F; // a hair of overlap hides the seams
+                DrawTexturePro(texture, src, Rectangle{.x = at.x, .y = at.y, .width = s, .height = s},
+                               Vector2{.x = s / 2, .y = s / 2}, obj.angle * RAD2DEG, dim);
                 continue;
             }
             if (piece.life <= 0)
             {
                 continue;
             }
-            // Burning away: heats to lavender, shrinks and fades, with a short streak inward.
+            // Burning away: heats to lavender, shrinks and fades.
             const float k = piece.life / looseLife;
-            const Color heat = ColorLerp(toned(piece.color), Palette::PunctumHaze, std::min(1.0F, (1.0F - k) * 1.6F));
+            const float s = piece.size * (0.3F + 0.7F * k);
+            const Color heat = ColorLerp(dim, Palette::PunctumHaze, std::min(1.0F, (1.0F - k) * 1.6F));
             const Vector2 at = Vector2Add(shift, piece.pos);
-            const Vector2 back = Vector2Scale(Vector2Normalize(piece.vel), -piece.radius * 2.5F);
-            DrawLineEx(at, Vector2Add(at, back), piece.radius * 0.5F * k, Fade(heat, 0.35F * k));
-            DrawPoly(at, piece.sides, piece.radius * (0.3F + 0.7F * k), piece.rotation, Fade(heat, 0.25F + 0.65F * k));
+            DrawTexturePro(texture, src, Rectangle{.x = at.x, .y = at.y, .width = s, .height = s},
+                           Vector2{.x = s / 2, .y = s / 2}, piece.rotation, Fade(heat, 0.25F + 0.75F * k));
+            // A lavender glow over the tile, so even dark rock visibly burns.
+            const float glow = std::sin((1.0F - k) * std::numbers::pi_v<float>); // flares, then dies
+            DrawRectanglePro(Rectangle{.x = at.x, .y = at.y, .width = s * 0.8F, .height = s * 0.8F},
+                             Vector2{.x = s * 0.4F, .y = s * 0.4F}, piece.rotation, Fade(Palette::PunctumHaze, 0.6F * glow));
         }
     }
 }

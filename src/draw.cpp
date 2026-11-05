@@ -8,6 +8,7 @@
 #include "entities/ship.hpp"
 #include "entities/space.hpp"
 #include "guitheme.hpp"
+#include "punctum_infall.hpp"
 #include "menu.hpp"
 #include "palette.hpp"
 #include "progression.hpp"
@@ -1869,56 +1870,11 @@ void fillConvexQuad(const std::array<Vector2, 4>& p, Color color)
         DrawTriangle(p[0], p[3], p[2], color);
     }
 }
-} // namespace
-
-void drawBeltPlanet(const Game& game)
+// A Belt planet with its debris ring, at any centre and size; tone maps a colour and strength to
+// the final colour. Punctum's falling wreckage uses it too.
+void drawBeltPlanetBody(const BeltPlanet& planet, Vector2 center, float radius,
+                        const std::function<Color(Color, float)>& tone)
 {
-    constexpr int32_t zonesPerSide = 3;
-    constexpr float visibility = 0.25F; // how far toward full colour the planet is drawn: a solid, dim body
-
-    const Vector2 player = game.run.player.position;
-    const float zoneSize = 2.0F * GameConstants::arenaHalf / zonesPerSide;
-    const auto zoneOf = [&](float v)
-    {
-        return std::clamp(static_cast<int32_t>(std::floor((v + GameConstants::arenaHalf) / zoneSize)), 0,
-                          zonesPerSide - 1);
-    };
-    const int32_t zx = zoneOf(player.x);
-    const int32_t zy = zoneOf(player.y);
-    const Vector2 zoneCenter{.x = -GameConstants::arenaHalf + (static_cast<float>(zx) + 0.5F) * zoneSize,
-                             .y = -GameConstants::arenaHalf + (static_cast<float>(zy) + 0.5F) * zoneSize};
-    const Vector2 rel = Vector2Subtract(zoneCenter, player);
-    // The drift is scaled so the planet slides just off screen as you reach the zone edge; it
-    // only fades over the last few percent, to hide the debris ring that trails past the body.
-    const float radius = static_cast<float>(game.resources.screenHeight) * 0.45F;
-    const float screenHalf = static_cast<float>(std::max(game.resources.screenWidth, game.resources.screenHeight)) / 2;
-    const float drift = (screenHalf + radius) / (zoneSize / 2);
-    const float edge = std::max(std::abs(rel.x), std::abs(rel.y)) / (zoneSize / 2);
-    const float vis = visibility * std::clamp((1.0F - edge) / 0.06F, 0.0F, 1.0F);
-    if (vis <= 0.005F)
-    {
-        return;
-    }
-
-    // Rebuilt on entering a zone or starting a run, so every run gets a new set of planets.
-    // Only some zones have one; the rest stay open space.
-    constexpr float planetChance = 0.45F;
-    const float seed = static_cast<float>(zy * zonesPerSide + zx) + 1.0F + game.run.backdropSeed;
-    if (hashNoise(seed * 17.3F + 5.0F) > planetChance)
-    {
-        return;
-    }
-    static float cachedSeed = -1;
-    static BeltPlanet planet;
-    if (seed != cachedSeed)
-    {
-        cachedSeed = seed;
-        planet = buildBeltPlanet(seed);
-    }
-
-    const Color voidColor = biomeVoidColor(game);
-    const auto tone = [&](Color c, float k) { return ColorLerp(voidColor, c, vis * k); };
-    const Vector2 center = Vector2Add(player, Vector2Scale(rel, drift));
     const auto proj = [&](Vector3 v) { return Vector2{.x = center.x + v.x * radius, .y = center.y - v.y * radius}; };
     const Vector3 light = planet.light;
     const Color rock = planet.rock;
@@ -1988,6 +1944,58 @@ void drawBeltPlanet(const Game& game)
 
     drawRing(true);
 }
+} // namespace
+
+void drawBeltPlanet(const Game& game)
+{
+    constexpr int32_t zonesPerSide = 3;
+    constexpr float visibility = 0.25F; // how far toward full colour the planet is drawn: a solid, dim body
+
+    const Vector2 player = game.run.player.position;
+    const float zoneSize = 2.0F * GameConstants::arenaHalf / zonesPerSide;
+    const auto zoneOf = [&](float v)
+    {
+        return std::clamp(static_cast<int32_t>(std::floor((v + GameConstants::arenaHalf) / zoneSize)), 0,
+                          zonesPerSide - 1);
+    };
+    const int32_t zx = zoneOf(player.x);
+    const int32_t zy = zoneOf(player.y);
+    const Vector2 zoneCenter{.x = -GameConstants::arenaHalf + (static_cast<float>(zx) + 0.5F) * zoneSize,
+                             .y = -GameConstants::arenaHalf + (static_cast<float>(zy) + 0.5F) * zoneSize};
+    const Vector2 rel = Vector2Subtract(zoneCenter, player);
+    // The drift is scaled so the planet slides just off screen as you reach the zone edge; it
+    // only fades over the last few percent, to hide the debris ring that trails past the body.
+    const float radius = static_cast<float>(game.resources.screenHeight) * 0.45F;
+    const float screenHalf = static_cast<float>(std::max(game.resources.screenWidth, game.resources.screenHeight)) / 2;
+    const float drift = (screenHalf + radius) / (zoneSize / 2);
+    const float edge = std::max(std::abs(rel.x), std::abs(rel.y)) / (zoneSize / 2);
+    const float vis = visibility * std::clamp((1.0F - edge) / 0.06F, 0.0F, 1.0F);
+    if (vis <= 0.005F)
+    {
+        return;
+    }
+
+    // Rebuilt on entering a zone or starting a run, so every run gets a new set of planets.
+    // Only some zones have one; the rest stay open space.
+    constexpr float planetChance = 0.45F;
+    const float seed = static_cast<float>(zy * zonesPerSide + zx) + 1.0F + game.run.backdropSeed;
+    if (hashNoise(seed * 17.3F + 5.0F) > planetChance)
+    {
+        return;
+    }
+    static float cachedSeed = -1;
+    static BeltPlanet planet;
+    if (seed != cachedSeed)
+    {
+        cachedSeed = seed;
+        planet = buildBeltPlanet(seed);
+    }
+
+    const Color voidColor = biomeVoidColor(game);
+    const auto tone = [&](Color c, float k) { return ColorLerp(voidColor, c, vis * k); };
+    drawBeltPlanetBody(planet, Vector2Add(player, Vector2Scale(rel, drift)), radius, tone);
+}
+
 
 namespace
 {
@@ -7493,6 +7501,7 @@ void drawSandboxMenu(const Game& game)
 auto drawGame(Game& game) -> void
 {
     updateTransitions(game);
+    preparePunctumInfallSprites(game); // renders into its own textures, so before the frame's target
     BeginTextureMode(game.resources.worldTarget);
     ClearBackground(biomeVoidColor(game));
 
@@ -7667,4 +7676,69 @@ auto drawGame(Game& game) -> void
     drawIrisClose(game);
 
     EndDrawing();
+}
+
+// One background object from another Biome, drawn into a Punctum wreckage sprite (see
+// punctum_infall.cpp) with its own Biome's drawing code, at fuller strength than in its Biome.
+void drawInfallSprite(InfallKind kind, float seed, Vector2 center, float size)
+{
+    const std::function<Color(Color, float)> tone = [](Color c, float k)
+    { return ColorLerp(Palette::Void, c, std::min(1.0F, 0.85F * k)); };
+    const auto h = [seed](float k) { return hashNoise(seed * 13.1F + k); };
+    switch (kind)
+    {
+    case InfallKind::BeltPlanet:
+        drawBeltPlanetBody(buildBeltPlanet(seed), center, size / 3.9F, tone);
+        break;
+    case InfallKind::Derelict:
+        drawRustbloomDerelict(center, (h(1) - 0.5F) * 0.6F, size * 0.88F, seed, tone);
+        break;
+    case InfallKind::HullFragment:
+        drawPanelShape(center, size * 0.4F, 3 + GetRandomValue(0, 5), h(2) * 360.0F,
+                       tone(ColorLerp(Palette::StructMid, Palette::RustbloomHaze, 0.3F), 1.0F), seed);
+        break;
+    case InfallKind::BloomPods:
+    {
+        // Three pods strung on tendrils, as on Rustbloom's near layer.
+        std::array<Vector2, 3> pods{};
+        for (size_t i = 0; i < pods.size(); i++)
+        {
+            const float a = h(3.0F + static_cast<float>(i)) * 2.0F * PI;
+            pods.at(i) = Vector2Add(center, Vector2{.x = std::cos(a) * size * 0.26F, .y = std::sin(a) * size * 0.26F});
+        }
+        DrawLineEx(pods.at(0), pods.at(1), 3.0F, tone(Palette::RustbloomHaze, 0.5F));
+        DrawLineEx(pods.at(1), pods.at(2), 3.0F, tone(Palette::RustbloomHaze, 0.5F));
+        for (size_t i = 0; i < pods.size(); i++)
+        {
+            const float r = size * (0.12F + 0.06F * h(7.0F + static_cast<float>(i)));
+            DrawCircleV(pods.at(i), r, tone(Palette::RustbloomAccent, 0.75F));
+            DrawCircleV(Vector2Add(pods.at(i), Vector2{.x = r * 0.5F, .y = r * 0.3F}), r * 0.6F,
+                        tone(Palette::RustbloomHaze, 0.6F));
+            DrawCircleV(pods.at(i), r * 0.3F, tone(Palette::Heal, 0.9F));
+        }
+        break;
+    }
+    case InfallKind::GelBlobs:
+    {
+        // A clump of Solar Forge cave gel: dark red globules with a sheen, one with an ember.
+        const int32_t count = 6 + GetRandomValue(0, 3);
+        for (int32_t i = 0; i < count; i++)
+        {
+            const auto k = static_cast<float>(i);
+            const float a = h(11.0F + k) * 2.0F * PI;
+            const float d = size * 0.22F * std::sqrt(h(21.0F + k));
+            const Vector2 c = Vector2Add(center, Vector2{.x = std::cos(a) * d, .y = std::sin(a) * d});
+            const float r = size * (0.12F + 0.07F * h(31.0F + k));
+            const Color rock = ColorLerp(Palette::SolarForgeAccent, Palette::Void, 0.45F + 0.25F * h(41.0F + k));
+            DrawCircleV(c, r, rock);
+            DrawCircleV(Vector2Add(c, Vector2{.x = -r * 0.28F, .y = -r * 0.28F}), r * 0.42F, ColorLerp(rock, WHITE, 0.12F));
+            DrawCircleLines(static_cast<int32_t>(c.x), static_cast<int32_t>(c.y), r, ColorLerp(rock, WHITE, 0.25F));
+            if (i == 0)
+            {
+                DrawCircleV(c, r * 0.3F, ColorLerp(Palette::ElementBurn, YELLOW, 0.3F));
+            }
+        }
+        break;
+    }
+    }
 }
