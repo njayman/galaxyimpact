@@ -138,6 +138,8 @@ void drawTouchControls(const Game& game);
 void drawStatusRow(const Game& game, int32_t x, int32_t y);
 auto drawVitals(const Game& game, int32_t x, int32_t y) -> int32_t;
 auto withThousands(int32_t value) -> std::string;
+auto bossLineColor(const Boss& boss) -> Color;
+void drawOffscreenBosses(const Game& game, int32_t width, int32_t height);
 void drawRunNumbers(const Game& game, int32_t right, int32_t y);
 void drawBossLines(const Game& game, int32_t width, int32_t height);
 void drawOrganicEnemyShape(Vector2 center, float baseRadius, float seed, Color color);
@@ -6570,6 +6572,7 @@ void drawHUD(const Game& game)
     DrawRectangle(0, 0, width, 2, Fade(Palette::StructDark, 0.8F));
     DrawRectangle(0, 0, static_cast<int32_t>(static_cast<float>(width) * xpFrac), 2, Fade(Palette::Charge, 0.85F));
 
+    drawOffscreenBosses(game, width, height);
     const int32_t vitalsBottom = drawVitals(game, margin, margin);
     drawStatusRow(game, margin, vitalsBottom + 10);
     drawRunNumbers(game, width - margin, margin - 6);
@@ -6845,6 +6848,59 @@ void drawRunNumbers(const Game& game, int32_t right, int32_t y)
     }
 }
 
+// A boss's fixed HUD colour: its bestiary colour, dark hulls lifted so it reads on the void.
+auto bossLineColor(const Boss& boss) -> Color
+{
+    const Color color = bossBestiaryColor(bossBestiaryIndex(boss));
+    return color.r + color.g + color.b < 330 ? ColorBrightness(color, 0.45F) : color;
+}
+
+// A chevron on the screen edge for each boss out of view, pointing at it, in its line colour;
+// it grows as the boss closes in, with the distance beside it.
+void drawOffscreenBosses(const Game& game, int32_t width, int32_t height)
+{
+    const float scale = hudScale(game);
+    const Vector2 centre{.x = static_cast<float>(width) / 2, .y = static_cast<float>(height) / 2};
+    constexpr float inset = 30.0F;
+    const auto pulse = 0.75F + 0.25F * std::sin(static_cast<float>(GetTime()) * 5.0F);
+    for (const auto& boss : game.run.bosses)
+    {
+        if (boss.health <= 0 || boss.isBeltbreakerPlate || boss.isWreckwormSegment)
+        {
+            continue;
+        }
+        const Vector2 bossCentre{.x = boss.position.x + boss.size.x / 2, .y = boss.position.y + boss.size.y / 2};
+        const Vector2 d = Vector2Scale(Vector2Subtract(bossCentre, game.run.player.position), 1.0F / scale);
+        const float reach = std::max(boss.size.x, boss.size.y) / 2 / scale;
+        if (std::abs(d.x) - reach < centre.x && std::abs(d.y) - reach < centre.y)
+        {
+            continue; // some of it is on screen
+        }
+        const float t = std::min((centre.x - inset) / std::max(std::abs(d.x), 1.0F),
+                                 (centre.y - inset) / std::max(std::abs(d.y), 1.0F));
+        const Vector2 p = Vector2Add(centre, Vector2Scale(d, t));
+        const Vector2 dir = Vector2Normalize(d);
+        const Vector2 side{.x = -dir.y, .y = dir.x};
+        const float dist = Vector2Length(d) * scale;
+        const float size = std::clamp(24.0F - dist / 200.0F, 13.0F, 24.0F);
+        const Color color = Fade(bossLineColor(boss), pulse);
+
+        const Vector2 tip = Vector2Add(p, Vector2Scale(dir, size * 0.6F));
+        const Vector2 notch = Vector2Subtract(p, Vector2Scale(dir, size * 0.1F));
+        const Vector2 left = Vector2Add(Vector2Subtract(p, Vector2Scale(dir, size * 0.5F)), Vector2Scale(side, size * 0.6F));
+        const Vector2 right = Vector2Subtract(Vector2Subtract(p, Vector2Scale(dir, size * 0.5F)), Vector2Scale(side, size * 0.6F));
+        DrawTriangle(tip, left, notch, color); // a chevron: two halves, either winding
+        DrawTriangle(tip, notch, left, color);
+        DrawTriangle(tip, right, notch, color);
+        DrawTriangle(tip, notch, right, color);
+
+        const std::string label = std::to_string(static_cast<int32_t>(dist / 10.0F));
+        const Vector2 at = Vector2Subtract(p, Vector2Scale(dir, size + 12.0F));
+        drawText(game, label.c_str(), static_cast<int32_t>(at.x) - measureText(game, label.c_str(), 12) / 2,
+                 static_cast<int32_t>(at.y) - 6, 12, Fade(Palette::Haze, 0.8F));
+    }
+}
+
 // One hairline per boss along the bottom centre: name in small caps above, a pale trail of
 // recent damage behind the fill, ticks where director bosses change phase.
 void drawBossLines(const Game& game, int32_t width, int32_t height)
@@ -6887,11 +6943,7 @@ void drawBossLines(const Game& game, int32_t width, int32_t height)
         DrawRectangleRec(Rectangle{.x = x + lineWidth * frac, .y = y, .width = lineWidth * (trail - frac), .height = 3},
                          Fade(Palette::Crit, 0.55F));
         const int32_t index = bossBestiaryIndex(boss);
-        Color color = bossBestiaryColor(index);
-        if (color.r + color.g + color.b < 330) // lift dark hulls so the line reads on the void
-        {
-            color = ColorBrightness(color, 0.45F);
-        }
+        const Color color = bossLineColor(boss);
         DrawRectangleRec(Rectangle{.x = x, .y = y, .width = lineWidth * frac, .height = 3}, color);
         if (boss.usesDirector)
         {
