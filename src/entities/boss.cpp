@@ -15,7 +15,11 @@
 
 void seedWreckwormTrail(Boss& head, Vector2 headCenter, Vector2 trailDir);
 void beginWreckwormConstrict(Game& game, Boss& head);
-void updateSlagmawDevour(Game& game, Boss& slagmaw, float deltaTime);
+void updateLavaMole(Game& game, Boss& boss, Vector2 bossCenter, float deltaTime);
+void moleBreach(Game& game, Boss& boss, Vector2 at, float radius);
+void slagmawErupt(Game& game, Boss& boss);
+void shedPetals(Game& game, Boss& boss, Vector2 bossCenter);
+void dropMagmaTrail(Game& game, Boss& boss, Vector2 bossCenter, Vector2 step);
 void endKrakenDraggedUnder(Game& game, Boss& kraken, bool clean);
 auto wreckwormCoilSegmentDeg(const Boss& head, int32_t segmentIndex) -> float;
 
@@ -387,7 +391,8 @@ void spawnSlagmaw(Game& game, int32_t wave)
 
     std::vector<BossAttack> moveset{BossAttack::Barrage,    BossAttack::ChargeDash,
                                     BossAttack::MeteorHell, BossAttack::MeteorSwarm,
-                                    BossAttack::Devour};
+                                    BossAttack::Devour,     BossAttack::Spread,
+                                    BossAttack::BurrowCharge};
     float attackTimerMin = 2.5F;
     float attackTimerMax = 4.5F;
     if (wave >= 70)
@@ -413,7 +418,7 @@ void spawnSlagmaw(Game& game, int32_t wave)
                                              megaBossHealthMult * enemyHealthMult *
                                              enemyHealthScale(game));
 
-    constexpr float slagmawSize = 450.0F;
+    constexpr float slagmawSize = slagmawHeadSize;
     const BossAttack firstAttack = moveset.front();
 
     Boss boss{.position = spawnPos,
@@ -1197,7 +1202,7 @@ void spawnSlagmawDrifterBreak(Game& game, Vector2 position, int32_t generation)
 void spawnSlagmawHalfBreak(Game& game, const Boss& original, Vector2 bossCenter,
                            std::vector<Boss>& pendingHalves)
 {
-    const float halfSize = original.size.x * 0.5F;
+    const float halfSize = original.size.x * 0.75F;
     const int32_t childGeneration = original.slagmawBreakGeneration + 1;
     const float generationMult = static_cast<float>(1 << std::clamp(childGeneration, 0, 8));
     const auto halfHealth =
@@ -1209,7 +1214,8 @@ void spawnSlagmawHalfBreak(Game& game, const Boss& original, Vector2 bossCenter,
 
         std::vector<BossAttack> moveset{BossAttack::Barrage,      BossAttack::ChargeDash,
                                         BossAttack::MeteorHell,   BossAttack::MeteorSwarm,
-                                        BossAttack::HomingBarrage, BossAttack::MeteorHell};
+                                        BossAttack::HomingBarrage, BossAttack::MeteorHell,
+                                        BossAttack::Spread,        BossAttack::BurrowCharge};
         const BossAttack firstAttack = moveset.front();
 
         const float offsetAngle = i == 0 ? 0.0F : 180.0F;
@@ -2473,35 +2479,151 @@ void endSlagmawSwallowed(Game& game, Boss& slagmaw, bool clean)
     playSFX(game, game.resources.sounds.nerveFizzle);
 }
 
-void updateSlagmawDevour(Game& game, Boss& slagmaw, float deltaTime)
+// Slag gobs thrown out in a ring, from a breach or the jaws coming up.
+void throwSlagRing(Game& game, Vector2 at, int32_t count)
+{
+    const float start = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+    for (int32_t i = 0; i < count; i++)
+    {
+        const float a = start + static_cast<float>(i) * 2.0F * PI / static_cast<float>(count);
+        const Vector2 dir{.x = std::cos(a), .y = std::sin(a)};
+        game.run.bossProjectiles.push_back(BossProjectile{.position = Vector2Add(at, Vector2Scale(dir, 40.0F)),
+                                                          .velocity = Vector2Scale(dir, barrageProjSpeed * 0.7F),
+                                                          .radius = 7,
+                                                          .homing = false,
+                                                          .active = true,
+                                                          .fromPlayer = false,
+                                                          .damage = enemyDamage(game, crossfireProjectileDamage),
+                                                          .health = 1,
+                                                          .isMeteor = true});
+    }
+}
+
+// Lava mole, every frame: dive or surface, the body sections trail the head, and the collar
+// blooms open for good below the bloom HP.
+void updateLavaMole(Game& game, Boss& boss, Vector2 bossCenter, float deltaTime)
+{
+    const bool under = (boss.state == BossState::WINDING_UP &&
+                        (boss.attack == BossAttack::Devour || boss.attack == BossAttack::BurrowCharge)) ||
+                       (boss.state == BossState::SHOOTING && boss.attack == BossAttack::BurrowCharge);
+    boss.moleUnder = std::clamp(boss.moleUnder + (under ? 1.0F : -1.0F) * moleDiveRate * deltaTime, 0.0F, 1.0F);
+
+    const float radius = boss.size.x / 2;
+    const float spacing = radius * moleSectionSpacing;
+    if (!boss.moleBodySet)
+    {
+        boss.moleBodySet = true;
+        for (size_t i = 0; i < boss.moleBody.size(); i++)
+        {
+            boss.moleBody.at(i) =
+                Vector2Subtract(bossCenter, Vector2Scale(boss.slagmawFacing, spacing * static_cast<float>(i + 1)));
+        }
+    }
+    Vector2 prev = bossCenter;
+    for (auto& section : boss.moleBody)
+    {
+        const Vector2 d = Vector2Subtract(section, prev);
+        const float len = Vector2Length(d);
+        if (len > spacing)
+        {
+            section = Vector2Add(prev, Vector2Scale(d, spacing / len));
+        }
+        prev = section;
+    }
+
+    if (!boss.slagmawBloomed && boss.health > 0 &&
+        static_cast<float>(boss.health) <= static_cast<float>(boss.maxHealth) * slagmawBloomHealthFrac)
+    {
+        boss.slagmawBloomed = true;
+        spawnBlastRing(game, bossCenter, 340.0F);
+        throwSlagRing(game, bossCenter, 16);
+        triggerShake(game, 10, 0.5F);
+        playSFX(game, game.resources.sounds.slamBoom);
+    }
+}
+
+// Surfacing with a bang: a blast ring, slag thrown out, and a hit on a ship too close.
+void moleBreach(Game& game, Boss& boss, Vector2 at, float radius)
+{
+    boss.moleUnder = 0;
+    spawnBlastRing(game, at, radius + 80.0F);
+    throwSlagRing(game, at, eruptSlagCount);
+    triggerShake(game, 9, 0.35F);
+    playSFX(game, game.resources.sounds.slamBoom);
+    auto& player = game.run.player;
+    if (player.health > 0 && !player.dashing && player.immunityTimer <= 0 &&
+        Vector2Distance(player.position, at) <= radius + player.radius)
+    {
+        damagePlayer(game, enemyDamage(game, devourBiteDamage));
+    }
+}
+
+// Erupt: the jaws come up through the ring. A ship still inside is swallowed (the Boss QTE),
+// or bitten and thrown clear while the QTE is on its gap. A dash through the moment escapes.
+void slagmawErupt(Game& game, Boss& boss)
 {
     auto& player = game.run.player;
-    if (bossQteActive(game) || player.health <= 0)
+    const Vector2 toPlayer = Vector2Subtract(player.position, boss.eruptAt);
+    boss.slagmawFacing = Vector2Length(toPlayer) > 1.0F ? Vector2Normalize(toPlayer) : Vector2{.x = 0, .y = -1};
+    boss.devourDir = boss.slagmawFacing;
+    // The maw, not the head's centre, comes up on the ring.
+    const Vector2 center = Vector2Subtract(boss.eruptAt, Vector2Scale(boss.slagmawFacing, boss.size.x / 2 * slagmawMawOffset));
+    boss.position = Vector2Subtract(center, Vector2{.x = boss.size.x / 2, .y = boss.size.y / 2});
+    boss.moleBodySet = false; // the body follows out of the hole
+    boss.stateTimer = eruptHold;
+    const bool caught = player.health > 0 && !player.dashing && !bossQteActive(game) &&
+                        Vector2Length(toPlayer) <= eruptRadius + player.radius;
+    if (caught && bossQteCanStart(game, QteKind::Swallowed))
+    {
+        boss.moleUnder = 0;
+        beginSlagmawSwallowed(game, boss);
+        return;
+    }
+    moleBreach(game, boss, boss.eruptAt, eruptRadius);
+}
+
+// Petal Volley: the collar sheds crystal petals in a ring; they slow to a hover, then dart at
+// the ship (updateProjectiles).
+void shedPetals(Game& game, Boss& boss, Vector2 bossCenter)
+{
+    const int32_t count = boss.slagmawBloomed ? petalBloomCount : petalCount;
+    const float start = std::atan2(boss.slagmawFacing.y, boss.slagmawFacing.x);
+    for (int32_t i = 0; i < count; i++)
+    {
+        const float a = start + static_cast<float>(i) * 2.0F * PI / static_cast<float>(count);
+        const Vector2 dir{.x = std::cos(a), .y = std::sin(a)};
+        game.run.bossProjectiles.push_back(
+            BossProjectile{.life = petalLife,
+                           .position = Vector2Add(bossCenter, Vector2Scale(dir, boss.size.x * 0.55F)),
+                           .velocity = Vector2Scale(dir, petalOutSpeed),
+                           .radius = 9,
+                           .homing = false,
+                           .active = true,
+                           .fromPlayer = false,
+                           .damage = enemyDamage(game, crossfireProjectileDamage),
+                           .health = 1,
+                           .isPetal = true});
+    }
+    spawnBlastRing(game, bossCenter, boss.size.x * 0.5F + 120.0F);
+    playSFX(game, game.resources.sounds.spreadBurst);
+}
+
+// Magma pools along a charge or tunnel, evenly spaced however far a frame moves.
+void dropMagmaTrail(Game& game, Boss& boss, Vector2 bossCenter, Vector2 step)
+{
+    if (!boss.isSlagmaw)
     {
         return;
     }
-    const Vector2 maw = slagmawMawCenter(slagmaw);
-    const Vector2 toPlayer = Vector2Subtract(player.position, maw);
-    const float dist = Vector2Length(toPlayer);
-    if (dist <= slagmaw.size.x * 0.18F + player.radius)
+    const float stepLength = Vector2Length(step);
+    boss.magmaTrailDist += stepLength;
+    while (stepLength > 0 && boss.magmaTrailDist >= magmaPoolSpacing)
     {
-        if (bossQteCanStart(game, QteKind::Swallowed))
-        {
-            beginSlagmawSwallowed(game, slagmaw);
-            return;
-        }
-        damagePlayer(game, enemyDamage(game, devourBiteDamage)); // a bite, then thrown clear
-        player.position = Vector2Add(maw, Vector2Scale(slagmaw.devourDir, slagmaw.size.x * 0.4F));
-        slagmaw.stateTimer = 0;
-        return;
+        boss.magmaTrailDist -= magmaPoolSpacing;
+        const Vector2 at =
+            Vector2Subtract(Vector2Add(bossCenter, step), Vector2Scale(step, boss.magmaTrailDist / stepLength));
+        game.run.magmaPools.push_back(MagmaPool{.position = at, .life = magmaPoolLife});
     }
-    if (dist > devourRange || dist < 0.01F || player.dashing ||
-        Vector2DotProduct(Vector2Scale(toPlayer, 1.0F / dist), slagmaw.devourDir) <
-            std::cos(devourConeHalfDeg * DEG2RAD))
-    {
-        return;
-    }
-    player.position = Vector2Subtract(player.position, Vector2Scale(toPlayer, devourPull * deltaTime / dist));
 }
 
 void updateSlagmawSwallowed(Game& game, Boss& slagmaw, float deltaTime)
@@ -3855,6 +3977,14 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake, bool pi
     {
         amount = static_cast<int32_t>(std::ceil(static_cast<float>(amount) * UpdateConstants::wreckwormPunishDamageMult));
     }
+    if (boss.isSlagmaw && boss.moleUnder > 0.5F)
+    {
+        return; // ponytail: underground; shots still stop on the swell
+    }
+    if (boss.isSlagmaw && boss.slagmawBloomed)
+    {
+        amount = static_cast<int32_t>(std::ceil(static_cast<float>(amount) * slagmawBloomDamageMult));
+    }
     if (boss.isSlagmaw && boss.slagmawPunishTimer > 0)
     {
         amount = static_cast<int32_t>(std::ceil(static_cast<float>(amount) * UpdateConstants::slagmawPunishDamageMult));
@@ -3966,13 +4096,14 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         {
             boss.slagmawPunishTimer -= deltaTime; // choking: starts no attack (IDLE below)
         }
-        // The maw tracks the player, held on the cone while Devour inhales.
+        // The maw tracks the player, held while it bites.
         if (boss.state != BossState::SHOOTING || boss.attack != BossAttack::Devour)
         {
             const Vector2 toPlayer = Vector2Normalize(Vector2Subtract(game.run.player.position, bossCenter));
             boss.slagmawFacing = Vector2Normalize(
                 Vector2Lerp(boss.slagmawFacing, toPlayer, std::min(1.0F, deltaTime * 2.5F)));
         }
+        updateLavaMole(game, boss, bossCenter, deltaTime);
     }
 
     if (boss.state != BossState::WINDING_UP)
@@ -3989,6 +4120,10 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         static_cast<float>(boss.health) <= static_cast<float>(boss.maxHealth) * enrageHealthFrac;
     float rateMult = enraged ? enrageSpeedMult : 1.0F;
 
+    if (boss.isSlagmaw && boss.slagmawBloomed)
+    {
+        rateMult *= slagmawBloomRateMult;
+    }
     if (boss.isBeltbreaker && boss.plateCount > 0)
     {
         // No minions left to hide behind: the core attacks faster the fewer plates remain.
@@ -4044,6 +4179,19 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             {
                 boss.stateTimer = slagSprayTell; // body flares gold
             }
+            else if (boss.isSlagmaw && boss.attack == BossAttack::Devour)
+            {
+                boss.stateTimer = eruptTell; // dives; the ring hunts the player
+                boss.eruptAt = game.run.player.position;
+            }
+            else if (boss.isSlagmaw && boss.attack == BossAttack::BurrowCharge)
+            {
+                boss.stateTimer = tunnelTell;
+            }
+            else if (boss.isSlagmaw && boss.attack == BossAttack::Spread)
+            {
+                boss.stateTimer = petalTell; // the collar flares
+            }
 
             switch (boss.attack)
             {
@@ -4090,6 +4238,10 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             case BossAttack::BurrowCharge:
             {
                 boss.color = Palette::RustbloomHaze;
+                if (boss.isSlagmaw)
+                {
+                    break; // dives where it is
+                }
 
                 const float burrowAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
                 const auto burrowDist = static_cast<float>(GetRandomValue(550, 700));
@@ -4139,6 +4291,23 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         if (!isAimLockedAttack(boss.attack) || boss.stateTimer > aimLockTime)
         {
             boss.targetPosition = bossAimPoint(game, boss); // frozen for the last aimLockTime
+        }
+        if (boss.isSlagmaw && boss.attack == BossAttack::Devour)
+        {
+            if (boss.stateTimer > eruptLockTime)
+            {
+                boss.eruptAt = game.run.player.position;
+            }
+            if (boss.moleUnder > 0.9F) // the swell runs under toward the ring
+            {
+                const Vector2 to = Vector2Subtract(boss.eruptAt, bossCenter);
+                const float len = Vector2Length(to);
+                if (len > 1.0F)
+                {
+                    boss.position = Vector2Add(boss.position,
+                                               Vector2Scale(to, std::min(len, moleTunnelSpeed * deltaTime) / len));
+                }
+            }
         }
 
         if (boss.stateTimer <= 0)
@@ -4190,7 +4359,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             }
         }
 
-        if (boss.attack == BossAttack::Spread)
+        if (boss.attack == BossAttack::Spread && !boss.isSlagmaw)
         {
             boss.barrageTimer -= deltaTime;
             if (boss.barrageTimer <= 0 && boss.spreadWindupShots < spreadRounds)
@@ -4307,25 +4476,9 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                                               deltaTime * (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F));
             boss.position = Vector2Add(boss.position, step);
             tryBeginRushQte(game, boss, bossCenter);
-            if (boss.isSlagmaw)
-            {
-                // Magma Ram: burning pools along the charge, evenly spaced however far a frame moves.
-                const float stepLength = Vector2Length(step);
-                boss.magmaTrailDist += stepLength;
-                while (stepLength > 0 && boss.magmaTrailDist >= magmaPoolSpacing)
-                {
-                    boss.magmaTrailDist -= magmaPoolSpacing;
-                    const Vector2 at = Vector2Subtract(
-                        Vector2Add(bossCenter, step), Vector2Scale(step, boss.magmaTrailDist / stepLength));
-                    game.run.magmaPools.push_back(MagmaPool{.position = at, .life = magmaPoolLife});
-                }
-            }
+            dropMagmaTrail(game, boss, bossCenter, step);
         }
 
-        if (boss.attack == BossAttack::Devour)
-        {
-            updateSlagmawDevour(game, boss, deltaTime);
-        }
 
         if (boss.attack == BossAttack::DashRush)
         {
@@ -4542,9 +4695,11 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 
         if (boss.attack == BossAttack::BurrowCharge)
         {
-            boss.position = Vector2Add(boss.position, Vector2Scale(boss.chargeVelocity,
-                                            deltaTime * (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F)));
+            const Vector2 step = Vector2Scale(boss.chargeVelocity,
+                                              deltaTime * (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F));
+            boss.position = Vector2Add(boss.position, step);
             tryBeginRushQte(game, boss, bossCenter);
+            dropMagmaTrail(game, boss, bossCenter, step); // Tunnel Run: the crust splits behind it
         }
 
         if (boss.attack == BossAttack::CoilClamp)
@@ -4694,6 +4849,10 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             boss.plateCount = aliveCount;
         }
 
+        if (boss.stateTimer <= 0 && boss.isSlagmaw && boss.attack == BossAttack::BurrowCharge)
+        {
+            moleBreach(game, boss, bossCenter, tunnelBreachRadius);
+        }
         if (boss.stateTimer <= 0 && boss.isBeltbreaker && boss.attack == BossAttack::ChargeDash &&
             boss.rampageDashesLeft > 0)
         {
@@ -4929,6 +5088,12 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         break;
     case BossAttack::Spread:
     {
+        if (boss.isSlagmaw)
+        {
+            shedPetals(game, boss, bossCenter);
+            boss.stateTimer = 0.5F;
+            break;
+        }
         boss.stateTimer = static_cast<float>(spreadRounds) * spreadRoundInterval + 0.2F;
         boss.barrageTimer = 0;
         boss.spreadWindupShots = 0;
@@ -5021,6 +5186,16 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         triggerShake(game, 6, 0.25F);
         break;
     case BossAttack::BurrowCharge:
+        if (boss.isSlagmaw)
+        {
+            // Tunnel Run: race under the locked line to just past the player.
+            const float travel = Vector2Length(direction) + tunnelOvershoot;
+            boss.stateTimer = travel / moleTunnelSpeed;
+            boss.chargeVelocity = Vector2Scale(aimDirection, moleTunnelSpeed);
+            boss.magmaTrailDist = 0;
+            playSFX(game, game.resources.sounds.rockBreak);
+            break;
+        }
         boss.stateTimer = wreckwormBurrowChargeDuration;
         boss.chargeVelocity = Vector2Scale(aimDirection, chargeDashSpeed);
         playSFX(game, game.resources.sounds.bossWindUp);
@@ -5103,10 +5278,7 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         break;
     }
     case BossAttack::Devour:
-        boss.stateTimer = devourDuration;
-        boss.devourDir = boss.slagmawFacing;
-        playSFX(game, game.resources.sounds.nerveCharge);
-        triggerShake(game, 6, 0.4F);
+        slagmawErupt(game, boss);
         break;
     case BossAttack::TailWrap:
     {

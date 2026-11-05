@@ -273,15 +273,37 @@ constexpr auto meteorHellDuration(int32_t wave) -> float
     return 3.0F;
 }
 
-constexpr float slagmawMoveSpeedMult = 0.32F;
+constexpr float slagmawMoveSpeedMult = 0.6F; // lava mole: quicker than the old mass
 constexpr float slagSprayTell = 0.5F;      // body flares gold before Slag Spray
 constexpr float slagSpraySpreadDeg = 14.0F; // each gob's random angle off the aim, +-
 constexpr float slagmawMawOffset = 0.55F;  // maw centre, in body radii from the centre
-constexpr float devourDuration = 2.0F;
-constexpr float devourConeHalfDeg = 35.0F;
-constexpr float devourRange = 760.0F;
-constexpr float devourPull = 300.0F;       // units per second toward the maw
-constexpr int32_t devourBiteDamage = 2;    // reaching the maw while a QTE can't start
+constexpr float slagmawHeadSize = 200.0F;
+constexpr float moleSectionSpacing = 0.8F;  // body sections apart, in head radii
+constexpr float moleDiveRate = 2.5F;        // moleUnder per second, diving or surfacing
+constexpr float moleTunnelSpeed = 950.0F;   // burrowed travel, units per second
+// Erupt (replaces Devour): dive, a gold ring hunts the player, the jaws come up through it.
+constexpr float eruptTell = 1.7F;
+constexpr float eruptLockTime = 0.45F; // the ring stops following for the last of the tell
+constexpr float eruptRadius = 120.0F;
+constexpr float eruptHold = 0.9F;      // surfaced recovery after the bite
+constexpr int32_t eruptSlagCount = 10;  // slag gobs thrown out round the breach
+// Tunnel Run (BurrowCharge): dive, race under a locked line, magma pools behind, breach past the player.
+constexpr float tunnelTell = 1.0F;
+constexpr float tunnelOvershoot = 220.0F;
+constexpr float tunnelBreachRadius = 130.0F;
+// Petal Volley (Spread): the collar flares and sheds crystal petals.
+constexpr float petalTell = 0.8F;
+constexpr int32_t petalCount = 7;
+constexpr int32_t petalBloomCount = 12;
+constexpr float petalOutSpeed = 9.0F;   // per frame at 60 fps
+constexpr float petalStallTime = 0.75F; // slowing to a hover, then they dart
+constexpr float petalDartSpeed = 12.0F;
+constexpr float petalLife = 4.0F;
+// Bloom: below this HP the collar locks open for good.
+constexpr float slagmawBloomHealthFrac = 0.3F;
+constexpr float slagmawBloomRateMult = 0.7F;
+constexpr float slagmawBloomDamageMult = 1.25F; // the opened collar bares the core
+constexpr int32_t devourBiteDamage = 2;    // an Erupt or breach hit
 constexpr float magmaPoolSpacing = 70.0F;
 constexpr float magmaPoolRadius = 64.0F;
 constexpr float magmaPoolLife = 2.0F;

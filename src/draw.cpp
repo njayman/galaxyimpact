@@ -150,7 +150,7 @@ void drawClusterEnemyShape(Vector2 center, float baseRadius, float seed, Color c
 void drawMeteorBossShape(Vector2 center, float radius, int32_t seed, Color baseColor);
 void drawSlagmawShape(Vector2 center, float radius, float seed, Vector2 facing, float mawOpen, float heat,
                       float flash, float alpha);
-void drawDevourCone(Vector2 maw, Vector2 dir);
+void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flash);
 void drawSlagGob(Vector2 position, float radius, Vector2 velocity);
 void drawMagmaPools(const Game& game);
 void drawSandboxToggleIndicator(const Game& game);
@@ -3369,6 +3369,26 @@ void drawGameplayWorld(const Game& game)
             DrawLineEx(tail, p.position, p.radius, Fade(Palette::ShatteredBeltAccent, 0.4F));
             DrawPoly(p.position, 5, p.radius * 1.3F, p.position.x + p.position.y, Palette::StructLight);
         }
+        else if (p.isPetal)
+        {
+            // Petal Volley crystal: a long amber kite pointing where it flies, glowing as it stalls.
+            constexpr Color gold{.r = 255, .g = 188, .b = 72, .a = 255};
+            const Vector2 fwd = Vector2Length(p.velocity) > 0.01F ? Vector2Normalize(p.velocity) : Vector2{.x = 1, .y = 0};
+            const Vector2 side{.x = -fwd.y, .y = fwd.x};
+            const float r = p.radius;
+            const bool stalling = p.petalTimer < petalStallTime;
+            const float glow = stalling ? 0.5F + 0.5F * std::sin(p.petalTimer * 30.0F) : 0.4F;
+            const Vector2 tip = Vector2Add(p.position, Vector2Scale(fwd, r * 2.2F));
+            const Vector2 tail = Vector2Subtract(p.position, Vector2Scale(fwd, r * 1.4F));
+            const Vector2 l = Vector2Add(p.position, Vector2Scale(side, r * 0.8F));
+            const Vector2 rr = Vector2Subtract(p.position, Vector2Scale(side, r * 0.8F));
+            DrawCircleV(p.position, r * 2.0F, Fade(Palette::ElementBurn, 0.12F + 0.15F * glow));
+            DrawTriangle(tip, l, tail, Fade(gold, 0.9F));
+            DrawTriangle(tip, tail, l, Fade(gold, 0.9F));
+            DrawTriangle(tip, rr, tail, ColorLerp(gold, Palette::ElementBurn, 0.5F));
+            DrawTriangle(tip, tail, rr, ColorLerp(gold, Palette::ElementBurn, 0.5F));
+            DrawLineEx(tip, tail, 1.2F, Fade(WHITE, 0.55F + 0.4F * glow));
+        }
         else if (p.isEmber)
         {
             // Seeker Ember: a spinning gold diamond in an ember glow, shedding sparks.
@@ -4766,58 +4786,8 @@ void drawBoss(const Game& game, const Boss& boss)
 
     if (boss.isSlagmaw)
     {
-        const auto t = static_cast<float>(GetTime());
-        const bool winding = boss.state == BossState::WINDING_UP;
-        const bool shooting = boss.state == BossState::SHOOTING;
-        const float windup =
-            winding ? std::clamp(1.0F - boss.stateTimer / (boss.attack == BossAttack::Barrage
-                                                                  ? slagSprayTell
-                                                                  : bossWindupDuration(boss.attack)),
-                                 0.0F, 1.0F)
-                    : 0.0F;
-        const bool swallowing = game.run.qteBossId == boss.instanceId;
-        float mawOpen = 0.15F + 0.08F * std::sin(t * 1.5F);
-        float heat = 0.15F;
-        if (swallowing || (shooting && boss.attack == BossAttack::Devour))
-        {
-            mawOpen = 1.0F;
-            heat = 1.0F;
-        }
-        else if (winding && boss.attack == BossAttack::Devour)
-        {
-            mawOpen = 0.3F + 0.7F * windup; // the maw glows gold for the tell
-            heat = windup;
-        }
-        else if (boss.attack == BossAttack::Barrage && (winding || shooting))
-        {
-            mawOpen = winding ? 0.6F * windup : 0.7F; // Slag Spray: the body flares gold
-            heat = winding ? windup : 0.8F;
-        }
-        if (boss.slagmawPunishTimer > 0)
-        {
-            mawOpen = 0.5F + 0.25F * std::sin(t * 22.0F); // choking
-            heat = 0.4F + 0.4F * std::sin(t * 9.0F);
-        }
-        Vector2 center = bossCenter;
-        if (swallowing)
-        {
-            center = Vector2Add(center, Vector2{.x = std::sin(t * 37.0F) * 6.0F, .y = std::cos(t * 29.0F) * 6.0F});
-        }
-        if (shooting && boss.attack == BossAttack::Devour)
-        {
-            drawDevourCone(slagmawMawCenter(boss), boss.devourDir);
-        }
         const float flash = boss.hitFlashTimer > 0 ? boss.hitFlashTimer / UpdateConstants::hitFlashDuration : 0.0F;
-        drawSlagmawShape(center, boss.size.x / 2, static_cast<float>(boss.instanceId), boss.slagmawFacing,
-                         mawOpen, heat, flash, boss.ghostFadeAlpha);
-        if (swallowing && game.run.qtePrompt != QtePrompt::None && game.run.qtePrompt != QtePrompt::Mash &&
-            game.run.qteTimerMax > 0)
-        {
-            // The slag gob the current prompt answers, flying in from its angle.
-            const float left = std::clamp(game.run.qteTimer / game.run.qteTimerMax, 0.0F, 1.0F);
-            const Vector2 gob = Vector2Subtract(game.run.player.position, Vector2Scale(game.run.qteThreatDir, 240.0F * left));
-            drawSlagGob(gob, 13.0F, game.run.qteThreatDir);
-        }
+        drawLavaMole(game, boss, bossCenter, flash);
     }
     else if (boss.isWreckwormHead && boss.krakenSnakeVariant)
     {
@@ -5494,28 +5464,6 @@ void drawSlagGob(Vector2 position, float radius, Vector2 velocity)
 }
 
 // Devour's inhale: a faint gold wedge with streaks flowing down it into the maw.
-void drawDevourCone(Vector2 maw, Vector2 dir)
-{
-    constexpr Color gold{.r = 255, .g = 188, .b = 72, .a = 255};
-    const auto t = static_cast<float>(GetTime());
-    const float half = devourConeHalfDeg * DEG2RAD;
-    const Vector2 a = Vector2Add(maw, Vector2Scale(Vector2Rotate(dir, half), devourRange));
-    const Vector2 b = Vector2Add(maw, Vector2Scale(Vector2Rotate(dir, -half), devourRange));
-    DrawTriangle(maw, a, b, Fade(gold, 0.06F));
-    DrawTriangle(maw, b, a, Fade(gold, 0.06F));
-    DrawLineEx(maw, a, 2.0F, Fade(gold, 0.22F));
-    DrawLineEx(maw, b, 2.0F, Fade(gold, 0.22F));
-    for (int32_t k = 0; k < 14; k++)
-    {
-        const auto kf = static_cast<float>(k);
-        const float angle = (hashNoise(kf * 3.1F) - 0.5F) * 2.0F * half;
-        const float frac = std::fmod(t * 1.4F + hashNoise(kf * 7.7F), 1.0F); // 0 far .. 1 at the maw
-        const Vector2 along = Vector2Rotate(dir, angle * (1.0F - frac * 0.7F));
-        const Vector2 p = Vector2Add(maw, Vector2Scale(along, devourRange * (1.0F - frac)));
-        DrawLineEx(p, Vector2Add(p, Vector2Scale(along, 46.0F)), 2.0F, Fade(gold, 0.55F * frac));
-    }
-}
-
 // Slagmaw: a jagged basalt mass, every facet lit from the upper left, split by molten gold seams
 // running back from a maw that faces `facing`. mawOpen 0..1 parts the toothed jaws on a glowing
 // throat; heat 0..1 brightens the seams, throat and haze (tells, Devour).
@@ -7921,3 +7869,192 @@ void drawInfallSprite(InfallKind kind, float seed, Vector2 center, float size)
     }
     }
 }
+
+namespace
+{
+// Lava mole Slagmaw: basalt body sections trailing the head, a collar of molten crystal petals
+// behind the jaws (folded back while it moves or dives, flared for attacks, locked open once it
+// blooms), and a cracked swell in the crust while it is underground. Erupt and Tunnel Run tells.
+void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flash)
+{
+    constexpr Color gold{.r = 255, .g = 188, .b = 72, .a = 255};
+    constexpr Color basalt{.r = 34, .g = 27, .b = 27, .a = 255};
+    constexpr Color basaltLit{.r = 104, .g = 84, .b = 76, .a = 255};
+    const Color ember = Palette::ElementBurn;
+    const auto t = static_cast<float>(GetTime());
+    const float radius = boss.size.x / 2;
+    const float seed = static_cast<float>(boss.instanceId);
+    const bool winding = boss.state == BossState::WINDING_UP;
+    const bool shooting = boss.state == BossState::SHOOTING;
+    const float windup = winding && boss.windupTotal > 0 ? std::clamp(1.0F - boss.stateTimer / boss.windupTotal, 0.0F, 1.0F) : 0.0F;
+    const float seen = (1.0F - boss.moleUnder) * boss.ghostFadeAlpha;
+    const bool swallowing = game.run.qteBossId == boss.instanceId;
+    const Vector2 face = Vector2Length(boss.slagmawFacing) > 0.01F ? Vector2Normalize(boss.slagmawFacing) : Vector2{.x = 0, .y = 1};
+
+    // Tells.
+    if (winding && boss.attack == BossAttack::Devour)
+    {
+        const bool locked = boss.stateTimer <= eruptLockTime;
+        const float pulse = 0.5F + 0.5F * std::sin(t * (locked ? 26.0F : 9.0F));
+        DrawCircleV(boss.eruptAt, eruptRadius, Fade(locked ? Palette::Accent : gold, 0.07F + 0.1F * windup));
+        DrawRing(boss.eruptAt, eruptRadius - 3.0F, eruptRadius, 0, 360, 48,
+                 Fade(locked ? Palette::Accent : gold, 0.35F + 0.4F * pulse));
+        DrawRing(boss.eruptAt, eruptRadius * (1.0F - windup) - 2.0F, eruptRadius * (1.0F - windup), 0, 360, 48,
+                 Fade(gold, 0.5F));
+    }
+    if ((winding || shooting) && boss.attack == BossAttack::BurrowCharge)
+    {
+        const Vector2 dir = Vector2Normalize(Vector2Subtract(boss.targetPosition, center));
+        const Vector2 from = center;
+        const Vector2 to = winding ? Vector2Add(boss.targetPosition, Vector2Scale(dir, tunnelOvershoot))
+                                   : Vector2Add(center, Vector2Scale(boss.chargeVelocity, std::max(0.0F, boss.stateTimer)));
+        const float a = winding ? 0.15F + 0.45F * windup : 0.4F;
+        for (float d = 0; d < Vector2Distance(from, to); d += 34.0F) // a dashed crack line
+        {
+            const Vector2 p = Vector2Add(from, Vector2Scale(dir, d));
+            DrawLineEx(p, Vector2Add(p, Vector2Scale(dir, 18.0F)), 3.0F, Fade(gold, a));
+        }
+        DrawRing(to, tunnelBreachRadius - 3.0F, tunnelBreachRadius, 0, 360, 40, Fade(gold, a));
+    }
+
+    // The swell in the crust while underground.
+    if (boss.moleUnder > 0.01F)
+    {
+        const float u = boss.moleUnder;
+        DrawCircleV(center, radius * 0.95F, Fade(ColorLerp(basalt, Palette::Void, 0.3F), 0.8F * u));
+        DrawCircleV(center, radius * 0.7F, Fade(basaltLit, 0.35F * u));
+        for (int32_t k = 0; k < 7; k++)
+        {
+            const auto kf = static_cast<float>(k);
+            float a = hashNoise(seed + kf * 2.9F) * 2.0F * PI + t * 0.3F;
+            Vector2 p = Vector2Add(center, Vector2{.x = std::cos(a) * radius * 0.2F, .y = std::sin(a) * radius * 0.2F});
+            for (int32_t seg = 0; seg < 3; seg++)
+            {
+                a += (hashNoise(seed * 1.7F + kf * 4.0F + static_cast<float>(seg)) - 0.5F) * 0.9F;
+                const Vector2 q = Vector2Add(p, Vector2{.x = std::cos(a) * radius * 0.28F, .y = std::sin(a) * radius * 0.28F});
+                DrawLineEx(p, q, 3.0F, Fade(gold, (0.5F + 0.3F * std::sin(t * 6.0F + kf)) * u));
+                p = q;
+            }
+        }
+        for (int32_t k = 0; k < 10; k++) // dust kicked up
+        {
+            const auto kf = static_cast<float>(k);
+            const float phase = std::fmod(t * 1.3F + hashNoise(kf * 5.1F), 1.0F);
+            const float a = hashNoise(seed + kf * 7.3F) * 2.0F * PI;
+            const Vector2 p = Vector2Add(center, Vector2Scale(Vector2{.x = std::cos(a), .y = std::sin(a)}, radius * (0.6F + 0.6F * phase)));
+            DrawCircleV(p, radius * 0.06F * (1.0F - phase), Fade(basaltLit, 0.6F * (1.0F - phase) * u));
+        }
+    }
+    if (seen <= 0.01F)
+    {
+        return;
+    }
+
+    // Body sections, tail first, tapering.
+    const auto paint = [&](Color c, float a) { return Fade(ColorLerp(c, WHITE, 0.2F * flash), a * seen); };
+    const Vector2 light = Vector2Normalize(Vector2{.x = -1, .y = -1});
+    const float glow = std::clamp(0.35F + 0.2F * std::sin(t * 2.0F + seed), 0.0F, 1.0F);
+    for (int32_t i = static_cast<int32_t>(boss.moleBody.size()) - 1; i >= 0; i--)
+    {
+        const Vector2 at = boss.moleBody.at(static_cast<size_t>(i));
+        const Vector2 ahead = i == 0 ? center : boss.moleBody.at(static_cast<size_t>(i - 1));
+        const Vector2 along = Vector2Length(Vector2Subtract(ahead, at)) > 0.01F ? Vector2Normalize(Vector2Subtract(ahead, at)) : face;
+        const Vector2 across{.x = -along.y, .y = along.x};
+        const float r = radius * (0.74F - 0.055F * static_cast<float>(i));
+        DrawCircleV(at, r, paint(ColorLerp(basalt, Palette::Void, 0.5F), 1.0F)); // outline
+        DrawCircleV(at, r * 0.92F, paint(basalt, 1.0F));
+        DrawCircleV(Vector2Add(at, Vector2Scale(light, r * 0.22F)), r * 0.62F, paint(ColorLerp(basalt, basaltLit, 0.45F), 1.0F));
+        // A molten seam across the section and two crystal nubs on its back.
+        DrawLineEx(Vector2Add(at, Vector2Scale(across, r * 0.8F)), Vector2Subtract(at, Vector2Scale(across, r * 0.8F)), r * 0.09F,
+                   paint(ember, 0.4F * glow));
+        DrawLineEx(Vector2Add(at, Vector2Scale(across, r * 0.75F)), Vector2Subtract(at, Vector2Scale(across, r * 0.75F)), r * 0.04F,
+                   paint(gold, glow));
+        for (const float sideSign : {-1.0F, 1.0F})
+        {
+            const Vector2 base = Vector2Add(at, Vector2Scale(across, sideSign * r * 0.55F));
+            const Vector2 tip = Vector2Add(base, Vector2Add(Vector2Scale(across, sideSign * r * 0.45F), Vector2Scale(along, -r * 0.25F)));
+            const Vector2 b1 = Vector2Add(base, Vector2Scale(along, r * 0.16F));
+            const Vector2 b2 = Vector2Subtract(base, Vector2Scale(along, r * 0.16F));
+            DrawTriangle(b1, tip, b2, paint(ColorLerp(gold, basalt, 0.35F), 0.9F));
+            DrawTriangle(b1, b2, tip, paint(ColorLerp(gold, basalt, 0.35F), 0.9F));
+        }
+    }
+
+    // Crystal collar behind the jaws.
+    float open = 0.15F;
+    if (winding && (boss.attack == BossAttack::Spread || boss.attack == BossAttack::Barrage))
+    {
+        open = 0.15F + 0.85F * windup;
+    }
+    else if (shooting && (boss.attack == BossAttack::Spread || boss.attack == BossAttack::Barrage ||
+                          boss.attack == BossAttack::Devour))
+    {
+        open = 1.0F;
+    }
+    if (boss.slagmawBloomed)
+    {
+        open = 0.9F + 0.1F * std::sin(t * 5.0F);
+        DrawCircleV(center, radius * 1.5F, paint(ember, 0.1F + 0.05F * std::sin(t * 5.0F)));
+    }
+    open *= 1.0F - boss.moleUnder;
+    const float faceAngle = std::atan2(face.y, face.x);
+    constexpr int32_t petals = 8;
+    for (int32_t k = 0; k < petals; k++)
+    {
+        // Spread round the back 260 degrees, leaving the jaws clear.
+        const float rel = (-130.0F + 260.0F * static_cast<float>(k) / static_cast<float>(petals - 1)) * DEG2RAD;
+        const float rootAngle = faceAngle + PI + rel;
+        const Vector2 rootDir{.x = std::cos(rootAngle), .y = std::sin(rootAngle)};
+        // Closed: folded back along the body. Open: flared straight out.
+        const float tipAngle = Lerp(faceAngle + PI + rel * 0.35F, rootAngle, open);
+        const Vector2 tipDir{.x = std::cos(tipAngle), .y = std::sin(tipAngle)};
+        const Vector2 side{.x = -tipDir.y, .y = tipDir.x};
+        const float len = radius * (0.55F + 0.55F * open) * (0.85F + 0.3F * hashNoise(seed + static_cast<float>(k)));
+        const Vector2 root = Vector2Add(center, Vector2Scale(rootDir, radius * 0.7F));
+        const Vector2 tip = Vector2Add(root, Vector2Scale(tipDir, len));
+        const Vector2 mid = Vector2Add(root, Vector2Scale(tipDir, len * 0.4F));
+        const Vector2 l = Vector2Add(mid, Vector2Scale(side, radius * 0.16F));
+        const Vector2 r = Vector2Subtract(mid, Vector2Scale(side, radius * 0.16F));
+        const float heat = 0.35F + 0.65F * open;
+        DrawTriangle(root, l, tip, paint(ColorLerp(basalt, gold, 0.55F + 0.35F * heat), 1.0F));
+        DrawTriangle(root, tip, l, paint(ColorLerp(basalt, gold, 0.55F + 0.35F * heat), 1.0F));
+        DrawTriangle(root, r, tip, paint(ColorLerp(basalt, ember, 0.4F + 0.3F * heat), 1.0F));
+        DrawTriangle(root, tip, r, paint(ColorLerp(basalt, ember, 0.4F + 0.3F * heat), 1.0F));
+        DrawLineEx(root, tip, 1.5F, paint(WHITE, 0.25F + 0.45F * heat * glow));
+        DrawLineEx(l, tip, 1.0F, paint(basalt, 0.8F));
+        DrawLineEx(r, tip, 1.0F, paint(basalt, 0.8F));
+    }
+
+    // The head with its jaws.
+    float mawOpen = 0.15F + 0.08F * std::sin(t * 1.5F);
+    float heat = boss.slagmawBloomed ? 0.7F : 0.15F;
+    if (swallowing || (shooting && boss.attack == BossAttack::Devour))
+    {
+        mawOpen = 1.0F;
+        heat = 1.0F;
+    }
+    else if (boss.attack == BossAttack::Barrage && (winding || shooting))
+    {
+        mawOpen = winding ? 0.6F * windup : 0.7F;
+        heat = winding ? windup : 0.8F;
+    }
+    if (boss.slagmawPunishTimer > 0)
+    {
+        mawOpen = 0.5F + 0.25F * std::sin(t * 22.0F);
+        heat = 0.4F + 0.4F * std::sin(t * 9.0F);
+    }
+    Vector2 head = center;
+    if (swallowing)
+    {
+        head = Vector2Add(head, Vector2{.x = std::sin(t * 37.0F) * 6.0F, .y = std::cos(t * 29.0F) * 6.0F});
+    }
+    drawSlagmawShape(head, radius, seed, face, mawOpen, heat, flash, seen);
+    if (swallowing && game.run.qtePrompt != QtePrompt::None && game.run.qtePrompt != QtePrompt::Mash &&
+        game.run.qteTimerMax > 0)
+    {
+        const float left = std::clamp(game.run.qteTimer / game.run.qteTimerMax, 0.0F, 1.0F);
+        const Vector2 gob = Vector2Subtract(game.run.player.position, Vector2Scale(game.run.qteThreatDir, 240.0F * left));
+        drawSlagGob(gob, 13.0F, game.run.qteThreatDir);
+    }
+}
+} // namespace

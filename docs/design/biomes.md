@@ -370,43 +370,42 @@ Mini Wave Bosses at waves 55 and 65. Pool: Ember Titan, Cinder Duke, Beamforge, 
 
 ### Biome Boss: Slagmaw
 
-Waves 60, 70, 75. Skeleton kept: a huge slow mass (0.32x speed), now basalt with molten gold seams (was `Palette::SolarForgeAccent` red). Death behaviour by wave: wave 60 dies; wave 70 shatters into 14 tough meteor drifters; wave 75 splits into halves that keep splitting by generation.
+Waves 60, 70, 75. Reworked 2026-11-05 into a **lava mole**: a basalt head with molten gold seams and fanged jaws (200 across, 0.6x speed), eight tapering basalt body sections trailing it (each with a gold seam and two crystal nubs), and a **crystal petal collar** of eight molten crystals round the back of the head. The collar lies folded back along the body at rest and while diving, flares open for attacks, and locks open once it blooms. Death behaviour by wave: wave 60 dies; wave 70 shatters into 14 tough meteor drifters; wave 75 splits into smaller moles (0.75x) that keep splitting by generation.
+
+**Burrowing:** for Erupt and Tunnel Run the mole dives (0.4 s). Underground its body is hidden and only a cracked swell in the crust shows; it takes no damage and does no contact damage (shots still stop on the swell).
 
 **Phases**
 
-1. **Molten:** attacks from the table below; Devour gives the recurring QTE beat.
-2. **Death break:** per wave as above. Wave 75 halves cannot Devour (too small).
+1. **Molten:** attacks from the table below; Erupt gives the recurring QTE beat.
+2. **Bloom (30% HP, once):** the collar blooms fully open with a blast ring and 16 slag gobs. Attacks come 30% faster, Petal Volley sheds 12 petals, and the bared core takes +25% damage.
+3. **Death break:** per wave as above. Wave 75 halves cannot Erupt.
 
 **Attacks**
 
 | Attack | Tell | Effect | Counter | Starting numbers |
 | --- | --- | --- | --- | --- |
-| Slag Spray (replaces `Barrage`) | body flares gold 0.5 s | molten spray, Barrage behaviour | strafe through gaps | as `Barrage` |
-| Magma Ram (replaces `ChargeDash`) | as ChargeDash | ChargeDash plus a burning trail | sidestep, avoid the trail | trail lasts 2 s, 1 damage per 0.5 s inside |
+| Slag Spray (replaces `Barrage`) | body flares gold 0.5 s, collar opens | molten spray, Barrage behaviour | strafe through gaps | as `Barrage` |
+| Magma Ram (replaces `ChargeDash`) | as ChargeDash | ChargeDash plus a burning trail | sidestep, avoid the trail | pools every 70 units, 2 s, 1 damage per 0.5 s |
 | Meteor Hell (`MeteorHell`, kept) | as today | as today | as today | as today |
 | Meteor Swarm (`MeteorSwarm`, kept) | as today | as today | as today | as today |
-| Seeker Embers (replaces `HomingBarrage`, wave 70+) | as HomingBarrage | homing embers, ember look | outrun, shoot down | as `HomingBarrage` |
-| Devour (new, all waves) | maw glows gold 1 s | inhale cone pulls the player toward the maw for 2 s; reaching the maw starts the Boss QTE | dash across or leave the cone; caves do not protect | pull strength tuned in build |
+| Seeker Embers (replaces `HomingBarrage`, wave 70+) | as HomingBarrage | homing embers | outrun, shoot down | as `HomingBarrage` |
+| Erupt (replaces Devour, all waves) | dives; a gold ring (120 radius) follows the player for 1.7 s, turning red and stopping for the last 0.45 s | the jaws come up through the ring; a ship inside is swallowed (Boss QTE) | leave the ring, or dash at the moment | 10 slag gobs and a 2 damage bite when the QTE is on its gap |
+| Tunnel Run (`BurrowCharge`, new for Slagmaw) | dives 1 s; a dashed gold line to just past the player | races underground at 950 units a second along the locked line, magma pools behind, then breaches | step off the line and away from its end | breach radius 130, 2 damage, 10 slag gobs |
+| Petal Volley (`Spread`, new for Slagmaw) | collar flares 0.8 s | 7 crystal petals (12 bloomed) burst out in a ring, slow to a hover for 0.75 s, then each darts once at the ship | keep moving once they hover; shoot them down | dart speed 12 per frame |
 
 ### Boss QTE: Swallowed
 
-- **Trigger:** Devour pulls the player into the maw (recurs; 20 s minimum gap). Escaping the cone means no QTE.
+- **Trigger:** Erupt comes up with the player inside its ring (recurs; 20 s minimum gap). Leaving the ring, or dashing as it erupts, means no QTE.
 - **Choreography:** a **Mash** Prompt to brace against the jaws, then 9 Prompts as Slagmaw chews and whips about, spitting slag gobs from shifting angles.
 - **Prompts:** 10 total (1 Mash + 9), 0.7 s window, 25% Parry share.
 - **Clean clear:** the player bursts out and Slagmaw chokes: 3 s Punish Window (+50%) with the maw exposed as a weak point.
 - **Fail:** the player is spat out and takes one burn hit.
 
-- As built: Slagmaw is a faceted basalt mass lit from the upper left, warm gold seams running back from a maw ringed by uneven fangs that turns to track the player; tells heat the seams and open the maw. Slag Spray keeps Barrage's aimed stream with a 0.5 s gold flare tell, spraying jagged slag gobs from the maw within 14 degrees. Magma Ram drops a pool every 70 units of the charge (64 radius, 2 s, 1 damage per 0.5 s, ignoring hit immunity; a dash crosses unharmed). Seeker Embers are spinning gold diamonds that shed sparks. Devour: 1 s tell, then a 2 s inhale along a cone (35 degrees each side, 760 long) locked to where the maw faced, pulling 300 units a second; a dash rides through the pull; reaching the maw while the QTE is on its gap takes a 2 damage bite and throws the player clear. Swallowed: Mash 8 presses in 2.6 s, then 9 prompts (0.7 s, 25% Parry) with a slag gob flying in from each prompt's angle while the boss shakes and the maw whips; a clean chain ends in the shared finisher shot. Wave 75 halves keep the old moveset (no Devour).
-
-### Planned rework: Lava Mole (idea, 2026-10-22, not built)
-
-- **Look:** keep the current design language (basalt, gold seams, fanged maw), but the body becomes a thinner lava mole instead of a planet-like mass.
-- **Spawn:** Slagmaw floods the whole map with the Solar Forge lava gel (it slows the player), except the area the screen shows at that moment. The player can't easily escape and has to fight inside that clearing.
-- **Open:** whether the clearing stays fixed or shifts; whether the gel clears on death; whether the mole burrows through the gel; how Devour and Magma Ram fit a thinner body.
+- As built: the jaws surface right on the ring's centre, facing the ship. Mash 8 presses in 2.6 s, then 9 prompts (0.7 s, 25% Parry) with a slag gob flying in from each prompt's angle while the head shakes; a clean chain ends in the shared finisher shot. Inside the QTE gap the erupt is a breach instead: blast ring, slag gobs and a 2 damage bite.
 
 ### Open for build
 
-- Devour pull strength and cone width; maw weak-point multiplier.
+- Erupt ring size and tell; Tunnel Run speed; Petal Volley count; maw weak-point multiplier.
 - Magma Ram trail damage; Slag Spray density.
 - Vent Crawler jet cadence; heat ramp across waves 51-75.
 - Exact basalt and gold shading of the cave layer.

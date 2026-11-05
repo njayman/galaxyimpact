@@ -441,7 +441,7 @@ void updatePlayerMovement(Game& game, float deltaTime)
                                  .y = boss.position.y,
                                  .width = boss.size.x,
                                  .height = boss.size.y};
-        if ((boss.health <= 0 && !boss.isBanished) ||
+        if ((boss.health <= 0 && !boss.isBanished) || (boss.isSlagmaw && boss.moleUnder > 0.5F) ||
             !CheckCollisionCircleRec(game.run.player.position, game.run.player.radius, bossRect))
         {
             continue;

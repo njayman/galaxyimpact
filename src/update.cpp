@@ -5552,6 +5552,22 @@ void updateProjectiles(Game& game, float deltaTime)
             projectile.velocity =
                 projectile.orbitTime > 0 ? Vector2{} : Vector2Scale(out, projectile.orbitFling);
         }
+        if (projectile.isPetal)
+        {
+            // Slow to a hover, then dart once at where the ship is.
+            const float before = projectile.petalTimer;
+            projectile.petalTimer += deltaTime;
+            if (projectile.petalTimer < petalStallTime)
+            {
+                const float speed = petalOutSpeed * std::max(0.05F, 1.0F - projectile.petalTimer / petalStallTime);
+                projectile.velocity = Vector2Scale(Vector2Normalize(projectile.velocity), speed);
+            }
+            else if (before < petalStallTime)
+            {
+                projectile.velocity = Vector2Scale(
+                    Vector2Normalize(Vector2Subtract(game.run.player.position, projectile.position)), petalDartSpeed);
+            }
+        }
         projectile.velocity = Vector2Add(projectile.velocity, Vector2Scale(projectile.accel, deltaTime));
         projectile.position = Vector2Add(projectile.position,
                                          Vector2Scale(projectile.velocity, deltaTime * frameScale));

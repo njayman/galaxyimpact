@@ -306,6 +306,12 @@ class Boss
     Vector2 slagmawFacing{.x = 0, .y = 1}; // the maw turns to track the player
     Vector2 devourDir{};                   // the inhale cone's axis, locked when it starts
     float slagmawPunishTimer = 0;          // Punish Window after a clean Swallowed
+    // Lava mole body: sections trailing the head (centres), set on the first update.
+    std::array<Vector2, 8> moleBody{};
+    bool moleBodySet = false;
+    float moleUnder = 0;        // 0 surfaced .. 1 burrowed (untouchable, body hidden)
+    Vector2 eruptAt{};          // Erupt: where the jaws come up
+    bool slagmawBloomed = false; // collar locked open below the bloom HP
     float qteStunTimer = 0;                // any other boss: stunned after a clean Rush QTE
     bool sandboxForcedRush = false;        // sandbox: the forced rush starts its QTE before enrage
     Vector2 moveHeading{};                 // steered travel direction (see updateBossMovement)
@@ -522,6 +528,8 @@ class BossProjectile
 
     int32_t visualEnemyKind = -1;
     bool isEmber = false; // Slagmaw Seeker Ember
+    bool isPetal = false; // Slagmaw Petal Volley crystal: flies out, stalls, then darts at the player
+    float petalTimer = 0;
     bool passesEnemies = false; // turret pattern shot: flies through enemies instead of killing them
 };
 
