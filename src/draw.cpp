@@ -2266,8 +2266,7 @@ void drawRustbloomDerelicts(const Game& game)
     }
 }
 
-// Rustbloom mid (0.3) and near (0.8) layers. The far derelicts are drawn separately, after
-// these, so the hulls hide them.
+// Rustbloom mid (0.3) and near (0.8) layers, drawn over the far derelicts (which hide the stars).
 void drawRustbloomBackground(const Game& game)
 {
     if (currentBiome(game.run.waveNumber) != Biome::Rustbloom)
@@ -2779,12 +2778,12 @@ void drawGameplayWorld(const Game& game)
     {
         drawBeltPlanet(game); // after the stars: the solid body hides them
     }
-    drawSolarForgeCaveBackground(game);
-    drawRustbloomBackground(game);
     if (currentBiome(game.run.waveNumber) == Biome::Rustbloom)
     {
-        drawRustbloomDerelicts(game); // after the stars and drifting layers: the hulls hide them
+        drawRustbloomDerelicts(game); // after the stars (the hulls hide them), before the fragments and spores
     }
+    drawSolarForgeCaveBackground(game);
+    drawRustbloomBackground(game);
 
     if (game.run.bossCutscenePhase == 11 || game.run.bossCutscenePhase == 12)
     {
