@@ -356,7 +356,7 @@ Three layers, far to near:
 
 ### Biome Hazard
 
-**Heat and caves** (always on, existing): the heat meter climbs outside open caves and drains inside; above the melt threshold it ticks damage. Kept as is; tuning notes only. Affects the player only; keeps its HUD meter. Stays on during Slagmaw fights: Devour can drag the player out of a cave into the heat.
+**Heat and caves** (always on, existing): the heat meter climbs outside open caves and drains inside; above the melt threshold it ticks damage. Kept as is; tuning notes only. Affects the player only; keeps its HUD meter. Stays on during Slagmaw fights: Erupt and Tunnel Run reach into caves too.
 
 As built: the rock outside the caves is a dense gel. Inside it the ship moves at 30% speed (dashes at 60%), the gel parts round the ship, trails behind its movement and jiggles back when it stops, with a splash on entry.
 
