@@ -229,7 +229,7 @@ Rework of `drawRustbloomBackground` into three layers, far to near, kept faint a
 
 - **Far** (parallax 0.05, `drawRustbloomDerelicts`, drawn after the stars, which the hulls hide, and before the mid and near layers, which drift in front): huge derelict capital ships (about 650-900 px long) on a 1100 px layer grid, about 60% of cells filled, placement varied per run by `backdropSeed`. Each is a faceted hull, every section split along the keel into a lit and a shadowed facet, snapped in two with the stern half knocked askew; plating rotted away ahead of the break bares the interior and a few ribs, with torn chunks adrift in the gap. Superstructure blocks cast short shadows, a stepped bridge sits aft, dead engines at the stern. Bloom furs the outer edges in patches (swaying slightly) and thickly along both cut faces, with a few pods rooted near the break. Drawn about 10% of the way from `RustbloomVoid` to full colour; at this parallax ships only ever slide in and out at the screen edges, never fading.
 - **Mid** (parallax 0.3): the existing hull fragments, thinned and toned toward the void, plus sparse spore motes, each circling slowly in place with a soft halo.
-- **Near** (parallax 0.8): the existing pods and tendrils, slightly sparser and fainter; pods breathe in size and core glow, and each tendril pulses with the blend of its two pods.
+- **Near** (parallax 0.8): the existing pods and tendrils, slightly sparser and fainter; pods breathe in size and core glow, and each tendril pulses with the blend of its two pods. Moving through a pod stirs it (`updatePodJiggle`): its outline ripples like jelly, its core sloshes and its tendrils wave, harder the faster the ship (full on a dash), ringing down over about a second after the ship leaves.
 
 ### Biome Hazard
 
@@ -440,6 +440,7 @@ Three layers, far to near:
 - **Far** (fixed): the Punctum itself, a tiny blinding point ringed by bent light, always in the same direction.
 - **Mid** (parallax 0.3): a lavender storm nebula lit from inside by each Thunder Strike flash.
 - **Near** (parallax 0.8): faint star streaks bent toward the Punctum.
+- **As built, convergence (2026-11-05):** the whole map pours into its centre. Stars and dust drift toward world (0, 0) from wherever they are, so far out they stream one way and near the centre they converge radially and are swallowed; each is also reborn at random about every 5 s so the flow never bunches. Wreckage from the other Biomes (`src/punctum_infall.cpp`, parallax 0.3, drawn over the stars) falls toward the centre too: Belt planet chunks (faceted stone, amber flecks, a wedge missing), Rustbloom derelict hulls (rust plating with bloom on the edges, snapped in two) and Solar Forge basalt slabs (split by a gold seam), up to 6 at once, spawning upstream so they cross the view, speeding up as they near the centre. Each is a mosaic of facets; inside 700 layer units of the centre each facet breaks off as it crosses in, so the side nearest the centre goes first. Loose facets heat to lavender, spiral in, shrink and fade over 2.2 s.
 
 ### Biome Hazard
 

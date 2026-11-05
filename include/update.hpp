@@ -374,6 +374,15 @@ struct SquallRock
 auto debrisSquallRock(const Game& game, int32_t index) -> SquallRock;
 // Cheap deterministic 0..1 noise; the Debris Squall uses it in both update and draw so every
 // rock sits in the same place for collisions as on screen.
+// Rustbloom bloom pods sit on a grid of cellSize (rustbloomPodCellSize) cells in layer
+// coordinates; this keys one cell.
+inline auto rustbloomPodKey(float cellX, float cellY, float cellSize) -> int64_t
+{
+    return static_cast<int64_t>(std::floor(cellX / cellSize)) * 1000003LL +
+           static_cast<int64_t>(std::floor(cellY / cellSize));
+}
+void updatePodJiggle(Game& game, float deltaTime);
+
 inline auto hashNoise(float seed) -> float
 {
     const float v = std::sin(seed) * 43758.5453F;

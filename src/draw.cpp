@@ -2362,6 +2362,11 @@ void drawRustbloomBackground(const Game& game)
     { return hashNoise(px * 0.021F + py * 0.037F); };
     auto podPulse = [&](float px, float py) -> float
     { return 0.5F + 0.5F * std::sin(t * 1.5F + px * 0.01F + py * 0.01F); };
+    auto podEnergy = [&](float px, float py) -> float
+    {
+        const auto it = game.run.podJiggle.find(rustbloomPodKey(px, py, cellSize));
+        return it == game.run.podJiggle.end() ? 0.0F : it->second;
+    };
 
     for (float y = startY; y < center.y + halfH; y += cellSize)
     {
@@ -2377,31 +2382,72 @@ void drawRustbloomBackground(const Game& game)
                                     .y = y + cellSize / 2 + jy + shift.y};
             const float pulse = podPulse(x, y);
 
-            // A tendril carries the blend of its two pods' pulses.
+            const float energy = podEnergy(x, y);
+
+            // A tendril carries the blend of its two pods' pulses, and waves when either is stirred.
+            const auto tendril = [&](float nx, float ny, Vector2 neighbor)
+            {
+                const float flow = (pulse + podPulse(nx, ny)) / 2;
+                const Color color = Fade(Palette::RustbloomHaze, 0.12F + 0.1F * flow);
+                const float wave = std::max(energy, podEnergy(nx, ny)) * 12.0F;
+                if (wave < 0.1F)
+                {
+                    DrawLineEx(podCenter, neighbor, 2.5F, color);
+                    return;
+                }
+                const Vector2 dir = Vector2Subtract(neighbor, podCenter);
+                const Vector2 side = Vector2Normalize(Vector2{.x = -dir.y, .y = dir.x});
+                Vector2 prev = podCenter;
+                constexpr int32_t steps = 10;
+                for (int32_t i = 1; i <= steps; i++)
+                {
+                    const float s = static_cast<float>(i) / steps;
+                    const float bend = wave * std::sin(s * PI) * std::sin(t * 14.0F + s * 7.0F + x * 0.01F);
+                    const Vector2 p = Vector2Add(Vector2Add(podCenter, Vector2Scale(dir, s)), Vector2Scale(side, bend));
+                    DrawLineEx(prev, p, 2.5F, color);
+                    prev = p;
+                }
+            };
             if (podPresence(x + cellSize, y) <= podChance)
             {
-                const Vector2 neighbor{.x = x + cellSize * 1.5F + shift.x,
-                                       .y = y + cellSize / 2 + shift.y};
-                const float flow = (pulse + podPulse(x + cellSize, y)) / 2;
-                DrawLineEx(podCenter, neighbor, 2.5F,
-                           Fade(Palette::RustbloomHaze, 0.12F + 0.1F * flow));
+                tendril(x + cellSize, y, Vector2{.x = x + cellSize * 1.5F + shift.x, .y = y + cellSize / 2 + shift.y});
             }
             if (podPresence(x, y + cellSize) <= podChance)
             {
-                const Vector2 neighbor{.x = x + cellSize / 2 + shift.x,
-                                       .y = y + cellSize * 1.5F + shift.y};
-                const float flow = (pulse + podPulse(x, y + cellSize)) / 2;
-                DrawLineEx(podCenter, neighbor, 2.5F,
-                           Fade(Palette::RustbloomHaze, 0.12F + 0.1F * flow));
+                tendril(x, y + cellSize, Vector2{.x = x + cellSize / 2 + shift.x, .y = y + cellSize * 1.5F + shift.y});
             }
 
             const float sizeSeed = hashNoise(x * 0.043F + y * 0.017F + 9.0F);
             const float podRadius = cellSize * (0.14F + sizeSeed * 0.06F) * (0.94F + 0.06F * pulse);
-            DrawCircleV(podCenter, podRadius, Fade(Palette::RustbloomAccent, 0.22F));
+            // Stirred pods wobble like jelly: the outline ripples and the core sloshes about.
+            const float phase = x * 0.013F + y * 0.029F;
+            const Vector2 slosh{.x = std::sin(t * 17.0F + phase) * energy * 9.0F,
+                                .y = std::cos(t * 13.0F + phase) * energy * 9.0F};
+            if (energy > 0.01F)
+            {
+                constexpr int32_t rim = 20;
+                const auto rimPoint = [&](int32_t i)
+                {
+                    const float a = static_cast<float>(i) / rim * 2.0F * PI;
+                    const float r = podRadius * (1.0F + energy * (0.28F * std::sin(3.0F * a + t * 15.0F) +
+                                                                  0.12F * std::sin(5.0F * a - t * 11.0F)));
+                    return Vector2Add(podCenter, Vector2{.x = std::cos(a) * r, .y = std::sin(a) * r});
+                };
+                const Color body = Fade(Palette::RustbloomAccent, 0.22F);
+                for (int32_t i = 0; i < rim; i++)
+                {
+                    DrawTriangle(podCenter, rimPoint(i), rimPoint(i + 1), body); // both windings: raylib culls one
+                    DrawTriangle(podCenter, rimPoint(i + 1), rimPoint(i), body);
+                }
+            }
+            else
+            {
+                DrawCircleV(podCenter, podRadius, Fade(Palette::RustbloomAccent, 0.22F));
+            }
             DrawCircleV(
-                Vector2Add(podCenter, Vector2{.x = podRadius * 0.5F, .y = podRadius * 0.3F}),
+                Vector2Add(Vector2Add(podCenter, Vector2{.x = podRadius * 0.5F, .y = podRadius * 0.3F}), Vector2Scale(slosh, 0.6F)),
                 podRadius * 0.6F, Fade(Palette::RustbloomHaze, 0.2F));
-            DrawCircleV(podCenter, podRadius * 0.3F, Fade(Palette::Heal, 0.2F + 0.3F * pulse));
+            DrawCircleV(Vector2Add(podCenter, slosh), podRadius * 0.3F, Fade(Palette::Heal, 0.2F + 0.3F * pulse));
         }
     }
 }
@@ -2774,6 +2820,7 @@ void drawGameplayWorld(const Game& game)
 {
     drawBackgroundStars(game, game.run.player.position);
     drawPunctumLightning(game);
+    drawPunctumInfall(game); // other Biomes' wreckage falling to the map centre, over the stars
     if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
     {
         drawBeltPlanet(game); // after the stars: the solid body hides them

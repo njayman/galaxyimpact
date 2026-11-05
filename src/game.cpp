@@ -276,6 +276,8 @@ void resetRun(Game& game)
     game.run.deathParticles.clear();
     game.run.dashWedges.clear();
     game.run.blastRings.clear();
+    game.run.punctumInfall = PunctumInfall{};
+    game.run.podJiggle.clear();
     game.run.dashBlasts.clear();
     game.run.flamethrowerCycle = 0;
     game.run.flamethrowerEmit = 0;

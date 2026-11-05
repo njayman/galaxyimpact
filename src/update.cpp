@@ -1064,6 +1064,49 @@ auto updateBossCutscene(Game& game, float deltaTime) -> bool
     return true;
 }
 
+// Rustbloom's near bloom pods (parallax 0.8) wobble when the ship moves through them, then ring
+// down. Same pod placement as drawRustbloomBackground.
+void updatePodJiggle(Game& game, float deltaTime)
+{
+    auto& jiggle = game.run.podJiggle;
+    std::erase_if(jiggle, [&](auto& entry) { return (entry.second *= std::exp(-2.2F * deltaTime)) < 0.01F; });
+    if (currentBiome(game.run.waveNumber) != Biome::Rustbloom)
+    {
+        jiggle.clear();
+        return;
+    }
+    constexpr float cell = rustbloomPodCellSize;
+    const Player& player = game.run.player;
+    const Vector2 shift = Vector2Scale(player.position, 0.2F);
+    const Vector2 layer = Vector2Subtract(player.position, shift);
+    const float moving = std::clamp(Vector2Length(player.velocity) / std::max(player.speed, 1.0F), 0.0F, 1.0F);
+    if (moving < 0.05F && !player.dashing)
+    {
+        return; // resting on a pod doesn't stir it
+    }
+    for (int32_t dy = -1; dy <= 1; dy++)
+    {
+        for (int32_t dx = -1; dx <= 1; dx++)
+        {
+            const float x = (std::floor(layer.x / cell) + static_cast<float>(dx)) * cell;
+            const float y = (std::floor(layer.y / cell) + static_cast<float>(dy)) * cell;
+            if (hashNoise(x * 0.021F + y * 0.037F) > rustbloomPodChance)
+            {
+                continue;
+            }
+            const float jx = (hashNoise(x * 0.05F + y * 0.02F + 3.0F) - 0.5F) * cell * 0.5F;
+            const float jy = (hashNoise(x * 0.02F + y * 0.05F + 7.0F) - 0.5F) * cell * 0.5F;
+            const Vector2 center{.x = x + cell / 2 + jx + shift.x, .y = y + cell / 2 + jy + shift.y};
+            const float radius = cell * (0.14F + hashNoise(x * 0.043F + y * 0.017F + 9.0F) * 0.06F);
+            if (Vector2Distance(center, player.position) < radius + player.radius)
+            {
+                float& energy = jiggle[rustbloomPodKey(x, y, cell)];
+                energy = std::max(energy, player.dashing ? 1.0F : 0.4F + 0.6F * moving);
+            }
+        }
+    }
+}
+
 // A radial burst's shock ring: races out from where the shots left, fading.
 void spawnBlastRing(Game& game, Vector2 at, float reach)
 {
@@ -1132,6 +1175,8 @@ void updateGameplay(Game& game, float deltaTime)
         ring.life -= deltaTime;
     }
     std::erase_if(game.run.blastRings, [](const Particle& p) { return p.life <= 0; });
+    updatePunctumInfall(game, deltaTime);
+    updatePodJiggle(game, deltaTime);
 
     if (game.sandbox)
     {
@@ -5555,10 +5600,6 @@ void updateBgParticles(Game& game)
 
     const bool inPunctum = currentBiome(game.run.waveNumber) == Biome::Punctum;
     const bool spiraling = inPunctum && game.run.punctumTrapActive;
-    const Vector2 fixedPull =
-        inPunctum ? Vector2{.x = std::cos(punctumPullAngleDeg * DEG2RAD) * punctumPullSpeed,
-                            .y = std::sin(punctumPullAngleDeg * DEG2RAD) * punctumPullSpeed}
-                  : Vector2{};
     // A particle's stored .position is a LOCAL tile coordinate in [0,tileW)x[0,tileH);
     // its actual on-screen position each frame comes from tiledWorldPos(player.position, pos, ...),
     // which wraps (pos - player.position) into the nearest copy of the tile. To pull particles
@@ -5592,11 +5633,19 @@ void updateBgParticles(Game& game)
                                                       game.run.player.position)
                                     : Vector2{};
 
+    // Punctum: everything streams toward the map centre, from wherever it is on the map.
+    const auto worldOf = [&](Vector2 pos) { return Vector2Add(game.run.player.position, localDeltaFromPlayer(pos)); };
     const auto driftFor = [&](Vector2 pos) -> Vector2
     {
         if (!spiraling)
         {
-            return fixedPull;
+            if (!inPunctum)
+            {
+                return Vector2{};
+            }
+            const Vector2 world = worldOf(pos);
+            const float d = std::max(Vector2Length(world), 1.0F);
+            return Vector2Scale(world, -punctumPullSpeed / d);
         }
         const Vector2 toCenter = Vector2Subtract(desiredDelta, localDeltaFromPlayer(pos));
         if (Vector2Length(toCenter) < 1.0F)
@@ -5615,8 +5664,22 @@ void updateBgParticles(Game& game)
                        .y = static_cast<float>(GetRandomValue(0, static_cast<int32_t>(tileH)))};
     };
 
+    // Swallowed at the centre, or (rarely) reborn anywhere, so the flow never bunches into a line.
+    const float rebirthChance = GetFrameTime() / 5.0F;
+    const auto swallowed = [&](Vector2 pos)
+    {
+        return inPunctum && !spiraling &&
+               (Vector2Length(worldOf(pos)) < punctumTrapConsumeRadius ||
+                static_cast<float>(GetRandomValue(0, 99999)) < rebirthChance * 100000.0F);
+    };
+
     for (auto& p : game.run.bgParticles)
     {
+        if (swallowed(p.position))
+        {
+            p.position = respawnAtEdge();
+            continue;
+        }
         if (spiraling &&
             Vector2Length(Vector2Subtract(desiredDelta, localDeltaFromPlayer(p.position))) <=
                 punctumTrapConsumeRadius)
@@ -5649,6 +5712,11 @@ void updateBgParticles(Game& game)
     {
         for (auto& s : game.run.stars)
         {
+            if (swallowed(s.position))
+            {
+                s.position = respawnAtEdge();
+                continue;
+            }
             if (spiraling &&
                 Vector2Length(Vector2Subtract(desiredDelta, localDeltaFromPlayer(s.position))) <=
                     punctumTrapConsumeRadius)

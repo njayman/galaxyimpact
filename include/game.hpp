@@ -8,6 +8,7 @@
 #include "entities/player.hpp"
 #include "entities/space.hpp"
 #include "highscore.hpp"
+#include "punctum_infall.hpp"
 #include "raylib.h"
 #include "rendertarget.hpp"
 #include "settings.hpp"
@@ -18,6 +19,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace GameConstants
@@ -224,6 +226,8 @@ struct GameplayState
     std::vector<Particle> enemyBombs; // Bomber drops; life is the fuse
     std::vector<Particle> flameParticles;
     std::vector<Particle> blastRings; // shock rings thrown out by radial bursts; radius is the reach
+    PunctumInfall punctumInfall;
+    std::unordered_map<int64_t, float> podJiggle; // Rustbloom bloom pods the ship has brushed: cell key -> wobble energy
     float flamethrowerCycle = 0; // time into the Flamethrower's burst + charge cycle
     float flamethrowerEmit = 0;  // fractional jet particles owed
     std::vector<DamageNumber> damageNumbers;

@@ -507,7 +507,6 @@ constexpr int punctumSpawnCountDivisor = 2;
 constexpr float punctumEnemyHealthMult = 1.8F;
 
 constexpr float punctumPullSpeed = 2.6F;
-constexpr float punctumPullAngleDeg = 205.0F;
 
 constexpr float punctumThunderIntervalMin = 7.0F;
 constexpr float punctumThunderIntervalMax = 11.0F;
