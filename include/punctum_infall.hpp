@@ -38,6 +38,7 @@ struct InfallObject
     Vector2 pos{};
     float angle = 0;
     float spin = 0;
+    float reach = 0; // farthest tile from its centre
     std::vector<InfallPiece> pieces;
 };
 

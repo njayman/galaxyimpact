@@ -140,6 +140,10 @@ void updatePunctumInfall(Game& game, float deltaTime)
                                       scale),
                 .size = tile.width * scale});
         }
+        for (const auto& piece : obj.pieces)
+        {
+            obj.reach = std::max(obj.reach, Vector2Length(piece.local) + piece.size);
+        }
         infall.objects.push_back(std::move(obj));
     }
 
@@ -152,13 +156,16 @@ void updatePunctumInfall(Game& game, float deltaTime)
             obj.pos = Vector2Subtract(obj.pos, Vector2Scale(obj.pos, speed * deltaTime / dist));
         }
         obj.angle += obj.spin * deltaTime;
+        // The break zone grows as the object arrives, so even its far edge comes apart by the time
+        // its centre reaches the middle (big planets reach well past breakRadius).
+        const float breakFront = breakRadius + std::max(0.0F, obj.reach - Vector2Length(obj.pos));
 
         for (auto& piece : obj.pieces)
         {
             if (!piece.loose)
             {
                 const Vector2 at = Vector2Add(obj.pos, Vector2Rotate(piece.local, obj.angle));
-                if (Vector2Length(at) < breakRadius)
+                if (Vector2Length(at) < breakFront)
                 {
                     // Comes away, keeping the object's fall plus a little spin-off.
                     piece.loose = true;
