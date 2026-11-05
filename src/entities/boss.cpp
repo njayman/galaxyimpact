@@ -1701,15 +1701,11 @@ auto beltbreakerBare(const Game& game, const Boss& core) -> bool
            std::ranges::none_of(game.run.bosses, [&](const Boss& plate) { return isRushPlateOf(plate, core); });
 }
 
-// Variant B: the bare core calls Belt rubble in from off screen. Each rock flies to a free slot
+// The bare core calls Belt rubble in from off screen. Each rock flies to a free slot
 // and attaches as a weak plate, restoring the armour and shield loop; shoot them down in flight.
 // Runs outside the boss loop since it adds bosses.
 void updateBeltbreakerRubble(Game& game, float deltaTime)
 {
-    if (game.beltbreakerBareVariant != 1)
-    {
-        return;
-    }
     for (size_t c = 0; c < game.run.bosses.size(); c++)
     {
         Boss& core = game.run.bosses.at(c);
@@ -4012,12 +4008,12 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             boss.attack = boss.moveset.at(static_cast<size_t>(
                 GetRandomValue(0, static_cast<int32_t>(boss.moveset.size()) - 1)));
             // A bare Beltbreaker has no plates for Ring Crush or Plate Hurl: it rampages
-            // (variant A, chained dashes) or bursts shard novas (variant B).
+            // (chained dashes) or bursts a shard nova, at random.
             bool shardNova = false;
             if (boss.isBeltbreaker && beltbreakerBare(game, boss) &&
                 (boss.attack == BossAttack::GravityWell || boss.attack == BossAttack::PlateHurl))
             {
-                if (game.beltbreakerBareVariant == 0)
+                if (GetRandomValue(0, 1) == 0)
                 {
                     boss.attack = BossAttack::ChargeDash;
                     boss.rampageDashesLeft = beltbreakerRampageDashes - 1;

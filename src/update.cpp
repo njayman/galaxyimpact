@@ -3478,9 +3478,8 @@ void updateDebrisSquall(Game& game, float deltaTime)
 {
     const bool beltbreakerFight = std::ranges::any_of(
         game.run.bosses, [](const Boss& boss) { return boss.isBeltbreaker || boss.isBeltbreakerPlate; });
-    // Variant A: a bare Beltbreaker calls squalls straight through the player.
-    const bool called = game.beltbreakerBareVariant == 0 &&
-                        std::ranges::any_of(game.run.bosses, [&](const Boss& boss) { return beltbreakerBare(game, boss); });
+    // A bare Beltbreaker calls squalls straight through the player.
+    const bool called = std::ranges::any_of(game.run.bosses, [&](const Boss& boss) { return beltbreakerBare(game, boss); });
     if (called && game.run.debrisSquallPhase == 0)
     {
         game.run.debrisSquallTimer = std::min(game.run.debrisSquallTimer, beltbreakerCalledSquallInterval);

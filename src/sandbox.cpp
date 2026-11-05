@@ -303,12 +303,6 @@ auto sandboxMenuButtons() -> const std::vector<SandboxMenuButton>&
         {[](const Game& game)
          { return std::format("Boss Can't Die: {}", game.sandboxBossNoDeath ? "ON" : "OFF"); },
          [](Game& game) { game.sandboxBossNoDeath = !game.sandboxBossNoDeath; }},
-        {[](const Game& game)
-         {
-             return std::format("Bare Beltbreaker: {}",
-                                game.beltbreakerBareVariant == 0 ? "A dash+squall" : "B rubble+nova");
-         },
-         [](Game& game) { game.beltbreakerBareVariant = 1 - game.beltbreakerBareVariant; }},
         {[](const Game&) { return std::string("Break Beltbreaker Plates"); },
          [](Game& game)
          {

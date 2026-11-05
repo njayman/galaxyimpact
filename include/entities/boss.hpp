@@ -356,8 +356,8 @@ class Boss
     int32_t plateRushAttacksLeft = 0;
     float beltbreakerPunishTimer = 0; // Punish Window after a clean Plate Rush
     float plateRushLastAngle = 0;
-    int32_t rampageDashesLeft = 0; // bare core, variant A: chained charge dashes still to come
-    float rubbleRegrowTimer = 0;   // bare core, variant B: next rubble call
+    int32_t rampageDashesLeft = 0; // bare core: chained charge dashes still to come
+    float rubbleRegrowTimer = 0;   // bare core: next rubble call
 
     // StrafeRun: the run line (start, direction, which side of the player) and the P2 decoy.
     Vector2 runStart{};

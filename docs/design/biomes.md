@@ -172,10 +172,15 @@ Waves 10, 20, 25 with 4, 6, 8 plates. Skeleton kept: a core ringed by rotating p
 
 As built: both replacements keep the `Barrage` and `GravityWell` attack slots and branch on the Beltbreaker core. Rubble Barrage keeps Barrage's aimed stream (no fan) with stone-shard projectiles. Ring Crush: plates pull in to 0.7x their orbit during the tell, then fly out to 600 units at speed 6 and come back. Each attached plate carries an amber arc covering 80% of its slot, so a missing or detached plate leaves a gap. The ring does no damage within 50 units of the hull, so hugging the core is safe.
 
-**Bare core** (every plate dead; A/B trial, 2026-11-05, toggled in the sandbox; the loser gets cut). Ring Crush and Plate Hurl have nothing to throw, so they are replaced:
+**Bare core** (every plate dead, 2026-11-05). Ring Crush and Plate Hurl have nothing to throw, so each use becomes, at random:
 
-- **A, rampage and called squalls:** they become a chain of 3 Charge Dashes (0.9 s tell between them; the core lands contact hits like a plate). Debris Squalls switch back on, every 7 s, aimed straight through the player; rocks also hit the core (20 per tick), so it can be lured into its own squall.
-- **B, rubble regrowth and shard nova:** they become a shard nova: Rubble Barrage fires gapped rings of shards, the gap turning per ring. Every 9 s the core calls 3 rocks in from off screen; each flies to a free slot and attaches as a plate with 30% HP, which brings back the armour, shield and Plate Rush loop. Shoot them down in flight to deny them.
+- **Rampage:** a chain of 3 Charge Dashes, 0.9 s tell between them; the core lands contact hits like a plate.
+- **Shard nova:** Rubble Barrage fires gapped rings of shards, the gap turning per ring.
+
+Also while bare:
+
+- **Called squalls:** Debris Squalls switch back on, every 7 s, aimed straight through the player. Rocks hit the core too (20 per tick), so it can be lured into its own squall.
+- **Rubble regrowth:** every 60 s on screen, the core calls 3 rocks in from off screen. Each flies to a free slot and attaches as a plate with 30% HP, bringing back the armour, shield and Plate Rush loop. Shoot them down in flight to deny them.
 
 ### Boss QTE: Plate Rush
 
