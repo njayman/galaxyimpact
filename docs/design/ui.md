@@ -28,7 +28,7 @@ No panels or boxes: thin lines and small numbers at the screen edges, fading bac
 - HP segments are 4 px; Nerve is a 1.5 px line under them (`SPACE` beside it when ready); dash dots and shield chevrons sit below. Vitals dim to 45% after 3 s with no change.
 - Weapon slots show bare icons with level dots and an evolved glow; there is no cooldown underline. The tooltip opens above the slots.
 - Each boss line is drawn in that boss's fixed bestiary colour (its live colour changes with its state; dark ones are lifted to read on the void), with ticks at 50% and 20% for director bosses, which change phase there.
-- Off-screen bosses: a chevron on the screen edge points at each boss out of view, in its line colour, growing as it closes in (13 to 24 px), with the distance (world units / 10) beside it.
+- Off-screen bosses: a chevron on the screen edge points at each boss out of view, in its line colour brightened, on a dark disc so any colour reads, growing as it closes in (20 to 32 px), with the distance (world units / 10) beside it.
 - One toast at a time, under the top-right numbers.
 - The controls line sits centred three quarters of the way down the screen, below the ship and clear of the HUD, for the first 8 s of a run, hidden while a boss is up. The sandbox button moved to the top centre.
 

@@ -7060,8 +7060,10 @@ void drawOffscreenBosses(const Game& game, int32_t width, int32_t height)
         const Vector2 dir = Vector2Normalize(d);
         const Vector2 side{.x = -dir.y, .y = dir.x};
         const float dist = Vector2Length(d) * scale;
-        const float size = std::clamp(24.0F - dist / 200.0F, 13.0F, 24.0F);
-        const Color color = Fade(bossLineColor(boss), pulse);
+        const float size = std::clamp(32.0F - dist / 200.0F, 20.0F, 32.0F);
+        const Color color = Fade(ColorBrightness(bossLineColor(boss), 0.25F), pulse);
+        DrawCircleV(p, size * 0.85F, Fade(Palette::Void, 0.7F)); // dark backing so any colour reads
+        DrawCircleLines(static_cast<int32_t>(p.x), static_cast<int32_t>(p.y), size * 0.85F, Fade(color, 0.5F));
 
         const Vector2 tip = Vector2Add(p, Vector2Scale(dir, size * 0.6F));
         const Vector2 notch = Vector2Subtract(p, Vector2Scale(dir, size * 0.1F));

@@ -208,45 +208,45 @@ constexpr float beltbreakerRubbleHealthFrac = 0.3F;  // of a plate's HP
 constexpr int32_t bossHpPerTier = 500;
 
 constexpr float wreckwormSegmentSpacing = 80.0F;
-constexpr float wreckwormChaseSpeedMult = 0.75F;
+constexpr float wreckwormChaseSpeedMult = 1.6F;
 
-constexpr float wreckwormBurrowChargeDuration = 0.55F;
-constexpr float wreckwormCoilClampDuration = 2.6F;
+constexpr float wreckwormBurrowChargeDuration = 0.4F;
+constexpr float wreckwormCoilClampDuration = 1.6F;
 constexpr float wreckwormCoilClampStartRadius = 260.0F;
 constexpr float wreckwormCoilClampEndRadius = 40.0F;
 constexpr float wreckwormCoilClampGapDeg = 90.0F;
-constexpr float wreckwormCoilClampAssembleDuration = 1.5F;
-constexpr float wreckwormCoilClampReleaseDuration = 1.5F;
+constexpr float wreckwormCoilClampAssembleDuration = 0.8F;
+constexpr float wreckwormCoilClampReleaseDuration = 0.7F;
 constexpr float wreckwormCoilClampTotalDuration = wreckwormCoilClampAssembleDuration +
                                                   wreckwormCoilClampDuration +
                                                   wreckwormCoilClampReleaseDuration;
 
 constexpr float wreckwormDetachDuration = 0.35F;
-constexpr float wreckwormDetachSpeed = 900.0F;
+constexpr float wreckwormDetachSpeed = 1600.0F;
 
-constexpr float wreckwormTailWrapCoilInDuration = 1.2F;
-constexpr float wreckwormTailWrapChaseDuration = 2.5F;
-constexpr float wreckwormTailWrapReleaseDuration = 1.0F;
+constexpr float wreckwormTailWrapCoilInDuration = 0.6F;
+constexpr float wreckwormTailWrapChaseDuration = 2.0F;
+constexpr float wreckwormTailWrapReleaseDuration = 0.5F;
 constexpr float wreckwormTailWrapDuration = wreckwormTailWrapCoilInDuration +
                                             wreckwormTailWrapChaseDuration +
                                             wreckwormTailWrapReleaseDuration;
 constexpr float wreckwormTailWrapRadius = 150.0F;
-constexpr float wreckwormTailWrapSpinSpeedDeg = 90.0F;
-constexpr float wreckwormTailWrapMoveSpeed = 260.0F;
-constexpr float wreckwormTailWrapCoilSpeedDeg = 160.0F;
+constexpr float wreckwormTailWrapSpinSpeedDeg = 180.0F;
+constexpr float wreckwormTailWrapMoveSpeed = 520.0F;
+constexpr float wreckwormTailWrapCoilSpeedDeg = 320.0F;
 
 // Spore Spit (Wreckworm's Barrage): head flares green, then green spores, Barrage behaviour.
-constexpr float sporeSpitTell = 0.5F;
+constexpr float sporeSpitTell = 0.35F;
 constexpr float wreckwormExposedLullDuration = 1.5F;
 constexpr float wreckwormMoltSpeedBoost = 0.15F;
 constexpr float wreckwormArmorDamageMult = 0.35F;
 constexpr float wreckwormSegmentHealthPerTier = 90.0F;
 constexpr float wreckwormArmorHealthMult = 2.0F;
 
-constexpr float wreckwormSegmentVolleyIntervalMin = 3.0F;
-constexpr float wreckwormSegmentVolleyIntervalMax = 5.0F;
+constexpr float wreckwormSegmentVolleyIntervalMin = 2.0F;
+constexpr float wreckwormSegmentVolleyIntervalMax = 3.2F;
 constexpr float wreckwormSegmentVolleyDamageMult = 0.4F;
-constexpr float wreckwormSegmentVolleyProjSpeed = 7.0F;
+constexpr float wreckwormSegmentVolleyProjSpeed = 13.0F;
 // A segment's gun pops out this long before its volley and sinks back over the retract time.
 constexpr float wreckwormGunPopLead = 0.45F;
 constexpr float wreckwormGunRetractDuration = 0.4F;
@@ -274,29 +274,33 @@ constexpr auto meteorHellDuration(int32_t wave) -> float
 }
 
 constexpr float slagmawMoveSpeedMult = 1.5F; // lava mole: outruns the ship
-constexpr float slagSprayTell = 0.5F;      // body flares gold before Slag Spray
+constexpr float slagSprayTell = 0.3F;
+// Slagmaw keeps its pace but attacks fast and in numbers: swarms x2.5, shots and tells quicker.
+constexpr float slagmawSwarmMult = 2.5F;
+constexpr float slagmawShotSpeedMult = 1.7F;
+constexpr float wreckwormShotSpeedMult = 1.8F; // Spore Spit      // body flares gold before Slag Spray
 constexpr float slagSpraySpreadDeg = 14.0F; // each gob's random angle off the aim, +-
 constexpr float slagmawMawOffset = 0.55F;  // maw centre, in body radii from the centre
 constexpr float slagmawHeadSize = 200.0F;
-constexpr float moleDiveRate = 2.5F;        // moleUnder per second, diving or surfacing
-constexpr float moleTunnelSpeed = 1400.0F;   // burrowed travel, units per second
+constexpr float moleDiveRate = 4.0F;        // moleUnder per second, diving or surfacing
+constexpr float moleTunnelSpeed = 2000.0F;   // burrowed travel, units per second
 // Erupt (replaces Devour): dive, a gold ring hunts the player, the jaws come up through it.
-constexpr float eruptTell = 1.7F;
-constexpr float eruptLockTime = 0.45F; // the ring stops following for the last of the tell
+constexpr float eruptTell = 1.2F;
+constexpr float eruptLockTime = 0.4F; // the ring stops following for the last of the tell
 constexpr float eruptRadius = 120.0F;
 constexpr float eruptHold = 0.9F;      // surfaced recovery after the bite
-constexpr int32_t eruptSlagCount = 10;  // slag gobs thrown out round the breach
+constexpr int32_t eruptSlagCount = 25;  // slag gobs thrown out round the breach
 // Tunnel Run (BurrowCharge): dive, race under a locked line, magma pools behind, breach past the player.
-constexpr float tunnelTell = 1.0F;
+constexpr float tunnelTell = 0.7F;
 constexpr float tunnelOvershoot = 220.0F;
 constexpr float tunnelBreachRadius = 130.0F;
 // Petal Volley (Spread): the collar flares and sheds crystal petals.
-constexpr float petalTell = 0.8F;
-constexpr int32_t petalCount = 7;
-constexpr int32_t petalBloomCount = 12;
-constexpr float petalOutSpeed = 9.0F;   // per frame at 60 fps
-constexpr float petalStallTime = 0.75F; // slowing to a hover, then they dart
-constexpr float petalDartSpeed = 12.0F;
+constexpr float petalTell = 0.5F;
+constexpr int32_t petalCount = 18;
+constexpr int32_t petalBloomCount = 30;
+constexpr float petalOutSpeed = 13.0F;   // per frame at 60 fps
+constexpr float petalStallTime = 0.5F; // slowing to a hover, then they dart
+constexpr float petalDartSpeed = 18.0F;
 constexpr float petalLife = 4.0F;
 // Bloom: below this HP the collar locks open for good.
 constexpr float slagmawBloomHealthFrac = 0.3F;
@@ -311,7 +315,7 @@ constexpr int32_t magmaPoolDamage = 1;
 constexpr float ghostFadeDuration = 2.2F;
 constexpr float ghostTeleportMargin = 120.0F;
 
-constexpr int32_t meteorSwarmSpawnCount = 16;
+constexpr int32_t meteorSwarmSpawnCount = 16; // x slagmawSwarmMult for Slagmaw;
 
 constexpr float caveNoiseScaleCoarse = 380.0F;
 constexpr float caveNoiseScaleFine = 60.0F;
@@ -734,10 +738,10 @@ constexpr float bossDeathAnimDuration =
 constexpr int32_t slagmawBreakDrifterCount = 14;
 constexpr float slagmawBrokenDrifterHealthMult = 10.0F;
 
-constexpr float wreckwormDashSpeedMult = 0.4F;
-constexpr float wreckwormDashRushGapDuration = 0.5F;
+constexpr float wreckwormDashSpeedMult = 0.75F;
+constexpr float wreckwormDashRushGapDuration = 0.25F;
 constexpr float wreckwormDashRushOffscreenMargin = 150.0F;
-constexpr float wreckwormDashRepositionSpeed = 900.0F;
+constexpr float wreckwormDashRepositionSpeed = 1700.0F;
 
 constexpr auto wreckwormDashRushCount(int32_t wave) -> int32_t
 {
@@ -758,7 +762,7 @@ constexpr int32_t wreckwormCloudBreathCount = 5;
 constexpr float wreckwormCloudRadiusMin = 55.0F;
 constexpr float wreckwormCloudRadiusMax = 90.0F;
 constexpr float wreckwormCloudSpawnSpread = 140.0F;
-constexpr float wreckwormCloudDriftSpeed = 45.0F;
+constexpr float wreckwormCloudDriftSpeed = 90.0F;
 constexpr float wreckwormCloudLifespan = 14.0F;
 constexpr float wreckwormCloudBurnDps = 8.0F;
 constexpr float wreckwormCloudBurnRefreshDuration = 1.0F;

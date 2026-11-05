@@ -292,6 +292,8 @@ Waves 30, 40, 50. Skeleton kept: a head trailing armoured segments (armour takes
 
 As built: Spore Spit keeps the `Barrage` attack slot and branches on the Wreckworm head (not the Kraken's snake summon, which keeps its fluid blobs). The tell is 0.5 s: the head pulses pale green inside a pulsing green ring. It then fires Barrage's aimed stream, but each shot is a spinning hexagonal green spore with eight spines and a short puff trail. Skeleton audit found no drift: armoured segments take 35%, molts at 50% (waves 30, 40) and at 66% then 33% (wave 50) each shed the two rearmost segments as asteroids, add 0.15 to the head's speed multiplier and give a 1.5 s lull, and Burrow Charge joins the moveset from wave 40.
 
+**Pace (2026-11-05):** a fast fight. Chase speed 1.6x (was 0.75x), Spore Spit shots 1.8x faster with a 0.35 s tell, segment volleys every 2-3.2 s at speed 13, Burrow Charge 1.6x, Dash Rush passes nearly twice as fast with 0.25 s gaps, Coil Clamp assembles in 0.8 s and closes in 1.6 s, Tail Wrap coils in 0.6 s and chases twice as fast, clouds drift twice as fast. Shared with the Kraken's Storm Serpent.
+
 ### Boss QTE: Constrict
 
 - **Trigger:** Coil Clamp closes with the player still inside (recurs; 20 s minimum gap). Escaping through the gap means no QTE.
@@ -371,6 +373,8 @@ Mini Wave Bosses at waves 55 and 65. Pool: Ember Titan, Cinder Duke, Beamforge, 
 ### Biome Boss: Slagmaw
 
 Waves 60, 70, 75. Reworked 2026-11-05 into a **lava mole**, a drill-like tube rather than a snake: a basalt head with molten gold seams and fanged jaws (200 across), and behind it one rigid tube tapering to a hot drill point, with a molten spine seam and screw ridges that turn (fast while burrowing). A **peel** of four long molten-crystal petals covers the tube, each one a strip from behind the head to the drill point, side by side so closed they wrap it into a cone. For attacks they stay fixed behind the head and peel away outward like a banana's skin, curling more toward their free ends, the tube glowing through; once it blooms they stay open. It moves 1.5x the generic boss chase speed, faster than the ship. Death behaviour by wave: wave 60 dies; wave 70 shatters into 14 tough meteor drifters; wave 75 splits into smaller moles (0.75x) that keep splitting by generation.
+
+**Pace (2026-11-05):** it keeps its movement, but its attacks are fast and its swarms 2.5x: Slag Spray fires 2.5x as often with 1.7x faster gobs (0.3 s tell), Meteor Hell drops 2.5x the meteors at 1.7x speed, Meteor Swarm calls 40 chunks, Seeker Embers fire 2.5x as often at 1.7x speed, Magma Ram charges 1.6x faster. Erupt tell 1.2 s with 25 gobs; Tunnel Run tell 0.7 s at 2000 units a second; Petal Volley tell 0.5 s, 18 petals (30 bloomed), faster out and dart.
 
 **Burrowing:** for Erupt and Tunnel Run the mole dives (0.4 s). Underground its body is hidden and only a cracked swell in the crust shows; it takes no damage and does no contact damage (shots still stop on the swell).
 

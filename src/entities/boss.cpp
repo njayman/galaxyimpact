@@ -4389,7 +4389,8 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                     std::max(1.0F, static_cast<float>(baseProjectileHealth) * meteorHellHealthMult *
                                        enemyHealthMult * enemyHealthScale(game)));
                 const int32_t spawnCount =
-                    GetRandomValue(meteorHellSpawnPerBatchMin, meteorHellSpawnPerBatchMax);
+                    static_cast<int32_t>(static_cast<float>(GetRandomValue(meteorHellSpawnPerBatchMin, meteorHellSpawnPerBatchMax)) *
+                                         (boss.isSlagmaw ? slagmawSwarmMult : 1.0F));
                 for (int32_t i = 0; i < spawnCount; i++)
                 {
 
@@ -4402,7 +4403,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                         Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
                     const Vector2 vel = Vector2Scale(
                         Vector2Normalize(Vector2Subtract(game.run.player.position, spawnPos)),
-                        meteorHellProjSpeed);
+                        meteorHellProjSpeed * (boss.isSlagmaw ? slagmawShotSpeedMult : 1.0F));
 
                     game.run.bossProjectiles.push_back(
                         BossProjectile{.position = spawnPos,
@@ -4528,7 +4529,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
 
                 const float attackScale =
                     boss.isBeltbreakerPlate ? beltbreakerPlateAttackScale : 1.0F;
-                boss.barrageTimer = barrageFireInterval / attackScale;
+                boss.barrageTimer = barrageFireInterval / attackScale / (boss.isSlagmaw ? slagmawSwarmMult : 1.0F);
                 // Generic bosses: a turning spiral or gapped rings instead of the aimed stream.
                 const bool generic = (!boss.isBeltbreaker && !boss.isBeltbreakerPlate && !boss.isWreckwormHead &&
                                       !boss.isWreckwormSegment && !boss.isSlagmaw) ||
@@ -4594,7 +4595,10 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                         : direction;
                 game.run.bossProjectiles.push_back(BossProjectile{
                     .position = muzzle,
-                    .velocity = Vector2Scale(shotDir, barrageProjSpeed * attackScale),
+                    .velocity = Vector2Scale(shotDir, barrageProjSpeed * attackScale *
+                                                     (boss.isSlagmaw ? slagmawShotSpeedMult
+                                                      : isSporeSpit  ? wreckwormShotSpeedMult
+                                                                     : 1.0F)),
                     .radius = 6,
                     .homing = false,
                     .active = true,
@@ -4619,12 +4623,12 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             boss.barrageTimer -= deltaTime;
             if (boss.barrageTimer <= 0)
             {
-                boss.barrageTimer = homingBarrageFireInterval;
+                boss.barrageTimer = homingBarrageFireInterval / (boss.isSlagmaw ? slagmawSwarmMult : 1.0F);
                 const Vector2 direction =
                     Vector2Normalize(Vector2Subtract(game.run.player.position, bossCenter));
                 game.run.bossProjectiles.push_back(
                     BossProjectile{.position = bossCenter,
-                                   .velocity = Vector2Scale(direction, homingProjSpeed),
+                                   .velocity = Vector2Scale(direction, homingProjSpeed * (boss.isSlagmaw ? slagmawShotSpeedMult : 1.0F)),
                                    .radius = 6,
                                    .homing = true,
                                    .active = true,
@@ -5099,7 +5103,7 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         boss.stateTimer = chargeDashDuration;
         boss.chargeVelocity = Vector2Scale(
             aimDirection,
-            chargeDashSpeed * (boss.isBeltbreakerPlate ? beltbreakerPlateAttackScale : 1.0F));
+            chargeDashSpeed * (boss.isBeltbreakerPlate ? beltbreakerPlateAttackScale : boss.isSlagmaw ? 1.6F : 1.0F));
         boss.dashHitPlayer = false;
         playSFX(game, game.resources.sounds.bossWindUp);
         triggerShake(game, 8, 0.3F);
@@ -5178,7 +5182,7 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
             break;
         }
         boss.stateTimer = wreckwormBurrowChargeDuration;
-        boss.chargeVelocity = Vector2Scale(aimDirection, chargeDashSpeed);
+        boss.chargeVelocity = Vector2Scale(aimDirection, chargeDashSpeed * 1.6F); // Wreckworm: fast
         playSFX(game, game.resources.sounds.bossWindUp);
         triggerShake(game, 8, 0.3F);
         break;
@@ -5207,7 +5211,7 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         boss.stateTimer = 0.6F;
         playSFX(game, game.resources.sounds.spreadBurst);
         triggerShake(game, 6, 0.25F);
-        for (int32_t i = 0; i < meteorSwarmSpawnCount; i++)
+        for (int32_t i = 0; i < static_cast<int32_t>(static_cast<float>(meteorSwarmSpawnCount) * (boss.isSlagmaw ? slagmawSwarmMult : 1.0F)); i++)
         {
             Vector2 pos = spawnRingPosition(game);
             for (int32_t attempt = 0; attempt < 8 && !isSolarForgeCaveOpen(pos); attempt++)
