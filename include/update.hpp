@@ -289,6 +289,7 @@ auto bossAimPoint(const Game& game, const Boss& boss) -> Vector2;
 auto bossDirectorDamageMult(const Boss& boss) -> float;
 void forceBossPattern(Game& game, Boss& boss, BossPattern pattern);
 void updateBeltbreakerCore(Game& game, Boss& core, float deltaTime);
+void updateBeltbreakerRubble(Game& game, float deltaTime);
 auto countAttachedAlivePlates(Game& game, const Boss& core) -> int32_t;
 auto beltbreakerPlateSlotPosition(const Boss& core, int32_t slotIndex) -> Vector2;
 auto findBeltbreakerById(Game& game, int32_t instanceId) -> Boss*;
@@ -474,6 +475,7 @@ auto isOutsideCameraView(const Game& game, Vector2 pos, float margin) -> bool;
 void spawnRockCluster(Game& game, Vector2 center);
 void spawnBossInstance(Game& game, float healthMult, float sizeMult, bool isMega, bool isSwarm);
 auto beltbreakerCoreCenter(const Boss& core) -> Vector2;
+auto beltbreakerBare(const Game& game, const Boss& core) -> bool; // every plate dead
 auto countContributingPlates(Game& game, const Boss& core) -> int32_t;
 void detachBeltbreakerPlates(Game& game, const Boss& core);
 void triggerBeltbreakerReturn(Game& game, const Boss& core);

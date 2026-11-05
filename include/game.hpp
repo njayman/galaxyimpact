@@ -371,6 +371,8 @@ struct Game
     int sandboxBossAttackIndex;
     int sandboxBossPatternIndex;
     bool sandboxBossNoDeath;
+    // ponytail: A/B of the plateless Beltbreaker (0 dashes + squalls, 1 rubble + shard nova); delete the loser
+    int beltbreakerBareVariant = 0;
     int sandboxPickupIndex;
     bool sandboxNaturalSpawnEnabled;
     bool sandboxKillBoxArmed;

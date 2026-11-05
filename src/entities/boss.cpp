@@ -1695,6 +1695,73 @@ void updateRingCrush(Game& game, Boss& core)
 
 auto isRushPlateOf(const Boss& plate, const Boss& core) -> bool;
 
+auto beltbreakerBare(const Game& game, const Boss& core) -> bool
+{
+    return core.isBeltbreaker && core.health > 0 &&
+           std::ranges::none_of(game.run.bosses, [&](const Boss& plate) { return isRushPlateOf(plate, core); });
+}
+
+// Variant B: the bare core calls Belt rubble in from off screen. Each rock flies to a free slot
+// and attaches as a weak plate, restoring the armour and shield loop; shoot them down in flight.
+// Runs outside the boss loop since it adds bosses.
+void updateBeltbreakerRubble(Game& game, float deltaTime)
+{
+    if (game.beltbreakerBareVariant != 1)
+    {
+        return;
+    }
+    for (size_t c = 0; c < game.run.bosses.size(); c++)
+    {
+        Boss& core = game.run.bosses.at(c);
+        if (!beltbreakerBare(game, core) || core.deathAnimTimer >= 0 || bossQteActive(game))
+        {
+            continue;
+        }
+        core.rubbleRegrowTimer += deltaTime;
+        if (core.rubbleRegrowTimer < beltbreakerRubbleInterval || !bossOnScreen(game, beltbreakerCoreCenter(core)))
+        {
+            continue;
+        }
+        core.rubbleRegrowTimer = 0;
+        const int32_t ownerId = core.instanceId;
+        const int32_t slots = core.plateCount;
+        const auto plateHealth = std::max(1, static_cast<int32_t>(UpdateConstants::beltbreakerPlateHealthPerTier *
+                                                                  beltbreakerRubbleHealthFrac * enemyHealthMult *
+                                                                  enemyHealthScale(game)));
+        const float offDist = std::max(static_cast<float>(game.resources.screenWidth),
+                                       static_cast<float>(game.resources.screenHeight)) /
+                              2;
+        const int32_t start = GetRandomValue(0, slots - 1);
+        for (int32_t i = 0; i < std::min(beltbreakerRubbleCount, slots); i++)
+        {
+            const int32_t slot = (start + i * slots / beltbreakerRubbleCount) % slots;
+            const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+            const Vector2 from = Vector2Add(game.run.player.position,
+                                            Vector2{.x = std::cos(angle) * offDist, .y = std::sin(angle) * offDist});
+            game.run.bosses.push_back(Boss{.position = Vector2Subtract(from, Vector2{.x = 22, .y = 22}),
+                                           .size = Vector2{.x = 44, .y = 44},
+                                           .color = Palette::StructLight,
+                                           .baseColor = Palette::StructLight,
+                                           .health = plateHealth,
+                                           .maxHealth = plateHealth,
+                                           .state = BossState::IDLE,
+                                           .attack = BossAttack::Barrage,
+                                           .moveset = {BossAttack::Barrage, BossAttack::ChargeDash},
+                                           .attackTimer = 3.0F,
+                                           .isMega = false,
+                                           .isSwarm = false,
+                                           .shape = BossShape::HexPlated,
+                                           .isBeltbreakerPlate = true,
+                                           .plateOwnerId = ownerId,
+                                           .plateSlotIndex = slot,
+                                           .plateAttached = false,
+                                           .plateReturning = true});
+        }
+        playSFX(game, game.resources.sounds.bossWindUp);
+        return; // the vector moved; one core per frame is plenty
+    }
+}
+
 void updateBeltbreakerCore(Game& game, Boss& core, float deltaTime)
 {
     if (!core.isBeltbreaker || core.health <= 0)
@@ -3944,6 +4011,23 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         {
             boss.attack = boss.moveset.at(static_cast<size_t>(
                 GetRandomValue(0, static_cast<int32_t>(boss.moveset.size()) - 1)));
+            // A bare Beltbreaker has no plates for Ring Crush or Plate Hurl: it rampages
+            // (variant A, chained dashes) or bursts shard novas (variant B).
+            bool shardNova = false;
+            if (boss.isBeltbreaker && beltbreakerBare(game, boss) &&
+                (boss.attack == BossAttack::GravityWell || boss.attack == BossAttack::PlateHurl))
+            {
+                if (game.beltbreakerBareVariant == 0)
+                {
+                    boss.attack = BossAttack::ChargeDash;
+                    boss.rampageDashesLeft = beltbreakerRampageDashes - 1;
+                }
+                else
+                {
+                    boss.attack = BossAttack::Barrage;
+                    shardNova = true;
+                }
+            }
             boss.state = BossState::WINDING_UP;
             boss.stateTimer = bossWindupDuration(boss.attack) * rateMult;
             boss.beamShieldLatched = false;
@@ -3990,7 +4074,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                 boss.color = Palette::Haze;
                 break;
             case BossAttack::Barrage:
-                boss.barragePattern = GetRandomValue(0, 2);
+                boss.barragePattern = boss.isBeltbreaker ? (shardNova ? 2 : 0) : GetRandomValue(0, 2);
                 boss.barrageAngle = std::atan2(game.run.player.position.y - bossCenter.y,
                                                game.run.player.position.x - bossCenter.x);
                 boss.color = boss.isBeltbreaker ? Palette::ShatteredBeltAccent
@@ -4316,8 +4400,9 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                     boss.isBeltbreakerPlate ? beltbreakerPlateAttackScale : 1.0F;
                 boss.barrageTimer = barrageFireInterval / attackScale;
                 // Generic bosses: a turning spiral or gapped rings instead of the aimed stream.
-                const bool generic = !boss.isBeltbreaker && !boss.isBeltbreakerPlate && !boss.isWreckwormHead &&
-                                     !boss.isWreckwormSegment && !boss.isSlagmaw;
+                const bool generic = (!boss.isBeltbreaker && !boss.isBeltbreakerPlate && !boss.isWreckwormHead &&
+                                      !boss.isWreckwormSegment && !boss.isSlagmaw) ||
+                                     boss.isBeltbreaker; // a Beltbreaker's pattern is 0 unless shard nova
                 if (generic && boss.barragePattern != 0)
                 {
                     constexpr float tau = 2.0F * std::numbers::pi_v<float>;
@@ -4333,7 +4418,8 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                             .active = true,
                             .fromPlayer = false,
                             .damage = damage,
-                            .health = 1});
+                            .health = 1,
+                            .isShard = boss.isBeltbreaker});
                     };
                     if (boss.barragePattern == 1)
                     {
@@ -4612,6 +4698,14 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             boss.plateCount = aliveCount;
         }
 
+        if (boss.stateTimer <= 0 && boss.isBeltbreaker && boss.attack == BossAttack::ChargeDash &&
+            boss.rampageDashesLeft > 0)
+        {
+            boss.rampageDashesLeft--; // rampage: straight into the next dash's tell
+            boss.state = BossState::WINDING_UP;
+            boss.stateTimer = beltbreakerRampageChainTell;
+            break;
+        }
         if (boss.stateTimer <= 0)
         {
             if (boss.isWreckwormHead &&

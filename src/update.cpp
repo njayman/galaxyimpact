@@ -1300,6 +1300,7 @@ void updateGameplay(Game& game, float deltaTime)
     updateBlackHoleDust(game, deltaTime);
     updateWormhole(game, deltaTime);
     updateEliteHazards(game, deltaTime);
+    updateBeltbreakerRubble(game, deltaTime);
 
     if (game.run.player.health > 0 && game.run.blackhole.active &&
         Vector2Distance(game.run.player.position, game.run.blackhole.position) <=
@@ -3477,7 +3478,14 @@ void updateDebrisSquall(Game& game, float deltaTime)
 {
     const bool beltbreakerFight = std::ranges::any_of(
         game.run.bosses, [](const Boss& boss) { return boss.isBeltbreaker || boss.isBeltbreakerPlate; });
-    if (currentBiome(game.run.waveNumber) != Biome::ShatteredBelt || beltbreakerFight)
+    // Variant A: a bare Beltbreaker calls squalls straight through the player.
+    const bool called = game.beltbreakerBareVariant == 0 &&
+                        std::ranges::any_of(game.run.bosses, [&](const Boss& boss) { return beltbreakerBare(game, boss); });
+    if (called && game.run.debrisSquallPhase == 0)
+    {
+        game.run.debrisSquallTimer = std::min(game.run.debrisSquallTimer, beltbreakerCalledSquallInterval);
+    }
+    if (currentBiome(game.run.waveNumber) != Biome::ShatteredBelt || (beltbreakerFight && !called))
     {
         game.run.debrisSquallPhase = 0;
         return;
@@ -3505,8 +3513,9 @@ void updateDebrisSquall(Game& game, float deltaTime)
         game.run.debrisSquallPhase = 1;
         game.run.debrisSquallPhaseTimer = debrisSquallWarnTime;
         game.run.debrisSquallAngle = static_cast<float>(GetRandomValue(0, 3599)) / 10.0F * DEG2RAD; // any direction
-        const auto offset = static_cast<float>(GetRandomValue(-static_cast<int32_t>(debrisSquallMaxOffset),
-                                                               static_cast<int32_t>(debrisSquallMaxOffset)));
+        const auto offset = called ? 0.0F
+                                   : static_cast<float>(GetRandomValue(-static_cast<int32_t>(debrisSquallMaxOffset),
+                                                                       static_cast<int32_t>(debrisSquallMaxOffset)));
         game.run.debrisSquallCenter =
             Vector2Add(game.run.player.position, Vector2Scale(across, offset));
         return;
@@ -3657,6 +3666,15 @@ void updateDebrisSquall(Game& game, float deltaTime)
             inRocks(enemy.position, enemyKinds.at(static_cast<size_t>(enemy.kind)).radius))
         {
             damageEnemy(game, i, debrisSquallEnemyDamage);
+        }
+    }
+    for (auto& boss : game.run.bosses)
+    {
+        // Lure the bare core into its own squall.
+        if (boss.isBeltbreaker && boss.health > 0 &&
+            inRocks(beltbreakerCoreCenter(boss), boss.size.x * 0.4F))
+        {
+            damageBoss(game, boss, debrisSquallBossDamage, false);
         }
     }
 }

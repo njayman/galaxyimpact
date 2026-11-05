@@ -303,6 +303,23 @@ auto sandboxMenuButtons() -> const std::vector<SandboxMenuButton>&
         {[](const Game& game)
          { return std::format("Boss Can't Die: {}", game.sandboxBossNoDeath ? "ON" : "OFF"); },
          [](Game& game) { game.sandboxBossNoDeath = !game.sandboxBossNoDeath; }},
+        {[](const Game& game)
+         {
+             return std::format("Bare Beltbreaker: {}",
+                                game.beltbreakerBareVariant == 0 ? "A dash+squall" : "B rubble+nova");
+         },
+         [](Game& game) { game.beltbreakerBareVariant = 1 - game.beltbreakerBareVariant; }},
+        {[](const Game&) { return std::string("Break Beltbreaker Plates"); },
+         [](Game& game)
+         {
+             for (auto& boss : game.run.bosses)
+             {
+                 if (boss.isBeltbreakerPlate && boss.health > 0)
+                 {
+                     damageBoss(game, boss, boss.health, false);
+                 }
+             }
+         }},
         {[](const Game&) { return std::string("Reset Tactics"); },
          [](Game& game) { game.run.tactics = TacticTracker{}; }},
         {[](const Game&) { return std::string("Drop Selected Pickup"); },

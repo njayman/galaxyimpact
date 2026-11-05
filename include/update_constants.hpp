@@ -196,6 +196,15 @@ constexpr float beltbreakerPlateShieldDashShieldDuration = 2.5F;
 // Core attacks faster as fewer plates remain attached: 1.0x at full plates, down to this
 // multiplier with none left.
 constexpr float beltbreakerNoPlatesSpeedMult = 0.4F;
+// Bare core (every plate dead). Variant A: rampage dashes and called squalls.
+constexpr int32_t beltbreakerRampageDashes = 3;      // chained per Charge Dash
+constexpr float beltbreakerRampageChainTell = 0.9F;  // tell between chained dashes
+constexpr float beltbreakerCalledSquallInterval = 7.0F;
+constexpr int32_t debrisSquallBossDamage = 20;       // per tick to a boss caught in the rocks
+// Variant B: rubble regrowth and shard nova.
+constexpr float beltbreakerRubbleInterval = 9.0F;
+constexpr int32_t beltbreakerRubbleCount = 3;
+constexpr float beltbreakerRubbleHealthFrac = 0.3F;  // of a plate's HP
 
 constexpr int32_t bossHpPerTier = 500;
 
