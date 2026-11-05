@@ -3316,9 +3316,8 @@ void updatePunctumThunder(Game& game, float deltaTime)
 
 auto debrisSquallRock(const Game& game, int32_t index) -> SquallRock
 {
-    const float angle = beltDustLaneAngleDeg * DEG2RAD;
-    const Vector2 along{.x = std::cos(angle) * game.run.debrisSquallDir,
-                        .y = std::sin(angle) * game.run.debrisSquallDir};
+    const float angle = game.run.debrisSquallAngle;
+    const Vector2 along{.x = std::cos(angle), .y = std::sin(angle)};
     const Vector2 across{.x = -along.y, .y = along.x};
     const float seed = static_cast<float>(index) * 13.7F;
     const float s = game.run.debrisSquallFront - hashNoise(seed) * debrisSquallStreamLength;
@@ -3348,9 +3347,8 @@ void updateDebrisSquall(Game& game, float deltaTime)
         return;
     }
 
-    const float angle = beltDustLaneAngleDeg * DEG2RAD;
-    const Vector2 along{.x = std::cos(angle) * game.run.debrisSquallDir,
-                        .y = std::sin(angle) * game.run.debrisSquallDir};
+    const float angle = game.run.debrisSquallAngle;
+    const Vector2 along{.x = std::cos(angle), .y = std::sin(angle)};
     const Vector2 across{.x = -along.y, .y = along.x};
 
     if (game.run.debrisSquallPhase == 0)
@@ -3366,7 +3364,7 @@ void updateDebrisSquall(Game& game, float deltaTime)
             std::lerp(debrisSquallIntervalStart, debrisSquallIntervalEnd, ramp);
         game.run.debrisSquallPhase = 1;
         game.run.debrisSquallPhaseTimer = debrisSquallWarnTime;
-        game.run.debrisSquallDir = GetRandomValue(0, 1) == 0 ? 1.0F : -1.0F;
+        game.run.debrisSquallAngle = static_cast<float>(GetRandomValue(0, 3599)) / 10.0F * DEG2RAD; // any direction
         const auto offset = static_cast<float>(GetRandomValue(-static_cast<int32_t>(debrisSquallMaxOffset),
                                                                static_cast<int32_t>(debrisSquallMaxOffset)));
         game.run.debrisSquallCenter =

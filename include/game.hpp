@@ -304,7 +304,7 @@ struct GameplayState
     int32_t debrisSquallPhase; // 0 idle, 1 edge warning, 2 rocks sweeping
     float debrisSquallPhaseTimer;
     Vector2 debrisSquallCenter;
-    float debrisSquallDir; // +1 or -1 along the dust-lane direction
+    float debrisSquallAngle; // direction the squall sweeps, radians, random per squall
     float debrisSquallFront;
     float debrisSquallEnemyTickTimer;
     uint64_t debrisSquallBrokenMask; // bit per rock shot this sweep

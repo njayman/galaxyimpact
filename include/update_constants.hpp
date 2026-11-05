@@ -287,9 +287,8 @@ constexpr float caveNoiseScaleCoarse = 380.0F;
 constexpr float caveNoiseScaleFine = 60.0F;
 constexpr float caveTunnelHalfWidth = 0.17F;
 
-// Shattered Belt dust lanes: the background draws them along this angle and Debris Squalls
-// sweep along it, so the backdrop foreshadows where a squall comes from.
-constexpr float beltDustLaneAngleDeg = 33.0F;
+// Tilt of the Belt planets' debris rings.
+constexpr float beltPlanetRingAngleDeg = 33.0F;
 // Amber tint on Global Enemies, Wave Bosses and Elite Hazards fighting in the Belt.
 constexpr float beltDustTint = 0.15F;
 // Green-brown tint on Global Enemies, Wave Bosses and Elite Hazards fighting in Rustbloom.

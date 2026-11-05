@@ -1929,7 +1929,7 @@ void drawBeltPlanet(const Game& game)
 
     // Debris ring: a tilted ellipse along the dust-lane angle, slowly orbiting. The far half
     // goes behind the body and the near half in front.
-    const float laneRad = beltDustLaneAngleDeg * DEG2RAD;
+    const float laneRad = beltPlanetRingAngleDeg * DEG2RAD;
     const Vector2 ringMajor{.x = std::cos(laneRad), .y = std::sin(laneRad)};
     const Vector2 ringMinor{.x = -ringMajor.y, .y = ringMajor.x};
     const auto drawRing = [&](bool front)
@@ -1989,60 +1989,6 @@ void drawBeltPlanet(const Game& game)
     drawRing(true);
 }
 
-void drawShatteredBeltBackground(const Game& game)
-{
-    if (currentBiome(game.run.waveNumber) != Biome::ShatteredBelt)
-    {
-        return;
-    }
-
-    const Vector2 player = game.run.player.position;
-    const auto halfW = static_cast<float>(game.resources.screenWidth) / 2;
-    const auto halfH = static_cast<float>(game.resources.screenHeight) / 2;
-    const auto t = static_cast<float>(GetTime());
-    const Color amber = Palette::ShatteredBeltAccent;
-
-    // Mid (0.3): faint diagonal amber dust lanes, dashes drifting slowly along the lane.
-    {
-        constexpr float parallax = 0.3F;
-        constexpr float laneSpacing = 700.0F;
-        constexpr float dashLength = 240.0F;
-        constexpr float driftSpeed = 18.0F;
-        const float angle = beltDustLaneAngleDeg * DEG2RAD;
-        const Vector2 along{.x = std::cos(angle), .y = std::sin(angle)};
-        const Vector2 across{.x = -along.y, .y = along.x};
-        const Vector2 layerCenter = Vector2Scale(player, parallax);
-        const Vector2 shift = Vector2Scale(player, 1.0F - parallax);
-        const float reach = std::sqrt(halfW * halfW + halfH * halfH) + dashLength;
-        const float acrossCenter = Vector2DotProduct(layerCenter, across);
-        const float alongCenter = Vector2DotProduct(layerCenter, along);
-        const float drift = std::fmod(t * driftSpeed, dashLength);
-        for (float k = std::floor((acrossCenter - reach) / laneSpacing); k * laneSpacing < acrossCenter + reach; k++)
-        {
-            // Irregular: about half the lanes are absent and the rest sit anywhere in their band.
-            const float laneSeed = hashNoise(k * 3.1F + 11.0F);
-            if (hashNoise(k * 8.3F + 4.0F) < 0.5F)
-            {
-                continue;
-            }
-            const float laneAcross = k * laneSpacing + (laneSeed - 0.5F) * laneSpacing * 0.9F;
-            const float width = 1.5F + laneSeed * 2.0F;
-            for (float d = std::floor((alongCenter - reach) / dashLength); d * dashLength < alongCenter + reach; d++)
-            {
-                const float density = hashNoise(k * 5.7F + d * 1.9F + 23.0F);
-                if (density < 0.55F)
-                {
-                    continue;
-                }
-                const float start = d * dashLength + drift;
-                const Vector2 a = Vector2Add(
-                    shift, Vector2Add(Vector2Scale(across, laneAcross), Vector2Scale(along, start)));
-                const Vector2 b = Vector2Add(a, Vector2Scale(along, dashLength * (0.3F + 0.65F * density)));
-                DrawLineEx(a, b, width, Fade(amber, 0.03F + 0.05F * density));
-            }
-        }
-    }
-}
 namespace
 {
 struct DerelictStation
@@ -2320,8 +2266,8 @@ void drawRustbloomDerelicts(const Game& game)
     }
 }
 
-// Rustbloom mid (0.3) and near (0.8) layers. The far derelicts are drawn separately, before the
-// stars.
+// Rustbloom mid (0.3) and near (0.8) layers. The far derelicts are drawn separately, after
+// these, so the hulls hide them.
 void drawRustbloomBackground(const Game& game)
 {
     if (currentBiome(game.run.waveNumber) != Biome::Rustbloom)
@@ -2527,9 +2473,8 @@ void drawDebrisSquall(const Game& game)
         return;
     }
 
-    const float angle = beltDustLaneAngleDeg * DEG2RAD;
-    const Vector2 along{.x = std::cos(angle) * game.run.debrisSquallDir,
-                        .y = std::sin(angle) * game.run.debrisSquallDir};
+    const float angle = game.run.debrisSquallAngle;
+    const Vector2 along{.x = std::cos(angle), .y = std::sin(angle)};
     const Vector2 across{.x = -along.y, .y = along.x};
     const Vector2 center = game.run.debrisSquallCenter;
     const auto at = [&](float s, float off)
@@ -2828,19 +2773,18 @@ void drawKrakenRemains(const Game& game)
 
 void drawGameplayWorld(const Game& game)
 {
-    if (currentBiome(game.run.waveNumber) == Biome::Rustbloom)
-    {
-        drawRustbloomDerelicts(game); // before the stars, so they shine in front of it
-    }
     drawBackgroundStars(game, game.run.player.position);
     drawPunctumLightning(game);
-    drawShatteredBeltBackground(game);
     if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
     {
-        drawBeltPlanet(game); // after the stars and dust lanes: the solid body hides them
+        drawBeltPlanet(game); // after the stars: the solid body hides them
     }
     drawSolarForgeCaveBackground(game);
     drawRustbloomBackground(game);
+    if (currentBiome(game.run.waveNumber) == Biome::Rustbloom)
+    {
+        drawRustbloomDerelicts(game); // after the stars and drifting layers: the hulls hide them
+    }
 
     if (game.run.bossCutscenePhase == 11 || game.run.bossCutscenePhase == 12)
     {
