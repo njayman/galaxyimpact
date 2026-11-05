@@ -139,7 +139,7 @@ Described in words only; looks the build finds open can become a prototype ticke
 
 **Debris Squall** (event): a few times per wave an edge warning shows, then a band of fast rocks sweeps across the field in one direction; move out of the band. Damages enemies too, so they can be lured in. Switched off during Beltbreaker fights.
 
-Each rock hurts on contact and can be shot: a bullet pops it with a small spark burst (2 score), clearing that piece of the band. Starting numbers: one squall every 18 s at wave 1, ramping linearly to every 10 s at wave 25; 1.2 s warning (band outline plus chevrons at the screen edge it enters from); band 180 units wide, centred within 60 units of the player, sweeping along a random direction (rolled per squall) at 1500 units/s; 1 wave-scaled damage to the player on rock contact (normal immunity frames apply), 12 damage every 0.25 s to enemies touching a rock.
+Each rock hurts on contact and can be shot: a bullet pops it with a small spark burst (2 score), clearing that piece of the band. Orbit blades (circling and flung), the Nerve ball and the Blade Tornado pop rocks too, so the Bastion, which fires no bullets, can clear a squall. Starting numbers: one squall every 18 s at wave 1, ramping linearly to every 10 s at wave 25; 1.2 s warning (band outline plus chevrons at the screen edge it enters from); band 180 units wide, centred within 60 units of the player, sweeping along a random direction (rolled per squall) at 1500 units/s; 1 wave-scaled damage to the player on rock contact (normal immunity frames apply), 12 damage every 0.25 s to enemies touching a rock.
 
 ### Anomaly variant
 

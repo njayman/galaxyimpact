@@ -3586,6 +3586,58 @@ void updateDebrisSquall(Game& game, float deltaTime)
         }
     }
 
+    // Attacks that aren't bullets pop rocks too: orbit blades (circling and flung), and the Nerve
+    // ball and tornado. Without this the Bastion, which fires no bullets, couldn't clear a squall.
+    const auto popRocksAt = [&](Vector2 pos, float radius)
+    {
+        for (int32_t i = 0; i < debrisSquallRockCount; i++)
+        {
+            const SquallRock rock = debrisSquallRock(game, i);
+            if (rock.live && CheckCollisionCircles(pos, radius, rock.position, rock.radius))
+            {
+                game.run.debrisSquallBrokenMask |= uint64_t{1} << i;
+                spawnKillExplosion(game, rock.position, Palette::StructLight, 8, 0.8F);
+                spawnKillExplosion(game, rock.position, Palette::ElementBurn, 6, 1.2F);
+                playSFX(game, game.resources.sounds.rockBreak);
+                game.run.score += debrisSquallRockScore;
+            }
+        }
+    };
+    for (const auto& w : game.run.weapons)
+    {
+        if (w.type != WeaponType::Orbit)
+        {
+            continue;
+        }
+        const float ring = orbitRadius(w.level) * (w.evolved ? 1.4F : 1.0F);
+        const int32_t count = orbitBladeCount(w.level);
+        for (int32_t s = 0; s < count; s++)
+        {
+            popRocksAt(orbitBladePosition(game, game.run.player.position, ring, s, count), orbitBladeHitRadius);
+        }
+    }
+    for (const auto& list : {&game.run.orbitBladeProjectiles, &game.run.nerveBallProjectiles})
+    {
+        for (const auto& proj : *list)
+        {
+            if (proj.active)
+            {
+                popRocksAt(proj.position, proj.radius);
+            }
+        }
+    }
+    for (const auto& spiral : game.run.nerveSpiralProjectiles)
+    {
+        for (int32_t s = 0; spiral.active && s < spiral.bladeCount; s++)
+        {
+            const float angle = spiral.age * nerveSpiralSpinSpeed +
+                                static_cast<float>(s) * 2 * std::numbers::pi_v<float> / static_cast<float>(spiral.bladeCount);
+            popRocksAt(Vector2Add(spiral.origin, Vector2{.x = std::cos(angle) * spiral.spinRadius,
+                                                          .y = std::sin(angle) * spiral.spinRadius}),
+                       orbitBladeHitRadius * 2.0F);
+        }
+    }
+
     if (game.run.player.health > 0 && game.run.player.immunityTimer <= 0 &&
         inRocks(game.run.player.position, game.run.player.radius))
     {
