@@ -51,3 +51,4 @@ void preparePunctumInfallSprites(const Game& game); // call outside any texture 
 void updatePunctumInfall(Game& game, float deltaTime);
 void drawPunctumInfall(const Game& game);
 void drawInfallSprite(InfallKind kind, float seed, Vector2 center, float size); // in draw.cpp
+constexpr float infallPlanetSpriteRatio = 3.7F; // sprite side / planet radius: room for the debris ring

@@ -7688,7 +7688,7 @@ void drawInfallSprite(InfallKind kind, float seed, Vector2 center, float size)
     switch (kind)
     {
     case InfallKind::BeltPlanet:
-        drawBeltPlanetBody(buildBeltPlanet(seed), center, size / 3.9F, tone);
+        drawBeltPlanetBody(buildBeltPlanet(seed), center, size / infallPlanetSpriteRatio, tone);
         break;
     case InfallKind::Derelict:
         drawRustbloomDerelict(center, (h(1) - 0.5F) * 0.6F, size * 0.88F, seed, tone);
@@ -7704,13 +7704,13 @@ void drawInfallSprite(InfallKind kind, float seed, Vector2 center, float size)
         for (size_t i = 0; i < pods.size(); i++)
         {
             const float a = h(3.0F + static_cast<float>(i)) * 2.0F * PI;
-            pods.at(i) = Vector2Add(center, Vector2{.x = std::cos(a) * size * 0.26F, .y = std::sin(a) * size * 0.26F});
+            pods.at(i) = Vector2Add(center, Vector2{.x = std::cos(a) * size * 0.26F, .y = std::sin(a) * size * 0.26F}); // ~140 apart, as in Rustbloom
         }
         DrawLineEx(pods.at(0), pods.at(1), 3.0F, tone(Palette::RustbloomHaze, 0.5F));
         DrawLineEx(pods.at(1), pods.at(2), 3.0F, tone(Palette::RustbloomHaze, 0.5F));
         for (size_t i = 0; i < pods.size(); i++)
         {
-            const float r = size * (0.12F + 0.06F * h(7.0F + static_cast<float>(i)));
+            const float r = rustbloomPodCellSize * (0.14F + 0.06F * h(7.0F + static_cast<float>(i))); // Rustbloom pod radius
             DrawCircleV(pods.at(i), r, tone(Palette::RustbloomAccent, 0.75F));
             DrawCircleV(Vector2Add(pods.at(i), Vector2{.x = r * 0.5F, .y = r * 0.3F}), r * 0.6F,
                         tone(Palette::RustbloomHaze, 0.6F));

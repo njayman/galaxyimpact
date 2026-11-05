@@ -16,7 +16,6 @@ constexpr float spawnInterval = 2.5F;
 constexpr float breakRadius = 700.0F;  // tiles inside this distance of the centre come loose
 constexpr float swallowRadius = 30.0F; // loose tiles vanish here
 constexpr float looseLife = 2.2F;
-constexpr int32_t tilesAcross = 24;
 constexpr Color dim{.r = 125, .g = 120, .b = 140, .a = 255}; // background strength, a little lavender
 constexpr float tau = 2.0F * std::numbers::pi_v<float>;
 
@@ -39,13 +38,8 @@ struct SpriteSpec
 {
     InfallKind kind;
     int32_t count;
-    float size;
+    float size; // sprite side, so each object keeps the size it has in its own Biome
 };
-constexpr std::array<SpriteSpec, 5> spriteSpecs{{{InfallKind::BeltPlanet, 3, 320},
-                                                 {InfallKind::Derelict, 3, 400},
-                                                 {InfallKind::HullFragment, 3, 150},
-                                                 {InfallKind::BloomPods, 2, 220},
-                                                 {InfallKind::GelBlobs, 3, 220}}};
 
 auto layerView(const Game& game) -> Vector2 { return Vector2Scale(game.run.player.position, parallax); }
 } // namespace
@@ -56,7 +50,14 @@ void preparePunctumInfallSprites(const Game& game)
     {
         return;
     }
-    for (const auto& spec : spriteSpecs)
+    // Belt planets: radius 45% of the screen height, plus their debris ring (planetSpriteRatio).
+    const float planetSprite = static_cast<float>(game.resources.screenHeight) * 0.45F * infallPlanetSpriteRatio;
+    const std::array<SpriteSpec, 5> specs{{{InfallKind::BeltPlanet, 2, planetSprite},
+                                           {InfallKind::Derelict, 3, 950},
+                                           {InfallKind::HullFragment, 3, 150},
+                                           {InfallKind::BloomPods, 2, 300},
+                                           {InfallKind::GelBlobs, 3, 220}}};
+    for (const auto& spec : specs)
     {
         for (int32_t v = 0; v < spec.count; v++)
         {
@@ -71,7 +72,7 @@ void preparePunctumInfallSprites(const Game& game)
             Image image = LoadImageFromTexture(sprite.target.texture);
             ImageFlipVertical(&image); // render textures are stored upside down
             const auto* pixels = static_cast<const Color*>(image.data);
-            const int32_t tile = px / tilesAcross;
+            const int32_t tile = std::clamp(px / 40, 8, 24); // bigger objects break into bigger tiles
             for (int32_t ty = 0; ty + tile <= px; ty += tile)
             {
                 for (int32_t tx = 0; tx + tile <= px; tx += tile)
@@ -120,7 +121,7 @@ void updatePunctumInfall(Game& game, float deltaTime)
         infall.spawnTimer = spawnInterval * rnd(0.6F, 1.4F);
         const auto index = GetRandomValue(0, static_cast<int32_t>(sprites.size()) - 1);
         const InfallSprite& sprite = sprites.at(static_cast<size_t>(index));
-        const float scale = rnd(0.8F, 1.25F);
+        constexpr float scale = 1.0F; // original size
         const float reach = sprite.size * scale / 2;
         const float base = Vector2Length(view) > 1500 ? std::atan2(view.y, view.x) : rnd(0, tau);
         const float a = base + rnd(-1.0F, 1.0F);
