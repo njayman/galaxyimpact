@@ -225,6 +225,8 @@ void updateTouchControls(Game& game);
 // use this (not TouchControls::visible, which is gameplay-only) to pick
 // touch- vs desktop-flavored hint text on any screen.
 auto touchInputActive(const Game& game) -> bool;
+auto settingsRows(const Game& game) -> int32_t;
+auto settingsRowSetting(const Game& game, int32_t row) -> int32_t;
 auto pausePressed(const Game& game) -> bool;
 auto dashPressed(const Game& game) -> bool;
 auto dashDown(const Game& game) -> bool;

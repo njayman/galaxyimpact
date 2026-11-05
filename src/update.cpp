@@ -586,8 +586,22 @@ void playSFX(Game& game, Sound sound)
     PlaySound(sound);
 }
 
+// Swap Sticks only matters with touch controls, so its row (setting 6) shows only then.
+auto settingsRows(const Game& game) -> int32_t { return touchInputActive(game) ? settingsRowCount : settingsRowCount - 1; }
+
+auto settingsRowSetting(const Game& game, int32_t row) -> int32_t
+{
+    return !touchInputActive(game) && row >= 6 ? row + 1 : row;
+}
+
 auto updateSettings(Game& game) -> bool
 {
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
+        game.state = game.settingsReturnState;
+        game.menuIndex = 0;
+        return false;
+    }
     if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP))
     {
         game.menuIndex--;
@@ -598,9 +612,9 @@ auto updateSettings(Game& game) -> bool
     }
     if (game.menuIndex < 0)
     {
-        game.menuIndex = settingsRowCount - 1;
+        game.menuIndex = settingsRows(game) - 1;
     }
-    if (game.menuIndex >= settingsRowCount)
+    if (game.menuIndex >= settingsRows(game))
     {
         game.menuIndex = 0;
     }
@@ -614,7 +628,7 @@ auto updateSettings(Game& game) -> bool
         std::abs(mouseDelta.x) > FLT_EPSILON || std::abs(mouseDelta.y) > FLT_EPSILON;
     if (mouseMoved)
     {
-        if (const auto row = hoveredColumnRow(settingsRowCount, MenuLayout::settingsWidth,
+        if (const auto row = hoveredColumnRow(settingsRows(game), MenuLayout::settingsWidth,
                                               MenuLayout::settingsHeight, MenuLayout::settingsGap,
                                               MenuLayout::settingsMenuY, game);
             row.has_value())
@@ -625,7 +639,7 @@ auto updateSettings(Game& game) -> bool
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
     {
-        if (const auto row = hoveredColumnRow(settingsRowCount, MenuLayout::settingsWidth,
+        if (const auto row = hoveredColumnRow(settingsRows(game), MenuLayout::settingsWidth,
                                               MenuLayout::settingsHeight, MenuLayout::settingsGap,
                                               MenuLayout::settingsMenuY, game);
             row.has_value())
@@ -640,7 +654,8 @@ auto updateSettings(Game& game) -> bool
         playSFX(game, game.resources.sounds.menuMove);
     }
 
-    switch (game.menuIndex)
+    const int32_t setting = settingsRowSetting(game, game.menuIndex);
+    switch (setting)
     {
     case 0:
         if (left)
@@ -708,7 +723,7 @@ auto updateSettings(Game& game) -> bool
         break;
     }
 
-    if ((left || right || confirm) && (game.menuIndex <= 4 || game.menuIndex == 6))
+    if ((left || right || confirm) && (setting <= 4 || setting == 6))
     {
         saveSettings(game.resources.settings);
     }

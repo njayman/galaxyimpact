@@ -635,7 +635,6 @@ void endPop()
 void drawSettings(const Game& game)
 {
     applyGuiScale(game);
-    const float scale = guiUiScale(game);
     windowText(game, "SETTINGS", game.resources.windowWidth / 2, 130, 34, Palette::Accent);
 
     const auto& res =
@@ -656,7 +655,7 @@ void drawSettings(const Game& game)
         "",
     };
 
-    constexpr int32_t rowCount = settingsRowCount;
+    const int32_t rowCount = settingsRows(game);
     for (int32_t i = 0; i < rowCount; i++)
     {
         const Rectangle rect =
@@ -668,29 +667,25 @@ void drawSettings(const Game& game)
             GuiSetState(STATE_FOCUSED);
         }
 
-        if (i == 1 || i == 2 || i == 6)
+        const int32_t row = settingsRowSetting(game, i);
+        if (row == 1 || row == 2 || row == 6)
         {
-            const bool on = i == 1   ? game.resources.settings.bgmOn
-                            : i == 2 ? game.resources.settings.soundOn
-                                     : game.resources.settings.swapTouchSticks;
-            bool checked = on;
-            const char* label = i == 1 ? "BGM" : i == 2 ? "Sound" : "Swap Sticks (Android)";
-            const Rectangle box{.x = rect.x,
-                                .y = rect.y + rect.height / 2 - 12 * scale,
-                                .width = 24 * scale,
-                                .height = 24 * scale};
-            GuiCheckBox(box, label, &checked);
+            const bool on = row == 1   ? game.resources.settings.bgmOn
+                            : row == 2 ? game.resources.settings.soundOn
+                                       : game.resources.settings.swapTouchSticks;
+            const char* label = row == 1 ? "BGM" : row == 2 ? "Sound" : "Swap Sticks";
+            uiButton(rect, std::format("{}:   {}", label, on ? "ON" : "OFF").c_str(), false);
         }
         else if (i == rowCount - 1)
         {
-            uiButton(rect, "Back");
+            uiButton(rect, "Back", false);
         }
         else
         {
             const std::string text =
-                std::format("{}:   <  {}  >", stepperLabels.at(static_cast<size_t>(i)),
-                            stepperValues.at(static_cast<size_t>(i)));
-            uiButton(rect, text.c_str());
+                std::format("{}:   <  {}  >", stepperLabels.at(static_cast<size_t>(row)),
+                            stepperValues.at(static_cast<size_t>(row)));
+            uiButton(rect, text.c_str(), false);
         }
 
         GuiSetState(STATE_NORMAL);
@@ -1623,7 +1618,7 @@ void drawMenu(const Game& game, const std::string& heading, const std::vector<st
             GuiSetState(STATE_FOCUSED);
         }
         beginPop(Vector2{.x = rect.x + rect.width / 2, .y = rect.y + rect.height / 2}, popScale(game, i + 1));
-        uiButton(rect, options.at(static_cast<size_t>(i)).c_str());
+        uiButton(rect, options.at(static_cast<size_t>(i)).c_str(), false);
         endPop();
         GuiSetState(STATE_NORMAL);
     }
