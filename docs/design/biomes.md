@@ -372,7 +372,7 @@ Mini Wave Bosses at waves 55 and 65. Pool: Ember Titan, Cinder Duke, Beamforge, 
 
 ### Biome Boss: Slagmaw
 
-Waves 60, 70, 75. Reworked 2026-11-05 into a **lava mole**, a drill-like tube rather than a snake: a basalt head with molten gold seams and fanged jaws (200 across), and behind it one rigid tube tapering to a hot drill point, with a molten spine seam and screw ridges that turn (fast while burrowing). A **peel** of four long molten-crystal petals covers the tube, each one a strip from behind the head to the drill point, side by side so closed they wrap it into a cone. For attacks they stay fixed behind the head and peel away outward like a banana's skin, curling more toward their free ends, the tube glowing through; once it blooms they stay open. It moves 1.5x the generic boss chase speed, faster than the ship. Death behaviour by wave: wave 60 dies; wave 70 shatters into 14 tough meteor drifters; wave 75 splits into smaller moles (0.75x) that keep splitting by generation.
+Waves 60, 70, 75. Reworked 2026-11-05 into a **lava mole**, a drill-like tube rather than a snake: no mouth; a curved, pointed basalt nose (200 across) with molten seams sweeping to a tip that heats up for attacks, and behind it one rigid tube tapering to a hot drill point, with a molten spine seam and screw ridges that turn (fast while burrowing). A **peel** of four long molten-crystal petals covers the tube, each one a strip from behind the head to the drill point, side by side so closed they wrap it into a cone. For attacks they stay fixed behind the head and peel away outward like a banana's skin, curling more toward their free ends, the tube glowing through; once it blooms they stay open. It moves 1.5x the generic boss chase speed, faster than the ship. Death behaviour by wave: wave 60 dies; wave 70 shatters into 14 tough meteor drifters; wave 75 splits into smaller moles (0.75x) that keep splitting by generation.
 
 **Pace (2026-11-05):** it keeps its movement, but its attacks are fast and its swarms 2.5x: Slag Spray fires 2.5x as often with 1.7x faster gobs (0.3 s tell), Meteor Hell drops 2.5x the meteors at 1.7x speed, Meteor Swarm calls 40 chunks, Seeker Embers fire 2.5x as often at 1.7x speed, Magma Ram charges 1.6x faster. Erupt tell 1.2 s with 25 gobs; Tunnel Run tell 0.7 s at 2000 units a second; Petal Volley tell 0.5 s, 18 petals (30 bloomed), faster out and dart.
 
@@ -405,7 +405,7 @@ Waves 60, 70, 75. Reworked 2026-11-05 into a **lava mole**, a drill-like tube ra
 - **Clean clear:** the player bursts out and Slagmaw chokes: 3 s Punish Window (+50%) with the maw exposed as a weak point.
 - **Fail:** the player is spat out and takes one burn hit.
 
-- As built: the jaws surface right on the ring's centre, facing the ship. Mash 8 presses in 2.6 s, then 9 prompts (0.7 s, 25% Parry) with a slag gob flying in from each prompt's angle while the head shakes; a clean chain ends in the shared finisher shot. Inside the QTE gap the erupt is a breach instead: blast ring, slag gobs and a 2 damage bite.
+- As built: the nose surfaces right on the ring's centre, pointing at the ship. Mash 8 presses in 2.6 s, then 9 prompts (0.7 s, 25% Parry) with a slag gob flying in from each prompt's angle while the head shakes; a clean chain ends in the shared finisher shot. Inside the QTE gap the erupt is a breach instead: blast ring, slag gobs and a 2 damage bite.
 
 ### Open for build
 

@@ -148,8 +148,6 @@ void drawHuskSentinelShape(Vector2 center, float radius, float seed, Vector2 aim
 void drawCarrionSpots(Vector2 center, float radius, float seed, Color color);
 void drawClusterEnemyShape(Vector2 center, float baseRadius, float seed, Color color);
 void drawMeteorBossShape(Vector2 center, float radius, int32_t seed, Color baseColor);
-void drawSlagmawShape(Vector2 center, float radius, float seed, Vector2 facing, float mawOpen, float heat,
-                      float flash, float alpha);
 void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flash);
 void drawSlagGob(Vector2 position, float radius, Vector2 velocity);
 void drawMagmaPools(const Game& game);
@@ -5464,121 +5462,6 @@ void drawSlagGob(Vector2 position, float radius, Vector2 velocity)
 }
 
 // Devour's inhale: a faint gold wedge with streaks flowing down it into the maw.
-// Slagmaw: a jagged basalt mass, every facet lit from the upper left, split by molten gold seams
-// running back from a maw that faces `facing`. mawOpen 0..1 parts the toothed jaws on a glowing
-// throat; heat 0..1 brightens the seams, throat and haze (tells, Devour).
-void drawSlagmawShape(Vector2 center, float radius, float seed, Vector2 facing, float mawOpen, float heat,
-                      float flash, float alpha)
-{
-    const auto t = static_cast<float>(GetTime());
-    const auto paint = [&](Color c, float a) { return Fade(ColorLerp(c, WHITE, 0.2F * flash), a * alpha); };
-    constexpr Color basalt{.r = 34, .g = 27, .b = 27, .a = 255};
-    constexpr Color basaltLit{.r = 104, .g = 84, .b = 76, .a = 255}; // warm, catching the light
-    constexpr Color gold{.r = 255, .g = 188, .b = 72, .a = 255};
-    const Color ember = Palette::ElementBurn;
-    const float glow = std::clamp(0.35F + 0.2F * std::sin(t * 2.0F + seed) + 0.6F * heat, 0.0F, 1.0F);
-    const Vector2 face = Vector2Length(facing) > 0.01F ? Vector2Normalize(facing) : Vector2{.x = 0, .y = 1};
-    const Vector2 side{.x = -face.y, .y = face.x};
-    const Vector2 light = Vector2Normalize(Vector2{.x = -1, .y = -1});
-
-    DrawCircleV(center, radius * 1.2F, paint(ember, 0.05F + 0.1F * heat));
-    DrawCircleV(center, radius * 1.07F, paint(ember, 0.07F + 0.12F * heat));
-
-    constexpr int32_t sides = 22;
-    std::array<Vector2, sides> verts{};
-    for (int32_t i = 0; i < sides; i++)
-    {
-        const float a = static_cast<float>(i) * 2.0F * PI / sides;
-        const float r = radius * (0.86F + 0.14F * hashNoise(seed * 5.3F + static_cast<float>(i) * 1.7F));
-        verts.at(static_cast<size_t>(i)) = Vector2Add(center, Vector2{.x = std::cos(a) * r, .y = std::sin(a) * r});
-    }
-    for (int32_t i = 0; i < sides; i++)
-    {
-        const Vector2 v0 = verts.at(static_cast<size_t>(i));
-        const Vector2 v1 = verts.at(static_cast<size_t>((i + 1) % sides));
-        const float lit = 0.5F + 0.5F * Vector2DotProduct(
-                                           Vector2Normalize(Vector2Subtract(Vector2Lerp(v0, v1, 0.5F), center)), light);
-        DrawTriangle(center, v1, v0, paint(ColorLerp(basalt, basaltLit, 0.65F * lit * lit), 1.0F));
-        DrawLineEx(v0, v1, radius * 0.018F, paint(basaltLit, 0.5F * lit));
-    }
-
-    // Raised plates, kept off the maw side.
-    for (int32_t k = 0; k < 6; k++)
-    {
-        const auto kf = static_cast<float>(k);
-        const float a = hashNoise(seed * 2.3F + kf * 4.1F) * 2.0F * PI;
-        const Vector2 dir{.x = std::cos(a), .y = std::sin(a)};
-        if (Vector2DotProduct(dir, face) > 0.3F)
-        {
-            continue;
-        }
-        const Vector2 pos = Vector2Add(center, Vector2Scale(dir, radius * (0.3F + 0.35F * hashNoise(seed + kf))));
-        const float size = radius * (0.1F + 0.06F * hashNoise(seed * 1.9F + kf));
-        DrawPoly(pos, 5, size, a * RAD2DEG, paint(ColorLerp(basalt, basaltLit, 0.45F), 1.0F));
-        DrawPolyLinesEx(pos, 5, size, a * RAD2DEG, 1.5F, paint(Palette::Void, 0.6F));
-    }
-
-    // Molten seams: jagged veins, each starting at its own point round the back of the maw and
-    // running out toward the rim.
-    const Vector2 mawCenter = Vector2Add(center, Vector2Scale(face, radius * slagmawMawOffset));
-    const float backAngle = std::atan2(-face.y, -face.x);
-    for (int32_t k = 0; k < 6; k++)
-    {
-        const auto kf = static_cast<float>(k);
-        float a = backAngle + (kf - 2.5F) * 0.55F;
-        Vector2 p = Vector2Add(mawCenter, Vector2{.x = std::cos(a) * radius * 0.42F, .y = std::sin(a) * radius * 0.42F});
-        for (int32_t seg = 0; seg < 3; seg++)
-        {
-            a += (hashNoise(seed * 3.3F + kf * 5.0F + static_cast<float>(seg)) - 0.5F) * 0.8F;
-            const Vector2 q = Vector2Add(p, Vector2{.x = std::cos(a) * radius * 0.22F, .y = std::sin(a) * radius * 0.22F});
-            const float taper = 1.0F - static_cast<float>(seg) * 0.22F;
-            DrawLineEx(p, q, radius * 0.05F * taper, paint(ember, 0.35F * glow));
-            DrawLineEx(p, q, radius * 0.022F * taper, paint(gold, glow));
-            p = q;
-        }
-        DrawCircleV(p, radius * 0.025F, paint(gold, glow));
-    }
-
-    // The maw: jaws parting on a glowing throat, ringed by basalt teeth.
-    const Vector2 maw = Vector2Add(center, Vector2Scale(face, radius * slagmawMawOffset));
-    const float halfWidth = radius * (0.34F + 0.06F * mawOpen);
-    const float halfDepth = radius * (0.05F + 0.2F * mawOpen);
-    const auto point = [&](float a, float s)
-    {
-        return Vector2Add(maw, Vector2Add(Vector2Scale(side, std::cos(a) * halfWidth * s),
-                                          Vector2Scale(face, std::sin(a) * halfDepth * s)));
-    };
-    constexpr int32_t mawVerts = 24;
-    const auto ellipse = [&](float s, Color c)
-    {
-        for (int32_t i = 0; i < mawVerts; i++)
-        {
-            const float a0 = static_cast<float>(i) * 2.0F * PI / mawVerts;
-            const float a1 = static_cast<float>(i + 1) * 2.0F * PI / mawVerts;
-            DrawTriangle(maw, point(a1, s), point(a0, s), c);
-            DrawTriangle(maw, point(a0, s), point(a1, s), c);
-        }
-    };
-    ellipse(1.14F, paint(ColorLerp(basalt, Palette::Void, 0.4F), 1.0F));
-    ellipse(1.0F, paint(Palette::Void, 1.0F));
-    ellipse(0.62F, paint(gold, (0.25F + 0.65F * heat) * mawOpen));
-    // Four uneven fangs per jaw.
-    for (const float lip : {0.0F, PI})
-    {
-        for (int32_t k = 1; k <= 4; k++)
-        {
-            const auto kf = static_cast<float>(k);
-            const float a = lip + PI * kf / 5.0F;
-            const Vector2 b1 = point(a - PI / 12.0F, 1.05F);
-            const Vector2 b2 = point(a + PI / 12.0F, 1.05F);
-            const Vector2 tip = Vector2Lerp(point(a, 1.0F), maw, 0.35F + 0.3F * hashNoise(seed + lip + kf));
-            const Color tooth = paint(ColorLerp(basalt, Palette::Haze, 0.35F), 1.0F);
-            DrawTriangle(b1, tip, b2, tooth);
-            DrawTriangle(b1, b2, tip, tooth);
-        }
-    }
-}
-
 // Magma Ram pools: a dark crust ring round molten slag, cooling as it fades, bubbling.
 void drawMagmaPools(const Game& game)
 {
@@ -8065,22 +7948,19 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
         }
     }
 
-    // The head with its jaws.
-    float mawOpen = 0.15F + 0.08F * std::sin(t * 1.5F);
-    float heat = boss.slagmawBloomed ? 0.7F : 0.15F;
+    // The head: a curved, pointed basalt nose (an ogive) leading the tube, molten seams sweeping
+    // to a tip that heats up for attacks.
+    float heat = boss.slagmawBloomed ? 0.7F : 0.2F;
     if (swallowing || (shooting && boss.attack == BossAttack::Devour))
     {
-        mawOpen = 1.0F;
         heat = 1.0F;
     }
-    else if (boss.attack == BossAttack::Barrage && (winding || shooting))
+    else if (winding || shooting)
     {
-        mawOpen = winding ? 0.6F * windup : 0.7F;
-        heat = winding ? windup : 0.8F;
+        heat = std::max(heat, winding ? windup : 0.8F);
     }
     if (boss.slagmawPunishTimer > 0)
     {
-        mawOpen = 0.5F + 0.25F * std::sin(t * 22.0F);
         heat = 0.4F + 0.4F * std::sin(t * 9.0F);
     }
     Vector2 head = center;
@@ -8088,7 +7968,55 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
     {
         head = Vector2Add(head, Vector2{.x = std::sin(t * 37.0F) * 6.0F, .y = std::cos(t * 29.0F) * 6.0F});
     }
-    drawSlagmawShape(head, radius, seed, face, mawOpen, heat, flash, seen);
+    {
+        const Vector2 across{.x = -face.y, .y = face.x};
+        const float base = radius * 0.94F;
+        const float noseLength = radius * 1.35F;
+        const auto nose = [&](float s, float v) // s 0 base .. 1 tip, v across -1 .. 1
+        {
+            const float w = base * std::sqrt(std::max(0.0F, 1.0F - s * s)) * std::pow(1.0F - s, 0.35F);
+            return Vector2Add(Vector2Add(head, Vector2Scale(face, noseLength * s)), Vector2Scale(across, w * v));
+        };
+        const bool litSide = Vector2DotProduct(across, light) > 0;
+        const Color dark = ColorLerp(basalt, Palette::Void, 0.5F);
+        const Color lit = ColorLerp(basalt, basaltLit, 0.6F);
+        constexpr int32_t slices = 16;
+        for (int32_t i = 0; i < slices; i++)
+        {
+            const float s0 = static_cast<float>(i) / slices;
+            const float s1 = static_cast<float>(i + 1) / slices;
+            const auto quad = [&](float v0, float v1, Color c, float grow)
+            {
+                const auto g = [&](float s, float v) { return Vector2Add(nose(s, v), Vector2Scale(face, grow * (s > 0.99F ? 1.0F : 0.0F))); };
+                const Vector2 p0 = g(s0, v0), p1 = g(s0, v1), p2 = g(s1, v1), p3 = g(s1, v0);
+                DrawTriangle(p0, p1, p2, c);
+                DrawTriangle(p0, p2, p1, c);
+                DrawTriangle(p0, p2, p3, c);
+                DrawTriangle(p0, p3, p2, c);
+            };
+            quad(-1.1F, 1.1F, paint(dark, 1.0F), radius * 0.04F); // outline
+            quad(-1.0F, 0.0F, paint(litSide ? basalt : lit, 1.0F), 0);
+            quad(0.0F, 1.0F, paint(litSide ? lit : basalt, 1.0F), 0);
+        }
+        // Base rim where the peel attaches.
+        DrawLineEx(nose(0, -1.05F), nose(0, 1.05F), radius * 0.08F, paint(dark, 1.0F));
+        // Molten seams sweeping to the tip.
+        const float seamGlow = std::clamp(glow + 0.6F * heat, 0.0F, 1.0F);
+        for (const float v : {-0.55F, 0.0F, 0.55F})
+        {
+            for (int32_t i = 0; i < 10; i++)
+            {
+                const float s0 = 0.05F + 0.9F * static_cast<float>(i) / 10.0F;
+                const float s1 = 0.05F + 0.9F * static_cast<float>(i + 1) / 10.0F;
+                const float taper = v == 0 ? 1.0F : 0.7F;
+                DrawLineEx(nose(s0, v), nose(s1, v), radius * 0.06F * taper, paint(ember, 0.35F * seamGlow));
+                DrawLineEx(nose(s0, v), nose(s1, v), radius * 0.022F * taper, paint(gold, seamGlow));
+            }
+        }
+        const Vector2 tip = nose(1.0F, 0);
+        DrawCircleV(tip, radius * (0.1F + 0.12F * heat), paint(ember, 0.25F + 0.4F * heat));
+        DrawCircleV(tip, radius * (0.04F + 0.05F * heat), paint(gold, 0.7F + 0.3F * heat));
+    }
     if (swallowing && game.run.qtePrompt != QtePrompt::None && game.run.qtePrompt != QtePrompt::Mash &&
         game.run.qteTimerMax > 0)
     {
