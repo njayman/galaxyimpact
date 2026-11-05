@@ -187,6 +187,17 @@ struct HudState
     float biomeTimer = 0; // biome name showing under the score
 };
 
+// A Rustbloom tendril the ship has hooked: it stretches with the ship, then snaps back on a spring.
+struct TendrilPull
+{
+    Vector2 offset{}; // displacement of the hooked point
+    Vector2 vel{};
+    float at = 0.5F;  // where along the tendril it was hooked, 0..1
+    bool hooked = false;
+    float cellX = 0;  // its pod's cell (layer coordinates)
+    float cellY = 0;
+};
+
 struct GameplayState
 {
     Player player;
@@ -228,6 +239,7 @@ struct GameplayState
     std::vector<Particle> blastRings; // shock rings thrown out by radial bursts; radius is the reach
     PunctumInfall punctumInfall;
     std::unordered_map<int64_t, float> podJiggle; // Rustbloom bloom pods the ship has brushed: cell key -> wobble energy
+    std::unordered_map<int64_t, TendrilPull> tendrilPull; // pod cell key * 2 + (0 right, 1 down)
     float flamethrowerCycle = 0; // time into the Flamethrower's burst + charge cycle
     float flamethrowerEmit = 0;  // fractional jet particles owed
     std::vector<DamageNumber> damageNumbers;

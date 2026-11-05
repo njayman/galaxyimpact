@@ -1073,6 +1073,7 @@ void updatePodJiggle(Game& game, float deltaTime)
     if (currentBiome(game.run.waveNumber) != Biome::Rustbloom)
     {
         jiggle.clear();
+        game.run.tendrilPull.clear();
         return;
     }
     constexpr float cell = rustbloomPodCellSize;
@@ -1080,11 +1081,8 @@ void updatePodJiggle(Game& game, float deltaTime)
     const Vector2 shift = Vector2Scale(player.position, 0.2F);
     const Vector2 layer = Vector2Subtract(player.position, shift);
     const float moving = std::clamp(Vector2Length(player.velocity) / std::max(player.speed, 1.0F), 0.0F, 1.0F);
-    if (moving < 0.05F && !player.dashing)
-    {
-        return; // resting on a pod doesn't stir it
-    }
-    for (int32_t dy = -1; dy <= 1; dy++)
+    const bool stirring = moving >= 0.05F || player.dashing; // resting on a pod doesn't stir it
+    for (int32_t dy = -1; dy <= 1 && stirring; dy++)
     {
         for (int32_t dx = -1; dx <= 1; dx++)
         {
@@ -1103,8 +1101,77 @@ void updatePodJiggle(Game& game, float deltaTime)
                 float& energy = jiggle[rustbloomPodKey(x, y, cell)];
                 energy = std::max(energy, player.dashing ? 1.0F : 0.4F + 0.6F * moving);
             }
+
+            // Tendrils to the right and down neighbours (same ends as drawRustbloomBackground):
+            // brushing one hooks it onto the ship.
+            for (int32_t dir = 0; dir < 2; dir++)
+            {
+                const float nx = dir == 0 ? x + cell : x;
+                const float ny = dir == 0 ? y : y + cell;
+                if (hashNoise(nx * 0.021F + ny * 0.037F) > rustbloomPodChance)
+                {
+                    continue;
+                }
+                const Vector2 end{.x = nx + cell / 2 + shift.x, .y = ny + cell / 2 + shift.y};
+                const Vector2 span = Vector2Subtract(end, center);
+                const float along = std::clamp(Vector2DotProduct(Vector2Subtract(player.position, center), span) /
+                                                   Vector2LengthSqr(span),
+                                               0.1F, 0.9F);
+                const Vector2 onLine = Vector2Add(center, Vector2Scale(span, along));
+                const int64_t key = rustbloomPodKey(x, y, cell) * 2 + dir;
+                auto found = game.run.tendrilPull.find(key);
+                if (Vector2Distance(onLine, player.position) < player.radius && (found == game.run.tendrilPull.end() || !found->second.hooked))
+                {
+                    TendrilPull& pull = game.run.tendrilPull[key];
+                    pull.hooked = true;
+                    pull.at = along;
+                    pull.cellX = x;
+                    pull.cellY = y;
+                }
+            }
         }
     }
+
+    // Hooked tendrils follow the ship until stretched too far, then snap back on a spring, ringing
+    // their pods as they go.
+    constexpr float maxStretch = 55.0F;
+    constexpr float stiffness = 170.0F;
+    constexpr float damping = 5.0F;
+    std::erase_if(game.run.tendrilPull,
+                  [&](auto& entry)
+                  {
+                      TendrilPull& pull = entry.second;
+                      const int64_t podKey = entry.first / 2;
+                      if (pull.hooked)
+                      {
+                          // Where the hooked point would rest, from its pod's key.
+                          const float cx = pull.cellX;
+                          const float cy = pull.cellY;
+                          const bool right = entry.first % 2 == 0;
+                          const float jx = (hashNoise(cx * 0.05F + cy * 0.02F + 3.0F) - 0.5F) * cell * 0.5F;
+                          const float jy = (hashNoise(cx * 0.02F + cy * 0.05F + 7.0F) - 0.5F) * cell * 0.5F;
+                          const Vector2 a{.x = cx + cell / 2 + jx + shift.x, .y = cy + cell / 2 + jy + shift.y};
+                          const Vector2 b{.x = cx + (right ? cell * 1.5F : cell / 2) + shift.x,
+                                          .y = cy + (right ? cell / 2 : cell * 1.5F) + shift.y};
+                          const Vector2 rest = Vector2Lerp(a, b, pull.at);
+                          const Vector2 target = Vector2Subtract(player.position, rest);
+                          if (Vector2Length(target) > maxStretch)
+                          {
+                              pull.hooked = false; // snaps: the spring takes it from here
+                              jiggle[podKey] = std::max(jiggle[podKey], 0.7F);
+                          }
+                          else
+                          {
+                              pull.vel = Vector2Scale(Vector2Subtract(target, pull.offset), 1.0F / std::max(deltaTime, 0.001F));
+                              pull.offset = target;
+                              return false;
+                          }
+                      }
+                      const Vector2 accel = Vector2Subtract(Vector2Scale(pull.offset, -stiffness), Vector2Scale(pull.vel, damping));
+                      pull.vel = Vector2Add(pull.vel, Vector2Scale(accel, deltaTime));
+                      pull.offset = Vector2Add(pull.offset, Vector2Scale(pull.vel, deltaTime));
+                      return Vector2Length(pull.offset) < 0.3F && Vector2Length(pull.vel) < 2.0F;
+                  });
 }
 
 // A radial burst's shock ring: races out from where the shots left, fading.

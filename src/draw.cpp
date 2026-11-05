@@ -2390,7 +2390,9 @@ void drawRustbloomBackground(const Game& game)
                 const float flow = (pulse + podPulse(nx, ny)) / 2;
                 const Color color = Fade(Palette::RustbloomHaze, 0.12F + 0.1F * flow);
                 const float wave = std::max(energy, podEnergy(nx, ny)) * 12.0F;
-                if (wave < 0.1F)
+                const auto pulled = game.run.tendrilPull.find(rustbloomPodKey(x, y, cellSize) * 2 + (ny == y ? 0 : 1));
+                const bool isPulled = pulled != game.run.tendrilPull.end();
+                if (wave < 0.1F && !isPulled)
                 {
                     DrawLineEx(podCenter, neighbor, 2.5F, color);
                     return;
@@ -2398,12 +2400,18 @@ void drawRustbloomBackground(const Game& game)
                 const Vector2 dir = Vector2Subtract(neighbor, podCenter);
                 const Vector2 side = Vector2Normalize(Vector2{.x = -dir.y, .y = dir.x});
                 Vector2 prev = podCenter;
-                constexpr int32_t steps = 10;
+                constexpr int32_t steps = 14;
                 for (int32_t i = 1; i <= steps; i++)
                 {
                     const float s = static_cast<float>(i) / steps;
                     const float bend = wave * std::sin(s * PI) * std::sin(t * 14.0F + s * 7.0F + x * 0.01F);
-                    const Vector2 p = Vector2Add(Vector2Add(podCenter, Vector2Scale(dir, s)), Vector2Scale(side, bend));
+                    Vector2 p = Vector2Add(Vector2Add(podCenter, Vector2Scale(dir, s)), Vector2Scale(side, bend));
+                    if (isPulled) // hooked or springing back: bent toward its offset, most at the hook
+                    {
+                        const float at = pulled->second.at;
+                        const float k = s < at ? s / at : (1.0F - s) / (1.0F - at);
+                        p = Vector2Add(p, Vector2Scale(pulled->second.offset, std::sin(k * PI / 2)));
+                    }
                     DrawLineEx(prev, p, 2.5F, color);
                     prev = p;
                 }
