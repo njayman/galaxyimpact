@@ -2828,17 +2828,17 @@ void drawKrakenRemains(const Game& game)
 
 void drawGameplayWorld(const Game& game)
 {
-    if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
+    if (currentBiome(game.run.waveNumber) == Biome::Rustbloom)
     {
-        drawBeltPlanet(game); // before the stars, so they shine in front of it
-    }
-    else if (currentBiome(game.run.waveNumber) == Biome::Rustbloom)
-    {
-        drawRustbloomDerelicts(game); // likewise
+        drawRustbloomDerelicts(game); // before the stars, so they shine in front of it
     }
     drawBackgroundStars(game, game.run.player.position);
     drawPunctumLightning(game);
     drawShatteredBeltBackground(game);
+    if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
+    {
+        drawBeltPlanet(game); // after the stars and dust lanes: the solid body hides them
+    }
     drawSolarForgeCaveBackground(game);
     drawRustbloomBackground(game);
 
