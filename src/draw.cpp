@@ -199,7 +199,8 @@ void drawPlayerBullet(const Bullet& b)
     }
     if (!b.evolved)
     {
-        DrawCircleV(b.position, b.radius, b.color);
+        // Ranger's base Forward shots are drawn at half size (the hitbox is unchanged).
+        DrawCircleV(b.position, b.source == DamageSource::Forward ? b.radius * 0.5F : b.radius, b.color);
         return;
     }
     const float speed = Vector2Length(b.velocity);
