@@ -258,6 +258,12 @@ constexpr std::array<std::string_view, static_cast<size_t>(WeaponType::Count)> e
     "Railgun",       "Chain Lightning", "Turret Deploy",  "Flamethrower",    "Sniper",
     "Heavy Lance"};
 
+// The colour an evolved weapon takes everywhere: its shots, its HUD icon and its ship's Nerve burst.
+constexpr auto evolvedWeaponColor(WeaponType type) -> Color
+{
+    return type == WeaponType::LaserShots ? Color{.r = 238, .g = 172, .b = 192, .a = 255} : Palette::Crit;
+}
+
 // Which weapons have an evolution at all. Beam lost its (Lance Sweep) when Laser Shots replaced it
 // as the Interceptor's default; the amplifier weapons never had one.
 constexpr std::array<bool, static_cast<size_t>(WeaponType::Count)> weaponEvolves{

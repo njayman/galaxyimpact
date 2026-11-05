@@ -175,6 +175,115 @@ void drawLaserBolt(const Bullet& b)
                    b.halfWidth * 2.0F * (0.3F + 0.7F * t1), Fade(b.color, 0.08F + 0.92F * t1 * t1));
     }
     DrawCircleV(shape.points[1], b.halfWidth * 1.1F, Fade(WHITE, 0.9F));
+    if (b.evolved) // evolved: a diamond head on the streak
+    {
+        const Vector2 d = Vector2Subtract(shape.points[1], shape.points[0]);
+        const float rot = std::atan2(d.y, d.x) * RAD2DEG;
+        DrawPoly(shape.points[1], 4, b.halfWidth * 3.0F, rot, Fade(b.color, 0.9F));
+        DrawPoly(shape.points[1], 4, b.halfWidth * 1.4F, rot, WHITE);
+    }
+}
+
+// A player bullet: laser bolts as streaks, round shots as dots; an evolved round shot is a
+// gleaming lance along its flight instead.
+void drawPlayerBullet(const Bullet& b)
+{
+    if (b.streak > 0)
+    {
+        drawLaserBolt(b);
+        return;
+    }
+    if (b.phasing)
+    {
+        DrawCircleV(b.position, b.radius * 1.6F, Fade(WHITE, 0.35F));
+    }
+    if (!b.evolved)
+    {
+        DrawCircleV(b.position, b.radius, b.color);
+        return;
+    }
+    const float speed = Vector2Length(b.velocity);
+    const Vector2 dir = speed > 0.01F ? Vector2Scale(b.velocity, 1.0F / speed) : Vector2{.x = 0, .y = -1};
+    const Vector2 side{.x = -dir.y, .y = dir.x};
+    const Vector2 tip = Vector2Add(b.position, Vector2Scale(dir, b.radius * 2.2F));
+    const Vector2 tail = Vector2Subtract(b.position, Vector2Scale(dir, b.radius * 3.4F));
+    const Vector2 left = Vector2Add(b.position, Vector2Scale(side, b.radius * 0.8F));
+    const Vector2 right = Vector2Subtract(b.position, Vector2Scale(side, b.radius * 0.8F));
+    for (int32_t k = 1; k <= 4; k++) // a short trail fading out behind
+    {
+        const auto kf = static_cast<float>(k);
+        DrawLineEx(Vector2Subtract(tail, Vector2Scale(dir, b.radius * 1.2F * (kf - 1))),
+                   Vector2Subtract(tail, Vector2Scale(dir, b.radius * 1.2F * kf)), b.radius * (0.9F - 0.18F * kf),
+                   Fade(b.color, 0.6F - 0.13F * kf));
+    }
+    for (const auto& [p, q] : {std::pair{left, right}, std::pair{right, left}}) // both windings
+    {
+        DrawTriangle(tip, p, q, b.color);
+        DrawTriangle(tail, p, q, Fade(b.color, 0.7F));
+    }
+    DrawLineEx(b.position, tip, 1.5F, WHITE);
+}
+
+// Bastion's orbit: a blade circling the ship, and one flung outward. Evolved, the circling blades
+// are spinning diamonds and the flung ones eight-point stars, in the evolved colour.
+void drawOrbitRingBlade(Vector2 pos, Color color, bool evolved)
+{
+    if (!evolved)
+    {
+        DrawCircleV(pos, 5, color);
+        return;
+    }
+    const float spin = static_cast<float>(GetTime()) * 360.0F;
+    DrawPoly(pos, 4, 8.0F, spin, color);
+    DrawCircleV(pos, 2.5F, WHITE);
+}
+
+void drawOrbitShot(Vector2 pos, float radius, bool evolved)
+{
+    const float angle = static_cast<float>(GetTime()) * 720.0F;
+    if (!evolved)
+    {
+        DrawPoly(pos, 4, radius, angle, Palette::Shield);
+        DrawCircleV(pos, radius * 0.4F, Fade(WHITE, 0.8F));
+        return;
+    }
+    const Color gold = evolvedWeaponColor(WeaponType::Orbit);
+    DrawCircleV(pos, radius * 1.8F, Fade(gold, 0.15F));
+    DrawPoly(pos, 4, radius * 1.3F, angle, gold);
+    DrawPoly(pos, 4, radius * 1.3F, angle + 45.0F, gold);
+    DrawCircleV(pos, radius * 0.45F, WHITE);
+}
+
+// Nerve bursts' own shapes: Ranger's ball and Bastion's tornado blades; evolved, in the signature
+// weapon's evolved colour with a star inside.
+void drawNerveBall(Vector2 pos, float radius, bool evolved)
+{
+    if (!evolved)
+    {
+        DrawCircleV(pos, radius, Fade(Palette::Accent, 0.55F));
+        DrawCircleLines(static_cast<int32_t>(pos.x), static_cast<int32_t>(pos.y), radius, Fade(WHITE, 0.8F));
+        return;
+    }
+    const Color gold = evolvedWeaponColor(WeaponType::Forward);
+    const float spin = static_cast<float>(GetTime()) * 90.0F;
+    DrawCircleV(pos, radius, Fade(gold, 0.45F));
+    DrawPolyLinesEx(pos, 4, radius * 0.8F, spin, 2.0F, Fade(WHITE, 0.8F));
+    DrawPolyLinesEx(pos, 4, radius * 0.8F, spin + 45.0F, 2.0F, Fade(WHITE, 0.8F));
+    DrawCircleLines(static_cast<int32_t>(pos.x), static_cast<int32_t>(pos.y), radius, gold);
+}
+
+void drawSpiralBlade(Vector2 pos, bool evolved)
+{
+    if (!evolved)
+    {
+        DrawCircleV(pos, 7, Palette::Shield);
+        return;
+    }
+    const Color gold = evolvedWeaponColor(WeaponType::Orbit);
+    const float spin = static_cast<float>(GetTime()) * 540.0F;
+    DrawPoly(pos, 4, 10.0F, spin, gold);
+    DrawPoly(pos, 4, 10.0F, spin + 45.0F, gold);
+    DrawCircleV(pos, 3.0F, WHITE);
 }
 
 void beginPixelZoom(const Game& game)
@@ -496,6 +605,8 @@ auto overGameplay(const Game& game, GameState state) -> bool
     case GameState::SETTINGS:
     case GameState::ACHIEVEMENTS:
     case GameState::BESTIARY:
+    case GameState::WEAPON_GALLERY:
+        return true;
     case GameState::SKILL_TREE:
         return game.settingsReturnState == GameState::PAUSED ||
                game.settingsReturnState == GameState::GAME_OVER ||
@@ -942,6 +1053,121 @@ void drawSkillTree(const Game& game)
     GuiSetState(STATE_NORMAL);
 }
 
+// Sandbox Weapon Gallery: every weapon's icon in its base and evolved colours, then the signature
+// weapons' shots and the Nerve bursts drawn base and evolved side by side, with the game's own
+// drawing functions. Laid out in 1920x1080 design units.
+void drawWeaponGallery(const Game& game)
+{
+    applyGuiScale(game);
+    const float scale = static_cast<float>(game.resources.windowHeight) / 1080.0F;
+    const float offsetX = (static_cast<float>(game.resources.windowWidth) - 1920.0F * scale) / 2;
+    BeginMode2D(Camera2D{.offset = {.x = offsetX, .y = 0}, .target = {}, .rotation = 0, .zoom = scale});
+    const auto label = [&](const char* text, float x, float y, int32_t size, Color color, bool centred)
+    {
+        const int32_t w = MeasureText(text, size);
+        DrawText(text, static_cast<int32_t>(x) - (centred ? w / 2 : 0), static_cast<int32_t>(y), size, color);
+    };
+    label("WEAPON GALLERY", 960, 30, 36, Palette::Accent, true);
+
+    // All weapons: base icon, evolved icon (where it evolves), name.
+    constexpr int32_t perRow = 8;
+    for (int32_t i = 0; i < static_cast<int32_t>(WeaponType::Count); i++)
+    {
+        const auto type = static_cast<WeaponType>(i);
+        const float cx = 180.0F + static_cast<float>(i % perRow) * 222.0F;
+        const float cy = 120.0F + static_cast<float>(i / perRow) * 120.0F;
+        const bool evolves = weaponEvolves.at(static_cast<size_t>(i));
+        drawWeaponIcon(type, Vector2{.x = cx - (evolves ? 30.0F : 0.0F), .y = cy}, 16.0F, Palette::Shield);
+        if (evolves)
+        {
+            drawWeaponIcon(type, Vector2{.x = cx + 30.0F, .y = cy}, 16.0F, evolvedWeaponColor(type), true);
+        }
+        label(std::string(weaponDisplayName(type)).c_str(), cx, cy + 28, 14, Palette::StructLight, true);
+        if (evolves)
+        {
+            label(std::string(evolvedWeaponName.at(static_cast<size_t>(i))).c_str(), cx, cy + 46, 12,
+                  evolvedWeaponColor(type), true);
+        }
+    }
+
+    constexpr float baseX = 860.0F;
+    constexpr float evolvedX = 1420.0F;
+    float y = 400.0F;
+    label("BASE", baseX, y - 40, 22, Palette::Haze, true);
+    label("EVOLVED", evolvedX, y - 40, 22, Palette::Crit, true);
+    const auto row = [&](const char* name, const auto& drawAt)
+    {
+        label(name, 160, y - 10, 20, Palette::StructLight, false);
+        drawAt(Vector2{.x = baseX, .y = y}, false);
+        drawAt(Vector2{.x = evolvedX, .y = y}, true);
+        y += 92.0F;
+    };
+    const Vector2 flight = Vector2Normalize(Vector2{.x = 1, .y = -0.25F});
+    row("Forward Shot (Ranger)", [&](Vector2 at, bool evolved)
+        {
+            for (int32_t k = -1; k <= 1; k++)
+            {
+                Bullet b{.position = Vector2Add(at, Vector2{.x = static_cast<float>(k) * 70.0F, .y = 0}),
+                         .velocity = flight,
+                         .radius = projectileSize,
+                         .color = evolved ? evolvedWeaponColor(WeaponType::Forward) : Palette::Accent,
+                         .active = true,
+                         .damage = 0,
+                         .evolved = evolved};
+                drawPlayerBullet(b);
+            }
+        });
+    const auto streaks = [&](Vector2 at, bool evolved, Color base, float lengthMult, float width)
+    {
+        for (int32_t k = 0; k < 5; k++)
+        {
+            Bullet b{.position = Vector2Add(at, Vector2{.x = static_cast<float>(k - 2) * 60.0F + 30.0F, .y = static_cast<float>((k * 7) % 3 - 1) * 14.0F}),
+                     .velocity = flight,
+                     .radius = width,
+                     .color = evolved ? evolvedWeaponColor(WeaponType::LaserShots) : base,
+                     .active = true,
+                     .damage = 0,
+                     .streak = laserShotStreak * lengthMult * (evolved ? laserEvoLengthMult : 1.0F),
+                     .halfWidth = width,
+                     .traveled = 1000.0F,
+                     .evolved = evolved};
+            drawPlayerBullet(b);
+        }
+    };
+    row("Laser Shots (Interceptor)", [&](Vector2 at, bool evolved) { streaks(at, evolved, Palette::ElementStatic, 1.0F, laserShotHalfWidth); });
+    row("Orbit blades (Bastion)", [&](Vector2 at, bool evolved)
+        {
+            drawShipHull(ShipClass::Bastion, at, 16.0F, 0, Palette::StructMid);
+            for (int32_t k = 0; k < 6; k++)
+            {
+                const float a = static_cast<float>(k) * PI / 3 + static_cast<float>(GetTime());
+                drawOrbitRingBlade(Vector2Add(at, Vector2{.x = std::cos(a) * 38.0F, .y = std::sin(a) * 38.0F}),
+                                   evolved ? evolvedWeaponColor(WeaponType::Orbit) : Palette::Shield, evolved);
+            }
+        });
+    row("Orbit shots (Bastion)", [&](Vector2 at, bool evolved)
+        {
+            for (int32_t k = -1; k <= 1; k++)
+            {
+                drawOrbitShot(Vector2Add(at, Vector2{.x = static_cast<float>(k) * 70.0F, .y = 0}), orbitProjectileRadius, evolved);
+            }
+        });
+    row("Nerve: Ball (Ranger)", [&](Vector2 at, bool evolved) { drawNerveBall(at, 34.0F, evolved); });
+    row("Nerve: Laser Storm (Interceptor)", [&](Vector2 at, bool evolved) { streaks(at, evolved, Palette::ElementStatic, 1.8F, 2.0F); });
+    row("Nerve: Blade Tornado (Bastion)", [&](Vector2 at, bool evolved)
+        {
+            for (int32_t k = 0; k < 6; k++)
+            {
+                const float a = static_cast<float>(k) * PI / 3 + static_cast<float>(GetTime()) * 3.0F;
+                drawSpiralBlade(Vector2Add(at, Vector2{.x = std::cos(a) * 36.0F, .y = std::sin(a) * 36.0F}), evolved);
+            }
+        });
+    EndMode2D();
+
+    const Rectangle back = backButtonRect(game);
+    uiButton(back, "Back");
+}
+
 // Predicts one Bestiary section's drawn height without drawing it, so
 // updateBestiary can size its scroll range before drawBestiary runs. Keep
 // this in sync with drawBestiarySection's own cellSize/gap/labelGap/columns
@@ -1367,7 +1593,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
 
     for (const auto& w : game.run.weapons)
     {
-        const Color color = w.evolved ? Palette::Crit : Palette::Shield;
+        const Color color = w.evolved ? evolvedWeaponColor(w.type) : Palette::Shield;
         const auto typeIndex = static_cast<size_t>(w.type);
         const bool evolutionReady = weaponEvolves.at(typeIndex) && !w.evolved && isEvolutionUnlocked(game, w.type);
         const bool stolen =
@@ -3268,16 +3494,7 @@ void drawGameplayWorld(const Game& game)
 
     for (const auto& b : game.run.bullets)
     {
-        if (b.streak > 0)
-        {
-            drawLaserBolt(b);
-            continue;
-        }
-        if (b.phasing)
-        {
-            DrawCircleV(b.position, b.radius * 1.6F, Fade(WHITE, 0.35F));
-        }
-        DrawCircleV(b.position, b.radius, b.color);
+        drawPlayerBullet(b);
     }
 
     for (const auto& p : game.run.deathParticles)
@@ -3576,9 +3793,7 @@ void drawNerveBallProjectiles(const Game& game)
         {
             continue;
         }
-        DrawCircleV(proj.position, proj.radius, Fade(Palette::Accent, 0.55F));
-        DrawCircleLines(static_cast<int32_t>(proj.position.x),
-                        static_cast<int32_t>(proj.position.y), proj.radius, Fade(WHITE, 0.8F));
+        drawNerveBall(proj.position, proj.radius, proj.evolved);
     }
 }
 
@@ -3600,7 +3815,7 @@ void drawNerveSpiralProjectiles(const Game& game)
             const Vector2 bladePos =
                 Vector2Add(center, Vector2{.x = std::cos(angle) * spiral.spinRadius,
                                            .y = std::sin(angle) * spiral.spinRadius});
-            DrawCircleV(bladePos, 7, Palette::Shield);
+            drawSpiralBlade(bladePos, spiral.evolved);
         }
     }
 }
@@ -5055,7 +5270,7 @@ void drawOrbitBlades(const Game& game)
 {
     for (const auto& w : game.run.weapons)
     {
-        const Color color = w.evolved ? Palette::Crit : Palette::Shield;
+        const Color color = w.evolved ? evolvedWeaponColor(w.type) : Palette::Shield;
 
         switch (w.type)
         {
@@ -5072,7 +5287,7 @@ void drawOrbitBlades(const Game& game)
             {
                 const Vector2 pos =
                     orbitBladePosition(game, game.run.player.position, radius, s, count);
-                DrawCircleV(pos, 5, color);
+                drawOrbitRingBlade(pos, color, w.evolved);
             }
 
             if (w.flashTimer > 0)
@@ -5165,9 +5380,7 @@ void drawOrbitBladeProjectiles(const Game& game)
         {
             continue;
         }
-        const float angle = static_cast<float>(GetTime()) * 720.0F;
-        DrawPoly(proj.position, 4, proj.radius, angle, Palette::Shield);
-        DrawCircleV(proj.position, proj.radius * 0.4F, Fade(WHITE, 0.8F));
+        drawOrbitShot(proj.position, proj.radius, proj.evolved);
     }
 }
 
@@ -7474,6 +7687,7 @@ auto drawGame(Game& game) -> void
     case GameState::ACHIEVEMENTS:
     case GameState::BESTIARY:
     case GameState::SKILL_TREE:
+    case GameState::WEAPON_GALLERY:
         if (overGameplay(game, game.state))
         {
             beginWorldCamera(game);
@@ -7549,6 +7763,7 @@ auto drawGame(Game& game) -> void
     case GameState::ACHIEVEMENTS:
     case GameState::BESTIARY:
     case GameState::SKILL_TREE:
+    case GameState::WEAPON_GALLERY:
         if (game.settingsReturnState == GameState::PAUSED)
         {
             drawHUD(game);
@@ -7614,6 +7829,10 @@ auto drawGame(Game& game) -> void
     case GameState::SKILL_TREE:
         drawOverlay(game);
         drawSkillTree(game);
+        break;
+    case GameState::WEAPON_GALLERY:
+        drawOverlay(game);
+        drawWeaponGallery(game);
         break;
     case GameState::ENDING:
         drawEnding(game);

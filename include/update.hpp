@@ -382,6 +382,7 @@ inline auto rustbloomPodKey(float cellX, float cellY, float cellSize) -> int64_t
            static_cast<int64_t>(std::floor(cellY / cellSize));
 }
 void updatePodJiggle(Game& game, float deltaTime);
+void updateNerveLaserStorm(Game& game, float deltaTime);
 
 inline auto hashNoise(float seed) -> float
 {

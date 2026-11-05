@@ -1244,6 +1244,7 @@ void updateGameplay(Game& game, float deltaTime)
     std::erase_if(game.run.blastRings, [](const Particle& p) { return p.life <= 0; });
     updatePunctumInfall(game, deltaTime);
     updatePodJiggle(game, deltaTime);
+    updateNerveLaserStorm(game, deltaTime);
 
     if (game.sandbox)
     {
@@ -2183,7 +2184,7 @@ void updateWeapons(Game& game, float deltaTime)
             if (w.evolved)
             {
                 dmg = static_cast<int32_t>(static_cast<float>(dmg) * 1.5F);
-                color = Palette::Crit;
+                color = evolvedWeaponColor(w.type);
             }
             for (int32_t s = 0; s < shots; s++)
             {
@@ -2204,7 +2205,8 @@ void updateWeapons(Game& game, float deltaTime)
                     .pierceRemaining = 0,
                     .ricochetRemaining = ricochetLevel(game),
                     .source = DamageSource::Forward,
-                    .ricochetThenPhase = w.evolved});
+                    .ricochetThenPhase = w.evolved,
+                    .evolved = w.evolved});
             }
             playSFX(game, game.resources.sounds.shoot);
             break;
@@ -2378,13 +2380,14 @@ void updateWeapons(Game& game, float deltaTime)
                     .position = start,
                     .velocity = Vector2Scale(d, projectileSpeed * laserShotSpeedMult * (1.0F + jitter(0.06F))),
                     .radius = laserShotHalfWidth,
-                    .color = w.evolved ? Color{.r = 238, .g = 172, .b = 192, .a = 255} : Palette::ElementStatic,
+                    .color = w.evolved ? evolvedWeaponColor(w.type) : Palette::ElementStatic,
                     .active = true,
                     .damage = dmg,
                     .source = DamageSource::LaserShots,
                     .streak = laserShotStreak * lengthMult * (w.evolved ? laserEvoLengthMult : 1.0F) * (1.0F + jitter(0.3F)),
                     .halfWidth = laserShotHalfWidth,
-                    .traveled = ahead});
+                    .traveled = ahead,
+                    .evolved = w.evolved});
             }
             playSFX(game, game.resources.sounds.shoot);
             break;
@@ -2785,7 +2788,8 @@ void updateOrbitBladeLaunch(Game& game, float deltaTime)
                                      .velocity = Vector2Scale(shotDir, orbitProjectileSpeed),
                                      .radius = orbitProjectileRadius,
                                      .damage = dmg,
-                                     .active = true});
+                                     .active = true,
+                                     .evolved = w.evolved});
 
             w.flashTimer = orbitRegrowDuration;
             playSFX(game, game.resources.sounds.homingLaunch);
@@ -3197,16 +3201,42 @@ void updateSniperShots(Game& game, float deltaTime)
 
 }
 
-// Laser Storm, the Interceptor's Nerve burst: one dense, wide fan of gold Laser Shots streaks.
+// Whether the current ship's signature weapon (its default, whose Nerve burst it fires) is evolved.
+auto signatureEvolved(const Game& game) -> bool
+{
+    const WeaponType signature = currentShip(game).defaultWeapon;
+    return std::ranges::any_of(game.run.weapons, [&](const Weapon& w) { return w.type == signature && w.evolved; });
+}
+
+// Laser Storm, the Interceptor's Nerve burst: a 2.5 s barrage of Laser Shots streaks, sprayed
+// wherever the ship aims while it lasts (updateNerveLaserStorm).
 void fireNerveLaserStorm(Game& game)
 {
+    game.run.nerveStormTimer = nerveStormDuration;
+    game.run.nerveStormEmit = 0;
+    playSFX(game, game.resources.sounds.nerveRelease);
+    duckBGM(game);
+    triggerShake(game, 10, 0.3F);
+    triggerHitPause(game, 0.08F);
+}
+
+void updateNerveLaserStorm(Game& game, float deltaTime)
+{
+    if (game.run.nerveStormTimer <= 0)
+    {
+        return;
+    }
+    game.run.nerveStormTimer -= deltaTime;
+    game.run.nerveStormEmit += static_cast<float>(nerveStormStreaks) / nerveStormDuration * deltaTime;
+    const bool evolved = signatureEvolved(game);
+    const Color color = evolved ? evolvedWeaponColor(WeaponType::LaserShots) : Palette::ElementStatic;
     const Vector2 dir = aimAtMouse(game);
     const Vector2 nose =
         Vector2Add(game.run.player.position, Vector2Scale(dir, game.run.player.radius * 1.05F));
     const Vector2 side{.x = -dir.y, .y = dir.x};
     const auto jitter = [](float range)
     { return static_cast<float>(GetRandomValue(-100, 100)) / 100.0F * range; };
-    for (int32_t i = 0; i < nerveStormStreaks; i++)
+    for (; game.run.nerveStormEmit >= 1.0F; game.run.nerveStormEmit -= 1.0F)
     {
         const Vector2 d = Vector2Rotate(dir, jitter(nerveStormSpreadDeg) * DEG2RAD);
         const auto ahead = static_cast<float>(GetRandomValue(0, 140));
@@ -3217,19 +3247,15 @@ void fireNerveLaserStorm(Game& game)
             .velocity =
                 Vector2Scale(d, projectileSpeed * laserShotSpeedMult * 1.5F * (1.0F + jitter(0.1F))),
             .radius = 2.0F,
-            .color = Palette::Crit,
+            .color = color,
             .active = true,
             .damage = nerveBurstDamage / nerveStormDamageDivisor,
             .source = DamageSource::Nerve,
             .streak = laserShotStreak * 1.8F * (1.0F + jitter(0.3F)),
             .halfWidth = 2.0F,
-            .traveled = ahead});
+            .traveled = ahead,
+            .evolved = evolved});
     }
-
-    playSFX(game, game.resources.sounds.nerveRelease);
-    duckBGM(game);
-    triggerShake(game, 10, 0.3F);
-    triggerHitPause(game, 0.08F);
 }
 
 void fireNerveBladeTornado(Game& game)
@@ -3255,7 +3281,8 @@ void fireNerveBladeTornado(Game& game)
                               .spinRadius = 50.0F,
                               .bladeCount = count,
                               .damagePerBlade = dmgPerBlade,
-                              .active = true});
+                              .active = true,
+                              .evolved = signatureEvolved(game)});
 
     playSFX(game, game.resources.sounds.nerveRelease);
     duckBGM(game);
@@ -3273,7 +3300,8 @@ void fireNerveBall(Game& game)
                              .velocity = Vector2Scale(dir, 8.0F),
                              .radius = 55.0F,
                              .damage = dmg,
-                             .active = true});
+                             .active = true,
+                             .evolved = signatureEvolved(game)});
 
     playSFX(game, game.resources.sounds.nerveRelease);
     duckBGM(game);
@@ -6220,6 +6248,13 @@ auto UpdateGame(Game& game, float deltaTime) -> bool
         return updateBestiary(game);
     case GameState::SKILL_TREE:
         return updateSkillTree(game);
+    case GameState::WEAPON_GALLERY:
+        if (IsKeyPressed(KEY_ESCAPE) || (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+                                         CheckCollisionPointRec(GetMousePosition(), backButtonRect(game))))
+        {
+            game.state = GameState::SANDBOX_MENU;
+        }
+        return false;
     case GameState::SANDBOX_MENU:
         updateSandboxMenuInput(game);
         break;

@@ -65,6 +65,7 @@ enum class GameState : std::uint8_t
     ACHIEVEMENTS,
     BESTIARY,
     SKILL_TREE,
+    WEAPON_GALLERY, // sandbox: every weapon's shots, base and evolved
     SANDBOX_MENU,
     ENDING
 };
@@ -238,6 +239,8 @@ struct GameplayState
     std::vector<Particle> flameParticles;
     std::vector<Particle> blastRings; // shock rings thrown out by radial bursts; radius is the reach
     PunctumInfall punctumInfall;
+    float nerveStormTimer = 0; // Interceptor's Laser Storm: seconds of barrage left
+    float nerveStormEmit = 0;  // streaks owed this frame
     std::unordered_map<int64_t, float> podJiggle; // Rustbloom bloom pods the ship has brushed: cell key -> wobble energy
     std::unordered_map<int64_t, TendrilPull> tendrilPull; // pod cell key * 2 + (0 right, 1 down)
     float flamethrowerCycle = 0; // time into the Flamethrower's burst + charge cycle

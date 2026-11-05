@@ -97,6 +97,7 @@ class Bullet
     // for a bolt crossing a crowd (it overlaps an enemy for a few frames).
     std::array<uint32_t, 64> phasedThrough{};
     uint8_t phasedCount = 0;
+    bool evolved = false; // from an evolved weapon: its colour and a sharper shape
 };
 
 // A laser bolt as a segment, shared by hit-testing and drawing so they can't drift.
@@ -167,6 +168,7 @@ class OrbitBladeProjectile
     float radius;
     int damage;
     bool active;
+    bool evolved = false;
 };
 
 class NerveSpiralProjectile
@@ -181,4 +183,5 @@ class NerveSpiralProjectile
     int32_t bladeCount;
     int32_t damagePerBlade;
     bool active;
+    bool evolved = false;
 };

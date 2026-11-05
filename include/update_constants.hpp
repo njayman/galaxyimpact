@@ -122,9 +122,10 @@ constexpr float chargeFeedRegenMult = 3.0F;
 constexpr int32_t nerveBurstDamage = 260;
 // Laser Storm (Interceptor's Nerve burst): a dense fan of streaks. Each streak deals
 // nerveBurstDamage / divisor to enemies; a few overlap any one target, roughly one burst's worth.
-constexpr int32_t nerveStormStreaks = 32;
+constexpr int32_t nerveStormStreaks = 75; // over the whole barrage
+constexpr float nerveStormDuration = 2.5F;
 constexpr float nerveStormSpreadDeg = 30.0F;
-constexpr int32_t nerveStormDamageDivisor = 3;
+constexpr int32_t nerveStormDamageDivisor = 6;
 constexpr float maxHealthPerLevel = 0.4F;
 constexpr float pickupRadiusPerLevel = 1.5F;
 constexpr float postCapDamageBonusPerLevel = 0.05F;
