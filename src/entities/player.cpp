@@ -1339,20 +1339,19 @@ void updatePlayerBuffs(Game& game, float deltaTime)
     updateDashWedgesAndBlasts(game, deltaTime);
 }
 
-// While dashing: sharp afterimage wedges behind the ship, and blast markers dropped along the
-// path that detonate a beat later.
+// While dashing: afterimages of the ship left behind (facing as it was), and blast markers
+// dropped along the path that detonate a beat later.
 void updateDashWedgesAndBlasts(Game& game, float deltaTime)
 {
     auto& player = game.run.player;
     if (player.dashing && Vector2Length(player.dashVelocity) > 0.01F)
     {
-        const Vector2 dir = Vector2Normalize(player.dashVelocity);
         player.dashWedgeTimer -= deltaTime;
         if (player.dashWedgeTimer <= 0)
         {
             player.dashWedgeTimer = dashWedgeInterval;
             game.run.dashWedges.push_back(Particle{.position = player.position,
-                                                   .velocity = dir,
+                                                   .velocity = aimAtMouse(game), // the ship's facing
                                                    .radius = dashWedgeLength,
                                                    .life = dashWedgeLife,
                                                    .maxLife = dashWedgeLife,

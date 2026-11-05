@@ -3285,23 +3285,16 @@ void drawGameplayWorld(const Game& game)
         DrawCircleV(p.position, p.radius, Fade(p.color, p.life / p.maxLife));
     }
 
-    // Dash afterimages: sharp wedges pointing back along the dash, alternating a little side to
-    // side so the trail reads spiky; each shrinks and fades.
-    for (size_t i = 0; i < game.run.dashWedges.size(); i++)
+    // Dash afterimages: copies of the ship's hull left along the dash, facing as it was, fading
+    // out and cooling from gold to the ship's own colour.
+    const auto shipClass = static_cast<ShipClass>(game.resources.settings.shipIndex);
+    for (const auto& w : game.run.dashWedges)
     {
-        const auto& w = game.run.dashWedges.at(i);
         const float fade = w.life / w.maxLife;
-        const Vector2 side{.x = -w.velocity.y, .y = w.velocity.x};
-        const float jog = (i % 2 == 0 ? 1.0F : -1.0F) * 4.0F;
-        const Vector2 base = Vector2Add(w.position, Vector2Scale(side, jog));
-        const float halfWidth = 10.0F * fade;
-        const Vector2 left = Vector2Add(base, Vector2Scale(side, halfWidth));
-        const Vector2 right = Vector2Subtract(base, Vector2Scale(side, halfWidth));
-        const Vector2 apex = Vector2Subtract(base, Vector2Scale(w.velocity, w.radius * (0.4F + 0.6F * fade)));
-        DrawTriangle(left, apex, right, Fade(w.color, 0.75F * fade));
-        DrawTriangle(left, right, apex, Fade(w.color, 0.75F * fade));
-        DrawLineEx(left, apex, 1.0F, Fade(Palette::Crit, 0.7F * fade));
-        DrawLineEx(right, apex, 1.0F, Fade(Palette::Crit, 0.7F * fade));
+        const float angle = std::atan2(w.velocity.y, w.velocity.x) + std::numbers::pi_v<float> / 2;
+        const Color ghost = ColorLerp(game.run.player.color, Palette::Crit, fade);
+        drawShipHull(shipClass, w.position, game.run.player.radius * (0.85F + 0.15F * fade), angle,
+                     Fade(ghost, 0.8F * fade));
     }
 
     // Bomber bombs: a red ring closing in on a hot dot until it blows.
@@ -3465,52 +3458,6 @@ void drawShip(const Game& game)
         const Color shipColor = ColorLerp(game.run.player.color, BLACK, twirlProgress);
         drawShipHull(shipClass, p, r, angle, shipColor);
         return;
-    }
-
-    if (game.run.player.dashing && !game.run.player.shieldActive &&
-        Vector2Length(game.run.player.dashVelocity) > 0.01F)
-    {
-        // Dash bow-wave: nested pointed arches wrapped round the ship, open at the back, with
-        // streaks running off behind. Matte gold layers; only the leading edge is bright.
-        const Vector2 fwd = Vector2Normalize(game.run.player.dashVelocity);
-        const Vector2 side{.x = -fwd.y, .y = fwd.x};
-        const float t = static_cast<float>(GetTime());
-        const auto archPoint = [&](float s, float scale)
-        {
-            // s in [-1, 1] across; |s|^1.6 bends the sides into a pointed arch.
-            const float size = r * 1.6F * scale;
-            const float ahead = (2.6F - 4.6F * std::pow(std::fabs(s), 1.6F)) * size;
-            return Vector2Add(p, Vector2Add(Vector2Scale(fwd, ahead), Vector2Scale(side, s * 1.7F * size)));
-        };
-        constexpr int32_t steps = 16;
-        for (const auto& [scale, alpha] : {std::pair{1.15F, 0.2F}, std::pair{0.95F, 0.26F}, std::pair{0.75F, 0.34F}})
-        {
-            for (int32_t i = 0; i < steps; i++)
-            {
-                const float s0 = -1.0F + 2.0F * static_cast<float>(i) / steps;
-                const float s1 = -1.0F + 2.0F * static_cast<float>(i + 1) / steps;
-                const Vector2 a = archPoint(s0, scale);
-                const Vector2 b = archPoint(s1, scale);
-                DrawTriangle(p, a, b, Fade(Palette::Charge, alpha));
-                DrawTriangle(p, b, a, Fade(Palette::Charge, alpha));
-            }
-        }
-        for (int32_t i = 0; i < steps; i++)
-        {
-            // The leading edge, brightest at the apex.
-            const float s0 = -1.0F + 2.0F * static_cast<float>(i) / steps;
-            const float s1 = -1.0F + 2.0F * static_cast<float>(i + 1) / steps;
-            const float bright = 1.0F - std::fabs(s0 + s1) * 0.5F;
-            DrawLineEx(archPoint(s0, 1.15F), archPoint(s1, 1.15F), 1.5F, Fade(Palette::Crit, 0.25F + 0.6F * bright));
-        }
-        for (int32_t k = 0; k < 5; k++)
-        {
-            // Streaks off the back, flickering in length.
-            const float across = (-1.0F + 0.5F * static_cast<float>(k)) * 1.3F * r;
-            const float len = r * (2.0F + 1.5F * std::fabs(std::sin(t * 23.0F + static_cast<float>(k) * 1.7F)));
-            const Vector2 start = Vector2Add(Vector2Subtract(p, Vector2Scale(fwd, r * 1.2F)), Vector2Scale(side, across));
-            DrawLineEx(start, Vector2Subtract(start, Vector2Scale(fwd, len)), 1.5F, Fade(Palette::Charge, 0.45F));
-        }
     }
 
     const Color shipColor = game.run.player.dashing ? Palette::Crit : game.run.player.color;

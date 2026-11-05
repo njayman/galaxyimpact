@@ -30,9 +30,9 @@ constexpr float pickupMagnetSpeed = 7;
 constexpr float dashSpeed = 22;
 constexpr float dashDuration = 0.18F;
 constexpr int32_t dashDamage = 15;
-// Dash afterimage wedges, so speed and direction read at a glance.
+// Dash afterimages: fading copies of the ship's hull dropped along the dash.
 constexpr float dashWedgeInterval = 0.025F;
-constexpr float dashWedgeLife = 0.24F;
+constexpr float dashWedgeLife = 0.3F;
 constexpr float dashWedgeLength = 54.0F;
 // Delayed blasts: markers dropped along the dash path detonate a beat later.
 constexpr float dashBlastInterval = 0.09F;
