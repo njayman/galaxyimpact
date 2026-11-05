@@ -7952,10 +7952,10 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
 
     // How far the petals stand open: flared for attacks, locked open once bloomed.
     const auto paint = [&](Color c, float a) { return Fade(ColorLerp(c, WHITE, 0.2F * flash), a * seen); };
-    float open = 0.15F;
+    float open = 0.0F;
     if (winding && (boss.attack == BossAttack::Spread || boss.attack == BossAttack::Barrage))
     {
-        open = 0.15F + 0.85F * windup;
+        open = windup;
     }
     else if (shooting && (boss.attack == BossAttack::Spread || boss.attack == BossAttack::Barrage ||
                           boss.attack == BossAttack::Devour))
@@ -7977,7 +7977,7 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
         const Vector2 back = Vector2Negate(face);
         const Vector2 across{.x = -back.y, .y = back.x};
         const float length = radius * 2.4F;
-        const auto width = [&](float u) { return radius * 0.8F * std::pow(1.0F - u, 0.7F) + radius * 0.02F; };
+        const auto width = [&](float u) { return radius * 0.92F * std::pow(1.0F - u, 0.7F) + radius * 0.02F; };
         const auto at = [&](float u, float v) // u along 0 head .. 1 tip, v across -1 .. 1
         { return Vector2Add(Vector2Add(center, Vector2Scale(back, length * u)), Vector2Scale(across, width(u) * v)); };
         const bool litSide = Vector2DotProduct(across, light) > 0; // which half catches the light
@@ -8019,71 +8019,48 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
         // Opened, the tube glows through the gaps.
         DrawLineEx(at(0.02F, 0), at(0.9F, 0), radius * 0.5F * open, paint(ember, 0.25F * open));
 
-        // Petal sheath: overlapping crystal petals over the whole tube, scales pointing back.
-        // Closed they lie flat along it; open they flare out like a flower.
-        constexpr int32_t rows = 6;
-        const float faceAngle = std::atan2(back.y, back.x);
-        for (int32_t row = rows - 1; row >= 0; row--)
+        // Peel: four long petals, each covering a strip of the tube from behind the head to the
+        // drill point. Closed they wrap it; opening, they stay fixed behind the head and peel
+        // away outward like a banana's skin, curling more toward their free ends.
+        constexpr int32_t strips = 4;
+        const Vector2 root = at(0.04F, 0);
+        for (int32_t k = 0; k < strips; k++)
         {
-            const float u = 0.06F + 0.8F * static_cast<float>(row) / static_cast<float>(rows - 1);
-            for (const float v : {-0.6F, 0.6F, 0.0F})
+            const float vc = -0.75F + 0.5F * static_cast<float>(k); // strip centre across the tube
+            const float sign = vc > 0 ? 1.0F : -1.0F;
+            const float spread = (std::abs(vc) > 0.5F ? 1.45F : 0.75F) * open;
+            // A point on the strip: on the closed tube, then turned about the root (more near the end).
+            const auto peel = [&](float u, float v)
             {
-                const float sideSign = v != 0 ? (v > 0 ? 1.0F : -1.0F) : (row % 2 == 0 ? 1.0F : -1.0F);
-                // Across is back turned +90 degrees, so +v petals turn the positive way.
-                const float angle =
-                    faceAngle + sideSign * Lerp(v != 0 ? 0.18F : 0.06F, v != 0 ? 1.75F : 1.2F, open);
-                const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
-                const Vector2 side{.x = -dir.y, .y = dir.x};
-                const float len = (width(u) * 1.25F + radius * 0.25F) * (1.0F + 0.25F * open);
-                const float half = width(u) * (v != 0 ? 0.42F : 0.5F);
-                const Vector2 root = at(u, v * 0.85F);
-                const Vector2 tip = Vector2Add(root, Vector2Scale(dir, len));
-                const Vector2 mid = Vector2Add(root, Vector2Scale(dir, len * 0.38F));
-                const Vector2 l = Vector2Add(mid, Vector2Scale(side, half));
-                const Vector2 r = Vector2Subtract(mid, Vector2Scale(side, half));
-                const float heat = 0.3F + 0.7F * open;
-                const Color face1 = paint(ColorLerp(basalt, gold, 0.45F + 0.4F * heat), 1.0F);
-                const Color face2 = paint(ColorLerp(basalt, ember, 0.35F + 0.35F * heat), 1.0F);
-                DrawTriangle(root, l, tip, face1);
-                DrawTriangle(root, tip, l, face1);
-                DrawTriangle(root, r, tip, face2);
-                DrawTriangle(root, tip, r, face2);
-                DrawLineEx(root, tip, 1.5F, paint(WHITE, 0.2F + 0.45F * heat * glow));
-                DrawLineEx(l, tip, 1.2F, paint(basalt, 0.85F));
-                DrawLineEx(r, tip, 1.2F, paint(basalt, 0.85F));
-                DrawLineEx(l, root, 1.2F, paint(basalt, 0.85F));
-                DrawLineEx(r, root, 1.2F, paint(basalt, 0.85F));
+                const Vector2 closed = Vector2Subtract(at(u, v), root);
+                return Vector2Add(root, Vector2Rotate(closed, sign * spread * (0.55F + 0.45F * u)));
+            };
+            constexpr int32_t steps = 14;
+            const float lo = vc - 0.3F;
+            const float hi = vc + 0.3F;
+            const Color fill = paint(ColorLerp(basalt, k % 2 == 0 ? gold : ember, 0.5F + 0.35F * open), 1.0F);
+            const Color inner = paint(ColorLerp(ember, gold, 0.4F), 0.9F);
+            for (int32_t i = 0; i < steps; i++)
+            {
+                const float u0 = 0.04F + 0.93F * static_cast<float>(i) / steps;
+                const float u1 = 0.04F + 0.93F * static_cast<float>(i + 1) / steps;
+                // The tip narrows to a point; peeled, the strip shows its glowing inner face.
+                const float n0 = 1.0F - std::pow(u0, 4.0F);
+                const float n1 = 1.0F - std::pow(u1, 4.0F);
+                const Vector2 a0 = peel(u0, vc + (lo - vc) * n0);
+                const Vector2 b0 = peel(u0, vc + (hi - vc) * n0);
+                const Vector2 a1 = peel(u1, vc + (lo - vc) * n1);
+                const Vector2 b1 = peel(u1, vc + (hi - vc) * n1);
+                const Color c = ColorLerp(fill, inner, open * 0.6F * u0);
+                DrawTriangle(a0, b0, b1, c);
+                DrawTriangle(a0, b1, b0, c);
+                DrawTriangle(a0, b1, a1, c);
+                DrawTriangle(a0, a1, b1, c);
+                DrawLineEx(a0, a1, 1.5F, paint(basalt, 0.9F));
+                DrawLineEx(b0, b1, 1.5F, paint(basalt, 0.9F));
+                DrawLineEx(peel(u0, vc), peel(u1, vc), 1.2F, paint(WHITE, 0.15F + 0.4F * open * glow)); // vein
             }
         }
-    }
-
-    // Crystal collar behind the jaws.
-    const float faceAngle = std::atan2(face.y, face.x);
-    constexpr int32_t petals = 8;
-    for (int32_t k = 0; k < petals; k++)
-    {
-        // Spread round the back 260 degrees, leaving the jaws clear.
-        const float rel = (-130.0F + 260.0F * static_cast<float>(k) / static_cast<float>(petals - 1)) * DEG2RAD;
-        const float rootAngle = faceAngle + PI + rel;
-        const Vector2 rootDir{.x = std::cos(rootAngle), .y = std::sin(rootAngle)};
-        // Closed: folded back along the body. Open: flared straight out.
-        const float tipAngle = Lerp(faceAngle + PI + rel * 0.35F, rootAngle, open);
-        const Vector2 tipDir{.x = std::cos(tipAngle), .y = std::sin(tipAngle)};
-        const Vector2 side{.x = -tipDir.y, .y = tipDir.x};
-        const float len = radius * (0.55F + 0.55F * open) * (0.85F + 0.3F * hashNoise(seed + static_cast<float>(k)));
-        const Vector2 root = Vector2Add(center, Vector2Scale(rootDir, radius * 0.7F));
-        const Vector2 tip = Vector2Add(root, Vector2Scale(tipDir, len));
-        const Vector2 mid = Vector2Add(root, Vector2Scale(tipDir, len * 0.4F));
-        const Vector2 l = Vector2Add(mid, Vector2Scale(side, radius * 0.16F));
-        const Vector2 r = Vector2Subtract(mid, Vector2Scale(side, radius * 0.16F));
-        const float heat = 0.35F + 0.65F * open;
-        DrawTriangle(root, l, tip, paint(ColorLerp(basalt, gold, 0.55F + 0.35F * heat), 1.0F));
-        DrawTriangle(root, tip, l, paint(ColorLerp(basalt, gold, 0.55F + 0.35F * heat), 1.0F));
-        DrawTriangle(root, r, tip, paint(ColorLerp(basalt, ember, 0.4F + 0.3F * heat), 1.0F));
-        DrawTriangle(root, tip, r, paint(ColorLerp(basalt, ember, 0.4F + 0.3F * heat), 1.0F));
-        DrawLineEx(root, tip, 1.5F, paint(WHITE, 0.25F + 0.45F * heat * glow));
-        DrawLineEx(l, tip, 1.0F, paint(basalt, 0.8F));
-        DrawLineEx(r, tip, 1.0F, paint(basalt, 0.8F));
     }
 
     // The head with its jaws.
