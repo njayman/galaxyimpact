@@ -33,4 +33,7 @@ No panels or boxes: thin lines and small numbers at the screen edges, fading bac
 
 ## Phase 2: menus and popups
 
+**As built (2026-11-05):** every button is one minimal `uiButton` (`src/guitheme.cpp`) in place of raygui's boxed button: no box, a hairline under it; focused or hovered adds a 2 px accent bar on the left, an accent underline, a faint fill and a warm label. Checkboxes keep raygui with a 1 px border. High scores show thousands separators. The controls line only shows during play, not behind menus.
+
+
 In the same theme: buttons (thin outline, hover and press states), title and pause menus, level-up cards, settings inputs (sliders, toggles, steppers), ship select, game over and score screens, high scores, achievements, bestiary, skill tree, sandbox menu, tooltips and confirm prompts.

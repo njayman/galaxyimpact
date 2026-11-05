@@ -137,6 +137,7 @@ void drawHUD(const Game& game);
 void drawTouchControls(const Game& game);
 void drawStatusRow(const Game& game, int32_t x, int32_t y);
 auto drawVitals(const Game& game, int32_t x, int32_t y) -> int32_t;
+auto withThousands(int32_t value) -> std::string;
 void drawRunNumbers(const Game& game, int32_t right, int32_t y);
 void drawBossLines(const Game& game, int32_t width, int32_t height);
 void drawOrganicEnemyShape(Vector2 center, float baseRadius, float seed, Color color);
@@ -372,7 +373,7 @@ void drawShipSelect(const Game& game)
     beginPop(Vector2{.x = layout.selectRect.x + layout.selectRect.width / 2,
                      .y = layout.selectRect.y + layout.selectRect.height / 2},
              popScale(game, 2));
-    GuiButton(layout.selectRect, "Select");
+    uiButton(layout.selectRect, "Select");
     endPop();
     GuiSetState(STATE_NORMAL);
 }
@@ -680,14 +681,14 @@ void drawSettings(const Game& game)
         }
         else if (i == rowCount - 1)
         {
-            GuiButton(rect, "Back");
+            uiButton(rect, "Back");
         }
         else
         {
             const std::string text =
                 std::format("{}:   <  {}  >", stepperLabels.at(static_cast<size_t>(i)),
                             stepperValues.at(static_cast<size_t>(i)));
-            GuiButton(rect, text.c_str());
+            uiButton(rect, text.c_str());
         }
 
         GuiSetState(STATE_NORMAL);
@@ -769,7 +770,7 @@ void drawAchievements(Game& game)
     {
         GuiSetState(STATE_FOCUSED);
     }
-    GuiButton(back, "Back");
+    uiButton(back, "Back");
     GuiSetState(STATE_NORMAL);
 }
 
@@ -939,7 +940,7 @@ void drawSkillTree(const Game& game)
     {
         GuiSetState(STATE_FOCUSED);
     }
-    GuiButton(back, "Back");
+    uiButton(back, "Back");
     GuiSetState(STATE_NORMAL);
 }
 
@@ -1135,7 +1136,7 @@ void drawBestiary(Game& game)
     {
         GuiSetState(STATE_FOCUSED);
     }
-    GuiButton(back, "Back");
+    uiButton(back, "Back");
     GuiSetState(STATE_NORMAL);
 }
 
@@ -1620,7 +1621,7 @@ void drawMenu(const Game& game, const std::string& heading, const std::vector<st
             GuiSetState(STATE_FOCUSED);
         }
         beginPop(Vector2{.x = rect.x + rect.width / 2, .y = rect.y + rect.height / 2}, popScale(game, i + 1));
-        GuiButton(rect, options.at(static_cast<size_t>(i)).c_str());
+        uiButton(rect, options.at(static_cast<size_t>(i)).c_str());
         endPop();
         GuiSetState(STATE_NORMAL);
     }
@@ -1641,7 +1642,7 @@ void drawHighScores(const Game& game, int32_t centerX, int32_t y, const std::vec
 
     for (size_t i = 0; i < scores.size(); i++)
     {
-        const std::string line = std::format("{}. {}", i + 1, scores.at(i));
+        const std::string line = std::format("{}. {}", i + 1, withThousands(scores.at(i)));
         windowText(game, line.c_str(), centerX, y + 36 + static_cast<int32_t>(i) * 28, 22,
                   Palette::StructLight);
     }
@@ -6577,7 +6578,7 @@ void drawHUD(const Game& game)
 
     // Controls: below the ship, clear of the HUD, only at the start of a run, then gone.
     constexpr float hintTime = 8.0F;
-    if (game.run.runTime < hintTime && game.run.bosses.empty())
+    if (game.run.runTime < hintTime && game.run.bosses.empty() && game.state == GameState::GAMEPLAY)
     {
         const char* controlHint =
             touchInputActive(game)
@@ -7121,7 +7122,7 @@ void drawSandboxBrowser(const Game& game)
         {
             GuiSetState(STATE_FOCUSED);
         }
-        GuiButton(rect, std::string(browserCategoryLabel(i)).c_str());
+        uiButton(rect, std::string(browserCategoryLabel(i)).c_str());
         GuiSetState(STATE_NORMAL);
     }
 
@@ -7202,8 +7203,8 @@ void drawSandboxBrowser(const Game& game)
                    static_cast<int32_t>(preview.y + preview.height + 62), 16, Palette::StructLight);
     }
 
-    GuiButton(sandboxBrowserPrevButtonRect(game), "<");
-    GuiButton(sandboxBrowserNextButtonRect(game), ">");
+    uiButton(sandboxBrowserPrevButtonRect(game), "<");
+    uiButton(sandboxBrowserNextButtonRect(game), ">");
 }
 
 void drawPickupIcon(PickupType type, ElementType element, Vector2 position, float alpha)
@@ -7261,7 +7262,7 @@ void drawSandboxToggleIndicator(const Game& game)
 {
     applyGuiScale(game);
     const Rectangle rect = sandboxToggleIndicatorRect(game);
-    GuiButton(rect, "Sandbox [TAB]");
+    uiButton(rect, "Sandbox [TAB]");
 
     // M12 director debug panel: what the bot/player is doing and how each boss is responding.
     const float scale = guiUiScale(game);
@@ -7348,8 +7349,8 @@ void drawSandboxMenu(const Game& game)
     applyGuiScale(game);
     windowText(game, "SANDBOX", game.resources.windowWidth / 2, 80, 34, Palette::Accent);
 
-    GuiButton(sandboxBrowserModeToggleRect(game), game.sandboxBrowserMode ? "Actions" : "Browser");
-    GuiButton(sandboxMenuCloseButtonRect(game), "Close [Esc]");
+    uiButton(sandboxBrowserModeToggleRect(game), game.sandboxBrowserMode ? "Actions" : "Browser");
+    uiButton(sandboxMenuCloseButtonRect(game), "Close [Esc]");
 
     if (game.sandboxBrowserMode)
     {
@@ -7371,17 +7372,17 @@ void drawSandboxMenu(const Game& game)
                  static_cast<int32_t>(row.y + (row.height - static_cast<float>(labelSize)) / 2),
                  labelSize, Palette::StructLight);
 
-        GuiButton(sandboxStepperMinusRect(game, i), "-");
+        uiButton(sandboxStepperMinusRect(game, i), "-");
         std::string value = stepper.valueText(game);
         GuiTextBox(sandboxStepperValueRect(game, i), value.data(),
                    static_cast<int32_t>(value.size()) + 1, false);
-        GuiButton(sandboxStepperPlusRect(game, i), "+");
+        uiButton(sandboxStepperPlusRect(game, i), "+");
     }
 
     const auto& buttons = sandboxMenuButtons();
     for (int32_t i = 0; i < static_cast<int32_t>(buttons.size()); i++)
     {
-        GuiButton(sandboxMenuButtonRect(game, i),
+        uiButton(sandboxMenuButtonRect(game, i),
                   buttons.at(static_cast<size_t>(i)).label(game).c_str());
     }
 }
