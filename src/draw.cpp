@@ -255,7 +255,7 @@ void drawOrbitShot(Vector2 pos, float radius, bool evolved)
 }
 
 // Nerve bursts' own shapes: Ranger's ball and Bastion's tornado blades; evolved, in the signature
-// weapon's evolved colour (a hot core in the ball, star blades for the tornado).
+// weapon's evolved colour (a turning-arc orb for the ball, star blades for the tornado).
 void drawNerveBall(Vector2 pos, float radius, bool evolved)
 {
     if (!evolved)
@@ -264,10 +264,24 @@ void drawNerveBall(Vector2 pos, float radius, bool evolved)
         DrawCircleLines(static_cast<int32_t>(pos.x), static_cast<int32_t>(pos.y), radius, Fade(WHITE, 0.8F));
         return;
     }
+    // Evolved: a gold orb with a hot core, three arcs turning round its rim, and sparks circling
+    // inside the other way.
     const Color gold = evolvedWeaponColor(WeaponType::Forward);
-    DrawCircleV(pos, radius, Fade(gold, 0.45F));
-    DrawCircleV(pos, radius * 0.45F, Fade(WHITE, 0.35F)); // a hot core
-    DrawCircleLines(static_cast<int32_t>(pos.x), static_cast<int32_t>(pos.y), radius, gold);
+    const float t = static_cast<float>(GetTime());
+    DrawCircleV(pos, radius, Fade(gold, 0.35F));
+    DrawCircleV(pos, radius * 0.5F, Fade(gold, 0.5F));
+    DrawCircleV(pos, radius * 0.25F, Fade(WHITE, 0.75F));
+    for (int32_t k = 0; k < 3; k++)
+    {
+        const float start = t * 160.0F + static_cast<float>(k) * 120.0F;
+        DrawRing(pos, radius - 3.0F, radius + 1.0F, start, start + 80.0F, 16, gold);
+    }
+    for (int32_t k = 0; k < 4; k++)
+    {
+        const float a = -t * 4.0F + static_cast<float>(k) * PI / 2;
+        DrawCircleV(Vector2Add(pos, Vector2{.x = std::cos(a) * radius * 0.7F, .y = std::sin(a) * radius * 0.7F}),
+                    radius * 0.08F, Fade(WHITE, 0.85F));
+    }
 }
 
 void drawSpiralBlade(Vector2 pos, bool evolved)
