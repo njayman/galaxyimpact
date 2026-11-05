@@ -441,6 +441,7 @@ auto weaponForGrantSkill(SkillType id) -> std::optional<WeaponType>;
 auto weaponEvolved(const Game& game, WeaponType kind) -> bool;
 auto bossWindupDuration(BossAttack attack) -> float;
 auto bossOnScreen(const Game& game, Vector2 bossCenter) -> bool;
+void spawnBlastRing(Game& game, Vector2 at, float reach);
 auto isAimLockedAttack(BossAttack attack) -> bool;
 void beginWindup(Game& game, Boss& boss);
 auto wormholeBentBeamSegments(const Game& game, Vector2 start,

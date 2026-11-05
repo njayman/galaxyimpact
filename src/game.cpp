@@ -275,6 +275,7 @@ void resetRun(Game& game)
     game.run.nerveSpiralProjectiles.clear();
     game.run.deathParticles.clear();
     game.run.dashWedges.clear();
+    game.run.blastRings.clear();
     game.run.dashBlasts.clear();
     game.run.flamethrowerCycle = 0;
     game.run.flamethrowerEmit = 0;

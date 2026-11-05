@@ -4345,6 +4345,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
                     }
                     else
                     {
+                        spawnBlastRing(game, bossCenter, boss.size.x * 0.4F + 140.0F);
                         boss.barrageTimer *= barrageRingIntervalMult;
                         boss.barrageAngle += 23.0F * DEG2RAD;
                         for (int32_t shot = barrageRingGap; shot < barrageRingCount; shot++)
@@ -4780,6 +4781,10 @@ void forceBossAttack(Game& game, Boss& boss, BossAttack attack)
         boss.color = Palette::Haze;
         break;
     case BossAttack::Barrage:
+        // Director bosses and forced attacks come through here: pick the pattern too.
+        boss.barragePattern = GetRandomValue(0, 2);
+        boss.barrageAngle = std::atan2(game.run.player.position.y - (boss.position.y + boss.size.y / 2),
+                                       game.run.player.position.x - (boss.position.x + boss.size.x / 2));
         boss.color = boss.isBeltbreaker ? Palette::ShatteredBeltAccent : Palette::BossSpread;
         break;
     case BossAttack::GravityWell:

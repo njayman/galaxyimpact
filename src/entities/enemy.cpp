@@ -734,6 +734,7 @@ void updateTurretPattern(Game& game, Enemy& enemy, float deltaTime)
             // A ring with a two-shot gap that turns a little each ring.
             enemy.patternTimer = turretRingInterval;
             enemy.patternAngle += 20.0F * DEG2RAD;
+            spawnBlastRing(game, enemy.position, 90.0F);
             for (int32_t shot = 2; shot < turretRingCount; shot++)
             {
                 fireTurretShot(game, enemy.position, enemy.patternAngle + static_cast<float>(shot) * tau / turretRingCount);

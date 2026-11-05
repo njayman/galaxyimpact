@@ -1064,6 +1064,14 @@ auto updateBossCutscene(Game& game, float deltaTime) -> bool
     return true;
 }
 
+// A radial burst's shock ring: races out from where the shots left, fading.
+void spawnBlastRing(Game& game, Vector2 at, float reach)
+{
+    constexpr float life = 0.55F;
+    game.run.blastRings.push_back(
+        Particle{.position = at, .velocity = {}, .radius = reach, .life = life, .maxLife = life, .color = Palette::Accent});
+}
+
 // Minimal HUD bookkeeping: calm timer, hit flash, biome name, boss damage trails.
 void updateHud(Game& game, float deltaTime)
 {
@@ -1119,6 +1127,11 @@ void updateGameplay(Game& game, float deltaTime)
 
     game.run.runTime += deltaTime;
     updateHud(game, deltaTime);
+    for (auto& ring : game.run.blastRings)
+    {
+        ring.life -= deltaTime;
+    }
+    std::erase_if(game.run.blastRings, [](const Particle& p) { return p.life <= 0; });
 
     if (game.sandbox)
     {

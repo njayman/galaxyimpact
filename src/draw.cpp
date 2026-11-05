@@ -3156,7 +3156,42 @@ void drawGameplayWorld(const Game& game)
         }
         else
         {
-            DrawCircleV(p.position, p.radius, Palette::BossSpread);
+            // Plasma orb: a streak behind, a pulsing halo, a deep red body and a hot core. Drawn a
+            // little larger than its hitbox.
+            const float pr = p.radius * 1.25F;
+            const float pulse = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 14.0F + p.position.x * 0.05F);
+            const float speed = Vector2Length(p.velocity);
+            if (speed > 0.01F)
+            {
+                const Vector2 back = Vector2Scale(p.velocity, -1.0F / speed);
+                for (int32_t k = 3; k >= 1; k--)
+                {
+                    const auto kf = static_cast<float>(k);
+                    DrawCircleV(Vector2Add(p.position, Vector2Scale(back, pr * 1.3F * kf)),
+                                pr * (1.0F - 0.22F * kf), Fade(Palette::Accent, 0.32F - 0.08F * kf));
+                }
+            }
+            DrawCircleV(p.position, pr * (2.0F + 0.35F * pulse), Fade(Palette::Accent, 0.14F + 0.08F * pulse));
+            DrawCircleV(p.position, pr * 1.15F, Palette::AccentDim);
+            DrawCircleV(p.position, pr * 0.85F, Palette::Accent);
+            DrawCircleV(p.position, pr * 0.42F, ColorLerp(Palette::Crit, WHITE, 0.4F * pulse));
+        }
+    }
+
+    // Radial bursts' shock rings: a bright edge racing out, thinning and fading.
+    for (const auto& ring : game.run.blastRings)
+    {
+        const float t = 1.0F - ring.life / ring.maxLife;
+        const float ease = 1.0F - (1.0F - t) * (1.0F - t);
+        const float r = 12.0F + (ring.radius - 12.0F) * ease;
+        const float width = 14.0F * (1.0F - t) + 2.0F;
+        const float fade = 1.0F - t * t; // holds, then drops away
+        DrawCircleV(ring.position, r, Fade(Palette::Accent, 0.12F * fade));
+        DrawRing(ring.position, r - width, r, 0, 360, 64, Fade(Palette::Accent, 0.7F * fade));
+        DrawRing(ring.position, r - 2.0F, r, 0, 360, 64, Fade(Palette::Crit, fade));
+        if (t < 0.3F) // the flash where the burst left
+        {
+            DrawCircleV(ring.position, 26.0F * (1.0F - t / 0.3F), Fade(Palette::Crit, 0.6F * (1.0F - t / 0.3F)));
         }
     }
 

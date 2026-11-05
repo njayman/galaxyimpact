@@ -151,6 +151,7 @@ auto playerHeading(const Game& game, Vector2 bossCenter) -> Vector2
 
 void fireNova(Game& game, Vector2 center, int32_t count)
 {
+    spawnBlastRing(game, center, 260.0F);
     const float offset = randomUnit() * twoPi;
     for (int32_t i = 0; i < count; i++)
     {
