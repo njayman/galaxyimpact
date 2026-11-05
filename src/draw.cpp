@@ -1874,7 +1874,7 @@ void fillConvexQuad(const std::array<Vector2, 4>& p, Color color)
 void drawBeltPlanet(const Game& game)
 {
     constexpr int32_t zonesPerSide = 3;
-    constexpr float visibility = 0.05F; // how far toward full colour the planet is drawn
+    constexpr float visibility = 0.25F; // how far toward full colour the planet is drawn: a solid, dim body
 
     const Vector2 player = game.run.player.position;
     const float zoneSize = 2.0F * GameConstants::arenaHalf / zonesPerSide;
