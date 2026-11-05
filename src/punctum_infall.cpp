@@ -27,8 +27,9 @@ auto rnd(float lo, float hi) -> float
 struct InfallSprite
 {
     RenderTexture2D target;
-    float size;
-    std::vector<Rectangle> tiles; // drawn-orientation tiles that hold some of the object
+    float size;                   // world units
+    float texScale;               // texels per world unit: the render scale, so it stays sharp
+    std::vector<Rectangle> tiles; // in world units, drawn orientation: tiles that hold some of the object
 };
 
 // ponytail: built once on first entering Punctum and kept for the process; a dozen small textures.
@@ -46,10 +47,21 @@ auto layerView(const Game& game) -> Vector2 { return Vector2Scale(game.run.playe
 
 void preparePunctumInfallSprites(const Game& game)
 {
-    if (!sprites.empty() || currentBiome(game.run.waveNumber) != Biome::Punctum)
+    if (currentBiome(game.run.waveNumber) != Biome::Punctum)
     {
         return;
     }
+    // Drawn at the render scale so a texel lands on a screen pixel; rebuilt if the window changes.
+    const float texScale = std::max(1.0F, game.resources.renderScale);
+    if (!sprites.empty() && std::abs(sprites.front().texScale - texScale) < 0.05F)
+    {
+        return;
+    }
+    for (auto& sprite : sprites)
+    {
+        UnloadRenderTexture(sprite.target);
+    }
+    sprites.clear();
     // Belt planets: radius 45% of the screen height, plus their debris ring (planetSpriteRatio).
     const float planetSprite = static_cast<float>(game.resources.screenHeight) * 0.45F * infallPlanetSpriteRatio;
     const std::array<SpriteSpec, 5> specs{{{InfallKind::BeltPlanet, 2, planetSprite},
@@ -61,36 +73,42 @@ void preparePunctumInfallSprites(const Game& game)
     {
         for (int32_t v = 0; v < spec.count; v++)
         {
-            const auto px = static_cast<int32_t>(spec.size);
-            InfallSprite sprite{.target = LoadRenderTexture(px, px), .size = spec.size, .tiles = {}};
+            const auto px = static_cast<int32_t>(spec.size * texScale);
+            InfallSprite sprite{.target = LoadRenderTexture(px, px), .size = spec.size, .texScale = texScale, .tiles = {}};
             BeginTextureMode(sprite.target);
             ClearBackground(BLANK);
+            BeginMode2D(Camera2D{.offset = {}, .target = {}, .rotation = 0, .zoom = texScale});
             drawInfallSprite(spec.kind, rnd(1, 1000), Vector2{.x = spec.size / 2, .y = spec.size / 2}, spec.size);
+            EndMode2D();
             EndTextureMode();
+            SetTextureFilter(sprite.target.texture, TEXTURE_FILTER_BILINEAR); // rotated tiles stay smooth
 
             // Keep only the tiles the object actually covers.
             Image image = LoadImageFromTexture(sprite.target.texture);
             ImageFlipVertical(&image); // render textures are stored upside down
             const auto* pixels = static_cast<const Color*>(image.data);
-            const int32_t tile = std::clamp(px / 40, 8, 24); // bigger objects break into bigger tiles
-            for (int32_t ty = 0; ty + tile <= px; ty += tile)
+            const float tile = std::clamp(spec.size / 40.0F, 8.0F, 24.0F); // world units; bigger objects, bigger tiles
+            const auto tilePx = static_cast<int32_t>(tile * texScale);
+            for (int32_t ty = 0; ty + tilePx <= px; ty += tilePx)
             {
-                for (int32_t tx = 0; tx + tile <= px; tx += tile)
+                for (int32_t tx = 0; tx + tilePx <= px; tx += tilePx)
                 {
                     int32_t covered = 0;
-                    for (int32_t y = ty; y < ty + tile; y++)
+                    int32_t sampled = 0;
+                    for (int32_t y = ty; y < ty + tilePx; y += 2)
                     {
-                        for (int32_t x = tx; x < tx + tile; x++)
+                        for (int32_t x = tx; x < tx + tilePx; x += 2)
                         {
                             covered += static_cast<int32_t>(pixels[y * px + x].a > 40);
+                            sampled++;
                         }
                     }
-                    if (covered * 4 > tile * tile)
+                    if (covered * 20 > sampled) // any real coverage, so the outline stays whole
                     {
-                        sprite.tiles.push_back(Rectangle{.x = static_cast<float>(tx),
-                                                         .y = static_cast<float>(ty),
-                                                         .width = static_cast<float>(tile),
-                                                         .height = static_cast<float>(tile)});
+                        sprite.tiles.push_back(Rectangle{.x = static_cast<float>(tx) / texScale,
+                                                         .y = static_cast<float>(ty) / texScale,
+                                                         .width = tile,
+                                                         .height = tile});
                     }
                 }
             }
@@ -221,11 +239,13 @@ void drawPunctumInfall(const Game& game)
         const Texture2D& texture = sprite.target.texture;
         for (const auto& piece : obj.pieces)
         {
-            // Render textures are upside down: flip the source rectangle.
-            const Rectangle src{.x = piece.src.x,
-                                .y = sprite.size - piece.src.y - piece.src.height,
-                                .width = piece.src.width,
-                                .height = -piece.src.height};
+            // Tiles are in world units; render textures are upside down, so flip the source.
+            const float k = sprite.texScale;
+            const auto texH = static_cast<float>(texture.height);
+            const Rectangle src{.x = piece.src.x * k,
+                                .y = texH - (piece.src.y + piece.src.height) * k,
+                                .width = piece.src.width * k,
+                                .height = -piece.src.height * k};
             if (!piece.loose)
             {
                 const Vector2 at = Vector2Add(shift, Vector2Add(obj.pos, Vector2Rotate(piece.local, obj.angle)));
@@ -239,14 +259,14 @@ void drawPunctumInfall(const Game& game)
                 continue;
             }
             // Burning away: heats to lavender, shrinks and fades.
-            const float k = piece.life / looseLife;
-            const float s = piece.size * (0.3F + 0.7F * k);
-            const Color heat = ColorLerp(dim, Palette::PunctumHaze, std::min(1.0F, (1.0F - k) * 1.6F));
+            const float burn = piece.life / looseLife;
+            const float s = piece.size * (0.3F + 0.7F * burn);
+            const Color heat = ColorLerp(dim, Palette::PunctumHaze, std::min(1.0F, (1.0F - burn) * 1.6F));
             const Vector2 at = Vector2Add(shift, piece.pos);
             DrawTexturePro(texture, src, Rectangle{.x = at.x, .y = at.y, .width = s, .height = s},
-                           Vector2{.x = s / 2, .y = s / 2}, piece.rotation, Fade(heat, 0.25F + 0.75F * k));
+                           Vector2{.x = s / 2, .y = s / 2}, piece.rotation, Fade(heat, 0.25F + 0.75F * burn));
             // A lavender glow over the tile, so even dark rock visibly burns.
-            const float glow = std::sin((1.0F - k) * std::numbers::pi_v<float>); // flares, then dies
+            const float glow = std::sin((1.0F - burn) * std::numbers::pi_v<float>); // flares, then dies
             DrawRectanglePro(Rectangle{.x = at.x, .y = at.y, .width = s * 0.8F, .height = s * 0.8F},
                              Vector2{.x = s * 0.4F, .y = s * 0.4F}, piece.rotation, Fade(Palette::PunctumHaze, 0.6F * glow));
         }
