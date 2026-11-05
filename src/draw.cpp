@@ -1159,7 +1159,7 @@ void drawWeaponGallery(const Game& game)
             for (int32_t k = 0; k < 6; k++)
             {
                 const float a = static_cast<float>(k) * PI / 3 + static_cast<float>(GetTime()) * 3.0F;
-                drawSpiralBlade(Vector2Add(at, Vector2{.x = std::cos(a) * 36.0F, .y = std::sin(a) * 36.0F}), evolved);
+                drawSpiralBlade(Vector2Add(at, Vector2{.x = std::cos(a) * 44.0F, .y = std::sin(a) * 44.0F}), evolved);
             }
         });
     EndMode2D();

@@ -3278,7 +3278,7 @@ void fireNerveBladeTornado(Game& game)
                               .age = 0,
                               .speed = 9.0F,
                               .life = 8.0F,
-                              .spinRadius = 50.0F,
+                              .spinRadius = 100.0F,
                               .bladeCount = count,
                               .damagePerBlade = dmgPerBlade,
                               .active = true,
