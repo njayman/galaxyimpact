@@ -2929,7 +2929,7 @@ void updateNerveSpiralProjectiles(Game& game, float deltaTime)
             {
                 auto& enemy = game.run.enemies.at(j);
                 if (enemy.active && !enemy.phased &&
-                    CheckCollisionCircles(bladePos, orbitBladeHitRadius, enemy.position,
+                    CheckCollisionCircles(bladePos, orbitBladeHitRadius * 2.0F, enemy.position,
                                           enemyCollisionRadius(enemy)))
                 {
                     damageEnemy(game, j, spiral.damagePerBlade);
@@ -2945,7 +2945,7 @@ void updateNerveSpiralProjectiles(Game& game, float deltaTime)
             {
                 auto& hazard = game.run.eliteHazards.at(j);
                 if (hazard.active &&
-                    CheckCollisionCircles(bladePos, orbitBladeHitRadius, hazard.position,
+                    CheckCollisionCircles(bladePos, orbitBladeHitRadius * 2.0F, hazard.position,
                                           EliteHazardConstants::radius))
                 {
                     damageEliteHazard(game, j, spiral.damagePerBlade);
@@ -2967,7 +2967,7 @@ void updateNerveSpiralProjectiles(Game& game, float deltaTime)
                                          .y = boss.position.y,
                                          .width = boss.size.x,
                                          .height = boss.size.y};
-                if (CheckCollisionCircleRec(bladePos, orbitBladeHitRadius, bossRect))
+                if (CheckCollisionCircleRec(bladePos, orbitBladeHitRadius * 2.0F, bossRect))
                 {
                     damageBoss(game, boss, spiral.damagePerBlade);
                     recordDamage(game, DamageSource::Nerve, spiral.damagePerBlade);
@@ -2976,7 +2976,7 @@ void updateNerveSpiralProjectiles(Game& game, float deltaTime)
 
             for (auto& asteroid : game.run.asteroids)
             {
-                if (asteroid.active && CheckCollisionCircles(bladePos, orbitBladeHitRadius,
+                if (asteroid.active && CheckCollisionCircles(bladePos, orbitBladeHitRadius * 2.0F,
                                                              asteroid.position, asteroid.radius))
                 {
                     asteroid.active = false;
@@ -3278,7 +3278,7 @@ void fireNerveBladeTornado(Game& game)
                               .age = 0,
                               .speed = 9.0F,
                               .life = 8.0F,
-                              .spinRadius = 100.0F,
+                              .spinRadius = 200.0F,
                               .bladeCount = count,
                               .damagePerBlade = dmgPerBlade,
                               .active = true,
@@ -3298,7 +3298,7 @@ void fireNerveBall(Game& game)
     game.run.nerveBallProjectiles.push_back(
         OrbitBladeProjectile{.position = game.run.player.position,
                              .velocity = Vector2Scale(dir, 8.0F),
-                             .radius = 55.0F,
+                             .radius = 110.0F,
                              .damage = dmg,
                              .active = true,
                              .evolved = signatureEvolved(game)});

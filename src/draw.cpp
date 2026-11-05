@@ -289,14 +289,14 @@ void drawSpiralBlade(Vector2 pos, bool evolved)
 {
     if (!evolved)
     {
-        DrawCircleV(pos, 7, weaponColor(WeaponType::Orbit));
+        DrawCircleV(pos, 14, weaponColor(WeaponType::Orbit));
         return;
     }
     const Color gold = evolvedWeaponColor(WeaponType::Orbit);
     const float spin = static_cast<float>(GetTime()) * 540.0F;
-    DrawPoly(pos, 4, 10.0F, spin, gold);
-    DrawPoly(pos, 4, 10.0F, spin + 45.0F, gold);
-    DrawCircleV(pos, 3.0F, WHITE);
+    DrawPoly(pos, 4, 20.0F, spin, gold);
+    DrawPoly(pos, 4, 20.0F, spin + 45.0F, gold);
+    DrawCircleV(pos, 6.0F, WHITE);
 }
 
 void beginPixelZoom(const Game& game)
