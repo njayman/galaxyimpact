@@ -6577,7 +6577,7 @@ void drawHUD(const Game& game)
 
     // Controls: below the ship, clear of the HUD, only at the start of a run, then gone.
     constexpr float hintTime = 8.0F;
-    if (game.run.runTime < hintTime)
+    if (game.run.runTime < hintTime && game.run.bosses.empty())
     {
         const char* controlHint =
             touchInputActive(game)
@@ -6885,7 +6885,13 @@ void drawBossLines(const Game& game, int32_t width, int32_t height)
         DrawRectangleRec(Rectangle{.x = x, .y = y, .width = lineWidth, .height = 3}, Fade(Palette::StructDark, 0.9F));
         DrawRectangleRec(Rectangle{.x = x + lineWidth * frac, .y = y, .width = lineWidth * (trail - frac), .height = 3},
                          Fade(Palette::Crit, 0.55F));
-        DrawRectangleRec(Rectangle{.x = x, .y = y, .width = lineWidth * frac, .height = 3}, Palette::Accent);
+        const int32_t index = bossBestiaryIndex(boss);
+        Color color = bossBestiaryColor(index);
+        if (color.r + color.g + color.b < 330) // lift dark hulls so the line reads on the void
+        {
+            color = ColorBrightness(color, 0.45F);
+        }
+        DrawRectangleRec(Rectangle{.x = x, .y = y, .width = lineWidth * frac, .height = 3}, color);
         if (boss.usesDirector)
         {
             for (const float tick : {0.5F, 0.2F})
@@ -6894,7 +6900,7 @@ void drawBossLines(const Game& game, int32_t width, int32_t height)
                                  Palette::StructLight);
             }
         }
-        std::string name(bossBestiaryName(bossBestiaryIndex(boss)));
+        std::string name(bossBestiaryName(index));
         std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
         const bool shielded = boss.isBeltbreaker && boss.beltbreakerShielded;
         label(name, shielded ? "SHIELDED" : "", Palette::Haze);

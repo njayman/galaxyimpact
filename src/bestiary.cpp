@@ -143,7 +143,7 @@ auto bossBestiaryColor(int32_t index) -> Color
     }
     if (index == bestiaryBossBeltbreaker)
     {
-        return Palette::StructMid;
+        return Palette::ShatteredBeltAccent;
     }
     if (index == bestiaryBossWreckworm)
     {

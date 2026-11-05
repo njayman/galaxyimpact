@@ -27,9 +27,9 @@ No panels or boxes: thin lines and small numbers at the screen edges, fading bac
 - XP is a 2 px line along the top edge. The level sits with the wave under the score (`WAVE 1   LV 1`), not at the left of the XP line.
 - HP segments are 4 px; Nerve is a 1.5 px line under them (`SPACE` beside it when ready); dash dots and shield chevrons sit below. Vitals dim to 45% after 3 s with no change.
 - Weapon slots show bare icons with level dots and an evolved glow; there is no cooldown underline. The tooltip opens above the slots.
-- Boss lines are all drawn in the accent red (a boss's own colour changes with its state), with ticks at 50% and 20% for director bosses, which change phase there.
+- Each boss line is drawn in that boss's fixed bestiary colour (its live colour changes with its state; dark ones are lifted to read on the void), with ticks at 50% and 20% for director bosses, which change phase there.
 - One toast at a time, under the top-right numbers.
-- The controls line sits centred three quarters of the way down the screen, below the ship and clear of the HUD, for the first 8 s of a run. The sandbox button moved to the top centre.
+- The controls line sits centred three quarters of the way down the screen, below the ship and clear of the HUD, for the first 8 s of a run, hidden while a boss is up. The sandbox button moved to the top centre.
 
 ## Phase 2: menus and popups
 
