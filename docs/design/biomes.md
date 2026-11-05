@@ -100,7 +100,7 @@ Every Biome section uses these headings in this order:
 
 ### Theme and palette
 
-The broken ring of a shattered planet: cold stone, amber dust lanes, the planet's split husk looming far behind. The opening Biome, where the basics are taught.
+The broken ring of a shattered planet: cold stone, the planet's split husk looming far behind. The opening Biome, where the basics are taught.
 
 | Role       | Hex       | Note                                   |
 | ---------- | --------- | -------------------------------------- |
@@ -129,8 +129,8 @@ Light amber dust tint, about 15%.
 
 Three layers, far to near:
 
-- **Far**: broken planets. The arena is cut into an equal 3x3 grid of zones. Each run, every zone has a 45% chance of a planet, rolled fresh, so some stretches are open space. A planet sits at screen centre when you are at its zone's centre, drifts against your movement so it slides just off screen as you reach the zone edge, and only fades in the last few percent. Each is a big, faint, low-poly faceted sphere, about 90% of screen height across and drawn at about 25% strength as a solid, matte body after the stars and dust lanes, so it hides them and reads as a near-ish solid world. Orientation, light direction and rock colour (ash, rust, bone, slate, dusk, ochre) are random per run. A fracture zone around a break point lifts the facets apart onto the core. About half the planets have a live core (orange, red, cyan or violet) glowing through the seams with a slow pulse; the rest have a dark core. The facets nearest the break fly off as shards, and a tilted debris ring runs along the dust-lane angle. Each run also starts at a random point in the inner 70% of the arena.
-- **Mid** (parallax 0.3): a few faint, irregularly spaced amber dust lanes drifting slowly. Debris Squalls arrive along the lane direction, so the background foreshadows them.
+- **Far**: broken planets. The arena is cut into an equal 3x3 grid of zones. Each run, every zone has a 45% chance of a planet, rolled fresh, so some stretches are open space. A planet sits at screen centre when you are at its zone's centre, drifts against your movement so it slides just off screen as you reach the zone edge, and only fades in the last few percent. Each is a big, faint, low-poly faceted sphere, about 90% of screen height across and drawn at about 25% strength as a solid, matte body after the stars, so it hides them. Orientation, light direction and rock colour (ash, rust, bone, slate, dusk, ochre) are random per run. A fracture zone around a break point lifts the facets apart onto the core. About half the planets have a live core (orange, red, cyan or violet) glowing through the seams with a slow pulse; the rest have a dark core. The facets nearest the break fly off as shards, and a tilted debris ring runs along the dust-lane angle. Each run also starts at a random point in the inner 70% of the arena.
+- **Mid**: none. The amber dust lanes were removed (2026-11-05); squalls no longer follow a fixed lane.
 - No near layer: the real asteroids already fill that role. Kept minimal after playtest feedback (too much on screen, evenly spaced parallel lines).
 
 Described in words only; looks the build finds open can become a prototype ticket.
@@ -139,7 +139,7 @@ Described in words only; looks the build finds open can become a prototype ticke
 
 **Debris Squall** (event): a few times per wave an edge warning shows, then a band of fast rocks sweeps across the field in one direction; move out of the band. Damages enemies too, so they can be lured in. Switched off during Beltbreaker fights.
 
-Each rock hurts on contact and can be shot: a bullet pops it with a small spark burst (2 score), clearing that piece of the band. Starting numbers: one squall every 18 s at wave 1, ramping linearly to every 10 s at wave 25; 1.2 s warning (band outline plus chevrons at the screen edge it enters from); band 180 units wide, centred within 60 units of the player, sweeping along the dust-lane angle at 1500 units/s; 1 wave-scaled damage to the player on rock contact (normal immunity frames apply), 12 damage every 0.25 s to enemies touching a rock.
+Each rock hurts on contact and can be shot: a bullet pops it with a small spark burst (2 score), clearing that piece of the band. Starting numbers: one squall every 18 s at wave 1, ramping linearly to every 10 s at wave 25; 1.2 s warning (band outline plus chevrons at the screen edge it enters from); band 180 units wide, centred within 60 units of the player, sweeping along a random direction (rolled per squall) at 1500 units/s; 1 wave-scaled damage to the player on rock contact (normal immunity frames apply), 12 damage every 0.25 s to enemies touching a rock.
 
 ### Anomaly variant
 
@@ -227,7 +227,7 @@ Green-brown tint, about 15%.
 
 Rework of `drawRustbloomBackground` into three layers, far to near, kept faint and sparse behind gameplay:
 
-- **Far** (parallax 0.05, `drawRustbloomDerelicts`, drawn before the stars like the Belt planets): huge derelict capital ships (about 650-900 px long) on a 1100 px layer grid, about 60% of cells filled, placement varied per run by `backdropSeed`. Each is a faceted hull, every section split along the keel into a lit and a shadowed facet, snapped in two with the stern half knocked askew; plating rotted away ahead of the break bares the interior and a few ribs, with torn chunks adrift in the gap. Superstructure blocks cast short shadows, a stepped bridge sits aft, dead engines at the stern. Bloom furs the outer edges in patches (swaying slightly) and thickly along both cut faces, with a few pods rooted near the break. Drawn about 10% of the way from `RustbloomVoid` to full colour; at this parallax ships only ever slide in and out at the screen edges, never fading.
+- **Far** (parallax 0.05, `drawRustbloomDerelicts`, drawn after the stars and the mid and near layers, so the hulls hide them): huge derelict capital ships (about 650-900 px long) on a 1100 px layer grid, about 60% of cells filled, placement varied per run by `backdropSeed`. Each is a faceted hull, every section split along the keel into a lit and a shadowed facet, snapped in two with the stern half knocked askew; plating rotted away ahead of the break bares the interior and a few ribs, with torn chunks adrift in the gap. Superstructure blocks cast short shadows, a stepped bridge sits aft, dead engines at the stern. Bloom furs the outer edges in patches (swaying slightly) and thickly along both cut faces, with a few pods rooted near the break. Drawn about 10% of the way from `RustbloomVoid` to full colour; at this parallax ships only ever slide in and out at the screen edges, never fading.
 - **Mid** (parallax 0.3): the existing hull fragments, thinned and toned toward the void, plus sparse spore motes, each circling slowly in place with a soft halo.
 - **Near** (parallax 0.8): the existing pods and tendrils, slightly sparser and fainter; pods breathe in size and core glow, and each tendril pulses with the blend of its two pods.
 
