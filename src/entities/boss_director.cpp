@@ -536,6 +536,13 @@ void runIdle(Game& game, Boss& boss, Vector2 bossCenter, float deltaTime)
         return;
     }
 
+    // No wind-up from off screen: close in first. Ambush places itself at the edge and strafe runs
+    // follow their own line.
+    if (boss.pattern != BossPattern::Ambush && boss.pattern != BossPattern::StrafeRun && !bossOnScreen(game, bossCenter))
+    {
+        return;
+    }
+
     switch (boss.pattern)
     {
     case BossPattern::HoverShoot:

@@ -349,6 +349,7 @@ class Boss
     float dazedTimer = 0;
     int32_t phase = 0;
     float trailHealth = -1; // HUD damage trail, lagging behind health
+    float windupTotal = 0;  // length of the current wind-up, set as it starts (0 = not winding up)
     float phaseInvulnTimer = 0;
     float readTellTimer = 0;
 

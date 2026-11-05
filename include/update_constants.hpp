@@ -395,6 +395,12 @@ constexpr float suppressorCooldownPenalty = 1.4F;
 
 constexpr float chargeDashSpeed = 4400;
 constexpr float chargeDashDuration = 0.5F;
+// Readable boss attacks: beams and dashes tell for at least this long, their aim freezes for the
+// last aimLockTime of the tell (the tell firms up then), and no wind-up starts off screen.
+constexpr float minBeamTell = 1.3F;
+constexpr float minDashTell = 0.9F;
+constexpr float aimLockTime = 0.5F;
+constexpr float bossOnScreenInset = 40.0F; // the boss centre must be this far inside the view
 
 constexpr int summonAddsCount = 4;
 constexpr float barrageFireInterval = 0.3F;

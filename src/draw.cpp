@@ -4880,8 +4880,9 @@ void drawBoss(const Game& game, const Boss& boss)
 
     if (boss.state == BossState::WINDING_UP)
     {
-        const float progress =
-            std::clamp(1 - boss.stateTimer / bossWindupDuration(boss.attack), 0.0F, 1.0F);
+        const float total = boss.windupTotal > 0 ? boss.windupTotal : bossWindupDuration(boss.attack);
+        const float progress = std::clamp(1 - boss.stateTimer / total, 0.0F, 1.0F);
+        const bool locked = isAimLockedAttack(boss.attack) && boss.stateTimer <= aimLockTime;
         drawChargeParticles(bossCenter, progress, boss.color, 100, 65);
 
         if (boss.isWreckwormHead && !boss.krakenSnakeVariant && boss.attack == BossAttack::Barrage)
@@ -4893,23 +4894,43 @@ void drawBoss(const Game& game, const Boss& boss)
                      ColorLerp(Palette::RustbloomAccent, WHITE, 0.2F + 0.3F * pulse));
         }
 
-        if (boss.attack == BossAttack::Beam || boss.attack == BossAttack::WormholeBeam)
+        // Beam and dash tells: a lane along the coming shot. It follows the aim, then freezes for the
+        // last aimLockTime, where it turns solid: step out of the lane to dodge.
+        const bool beam = boss.attack == BossAttack::Beam || boss.attack == BossAttack::WormholeBeam;
+        const bool dash = boss.attack == BossAttack::ChargeDash || boss.attack == BossAttack::DashRush;
+        if (beam || dash)
         {
-            // A thin tell line from the beam's origin through the player, firming up to the shot.
             const Vector2 origin = boss.attack == BossAttack::WormholeBeam && Vector2LengthSqr(boss.wormholeBeamOrigin) > 0
                                        ? boss.wormholeBeamOrigin
                                        : bossCenter;
-            const Vector2 through = Vector2Normalize(Vector2Subtract(game.run.player.position, origin));
-            DrawLineEx(origin, Vector2Add(origin, Vector2Scale(through, 2000.0F)), 1.0F + progress,
-                       Fade(Palette::Crit, 0.15F + 0.45F * progress));
-            const float blink = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 10.0F);
-            const float markerRadius = game.run.player.radius + 10 + 4 * progress;
-            DrawCircleLines(static_cast<int32_t>(game.run.player.position.x),
-                            static_cast<int32_t>(game.run.player.position.y), markerRadius,
-                            Fade(Palette::Crit, blink));
-            DrawCircleLines(static_cast<int32_t>(game.run.player.position.x),
-                            static_cast<int32_t>(game.run.player.position.y), markerRadius * 0.7F,
-                            Fade(Palette::Accent, blink * 0.7F));
+            const Vector2 dir = Vector2Normalize(Vector2Subtract(boss.targetPosition, origin));
+            const Vector2 side{.x = -dir.y, .y = dir.x};
+            const float length = beam ? 2000.0F
+                                      : chargeDashSpeed * chargeDashDuration *
+                                            (boss.isBeltbreakerPlate ? beltbreakerPlateAttackScale : 1.0F);
+            const float half = beam ? 10.0F + game.run.player.radius : boss.size.x / 2;
+            const Vector2 end = Vector2Add(origin, Vector2Scale(dir, length));
+            const float blink = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 18.0F);
+            const Color edge = locked ? Fade(Palette::Crit, 0.55F + 0.35F * blink) : Fade(Palette::Crit, 0.12F + 0.3F * progress);
+            const Vector2 a1 = Vector2Add(origin, Vector2Scale(side, half));
+            const Vector2 a2 = Vector2Subtract(origin, Vector2Scale(side, half));
+            const Vector2 b1 = Vector2Add(end, Vector2Scale(side, half));
+            const Vector2 b2 = Vector2Subtract(end, Vector2Scale(side, half));
+            const Color fill = Fade(Palette::Accent, locked ? 0.16F : 0.05F + 0.06F * progress);
+            DrawTriangle(a1, b1, b2, fill); // both windings: raylib culls one
+            DrawTriangle(a1, b2, b1, fill);
+            DrawTriangle(a1, b2, a2, fill);
+            DrawTriangle(a1, a2, b2, fill);
+            DrawLineEx(a1, b1, locked ? 2.0F : 1.0F, edge);
+            DrawLineEx(a2, b2, locked ? 2.0F : 1.0F, edge);
+            if (!locked) // centre line while still aiming
+            {
+                DrawLineEx(origin, end, 1.0F, Fade(Palette::Crit, 0.1F + 0.25F * progress));
+            }
+            if (boss.attack == BossAttack::WormholeBeam) // the portal opening
+            {
+                DrawCircleLinesV(origin, 10.0F + 8.0F * progress, Fade(Palette::Shield, 0.4F + 0.5F * progress));
+            }
         }
     }
 

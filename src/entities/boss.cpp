@@ -3912,6 +3912,10 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         }
     }
 
+    if (boss.state != BossState::WINDING_UP)
+    {
+        boss.windupTotal = 0;
+    }
     if (boss.usesDirector && updateBossDirector(game, boss, bossCenter, deltaTime))
     {
         return;
@@ -3936,7 +3940,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         boss.attackTimer -= deltaTime;
 
         if (boss.attackTimer <= 0 && boss.health > 0 && boss.wreckwormPunishTimer <= 0 &&
-            boss.slagmawPunishTimer <= 0 && boss.qteStunTimer <= 0)
+            boss.slagmawPunishTimer <= 0 && boss.qteStunTimer <= 0 && bossOnScreen(game, bossCenter))
         {
             boss.attack = boss.moveset.at(static_cast<size_t>(
                 GetRandomValue(0, static_cast<int32_t>(boss.moveset.size()) - 1)));
@@ -4047,8 +4051,15 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         }
         break;
     case BossState::WINDING_UP:
+        if (boss.windupTotal <= 0)
+        {
+            beginWindup(game, boss);
+        }
         boss.stateTimer -= deltaTime;
-        boss.targetPosition = bossAimPoint(game, boss);
+        if (!isAimLockedAttack(boss.attack) || boss.stateTimer > aimLockTime)
+        {
+            boss.targetPosition = bossAimPoint(game, boss); // frozen for the last aimLockTime
+        }
 
         if (boss.stateTimer <= 0)
         {
@@ -4622,6 +4633,42 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
     }
 }
 
+auto isAimLockedAttack(BossAttack attack) -> bool
+{
+    return attack == BossAttack::Beam || attack == BossAttack::WormholeBeam || attack == BossAttack::ChargeDash ||
+           attack == BossAttack::DashRush;
+}
+
+auto bossOnScreen(const Game& game, Vector2 bossCenter) -> bool
+{
+    return !isOutsideCameraView(game, bossCenter, -bossOnScreenInset);
+}
+
+// First frame of a wind-up, whoever started it: stretch beam and dash tells to their minimum and
+// place the wormhole portal now, so its tell line can show where the beam will come from.
+void beginWindup(Game& game, Boss& boss)
+{
+    if (boss.attack == BossAttack::Beam || boss.attack == BossAttack::WormholeBeam)
+    {
+        boss.stateTimer = std::max(boss.stateTimer, minBeamTell);
+    }
+    else if (boss.attack == BossAttack::ChargeDash || boss.attack == BossAttack::DashRush)
+    {
+        boss.stateTimer = std::max(boss.stateTimer, minDashTell);
+    }
+    boss.windupTotal = std::max(boss.stateTimer, 0.01F);
+    if (boss.attack == BossAttack::WormholeBeam)
+    {
+        const float flankAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+        const auto flankDist =
+            static_cast<float>(GetRandomValue(static_cast<int32_t>(wormholeBeamFlankMinDist),
+                                              static_cast<int32_t>(wormholeBeamFlankMaxDist)));
+        boss.wormholeBeamOrigin =
+            Vector2Add(game.run.player.position, Vector2{.x = std::cos(flankAngle) * flankDist,
+                                                         .y = std::sin(flankAngle) * flankDist});
+    }
+}
+
 auto bossWindupDuration(BossAttack attack) -> float
 {
     switch (attack)
@@ -4802,14 +4849,7 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
     case BossAttack::WormholeBeam:
     {
         boss.stateTimer = wormholeBeamDuration;
-        boss.beamShieldLatched = false;
-        const float flankAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-        const auto flankDist =
-            static_cast<float>(GetRandomValue(static_cast<int32_t>(wormholeBeamFlankMinDist),
-                                              static_cast<int32_t>(wormholeBeamFlankMaxDist)));
-        boss.wormholeBeamOrigin =
-            Vector2Add(game.run.player.position, Vector2{.x = std::cos(flankAngle) * flankDist,
-                                                         .y = std::sin(flankAngle) * flankDist});
+        boss.beamShieldLatched = false; // the portal was placed when the wind-up began
         playSFX(game, game.resources.sounds.beamFire);
         triggerShake(game, 6, 0.25F);
         break;

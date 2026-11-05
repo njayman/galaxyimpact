@@ -438,6 +438,9 @@ auto hasWeapon(const Game& game, WeaponType kind) -> bool;
 auto weaponForGrantSkill(SkillType id) -> std::optional<WeaponType>;
 auto weaponEvolved(const Game& game, WeaponType kind) -> bool;
 auto bossWindupDuration(BossAttack attack) -> float;
+auto bossOnScreen(const Game& game, Vector2 bossCenter) -> bool;
+auto isAimLockedAttack(BossAttack attack) -> bool;
+void beginWindup(Game& game, Boss& boss);
 auto wormholeBentBeamSegments(const Game& game, Vector2 start,
                               Vector2 end) -> std::vector<std::pair<Vector2, Vector2>>;
 
