@@ -370,7 +370,7 @@ Mini Wave Bosses at waves 55 and 65. Pool: Ember Titan, Cinder Duke, Beamforge, 
 
 ### Biome Boss: Slagmaw
 
-Waves 60, 70, 75. Reworked 2026-11-05 into a **lava mole**: a basalt head with molten gold seams and fanged jaws (200 across, 0.6x speed), eight tapering basalt body sections trailing it (each with a gold seam and two crystal nubs), and a **crystal petal collar** of eight molten crystals round the back of the head. The collar lies folded back along the body at rest and while diving, flares open for attacks, and locks open once it blooms. Death behaviour by wave: wave 60 dies; wave 70 shatters into 14 tough meteor drifters; wave 75 splits into smaller moles (0.75x) that keep splitting by generation.
+Waves 60, 70, 75. Reworked 2026-11-05 into a **lava mole**, a drill-like tube rather than a snake: a basalt head with molten gold seams and fanged jaws (200 across), and behind it one rigid tube tapering to a hot drill point, with a molten spine seam and screw ridges that turn (fast while burrowing). A **petal sheath** of overlapping molten-crystal petals (6 rows of 3, plus a crown of 8 round the head) covers the whole tube: closed they lie flat along it like scales; for attacks they flare open like a flower and the tube glows through; once it blooms they stay open. It moves 1.5x the generic boss chase speed, faster than the ship. Death behaviour by wave: wave 60 dies; wave 70 shatters into 14 tough meteor drifters; wave 75 splits into smaller moles (0.75x) that keep splitting by generation.
 
 **Burrowing:** for Erupt and Tunnel Run the mole dives (0.4 s). Underground its body is hidden and only a cracked swell in the crust shows; it takes no damage and does no contact damage (shots still stop on the swell).
 
@@ -390,7 +390,7 @@ Waves 60, 70, 75. Reworked 2026-11-05 into a **lava mole**: a basalt head with m
 | Meteor Swarm (`MeteorSwarm`, kept) | as today | as today | as today | as today |
 | Seeker Embers (replaces `HomingBarrage`, wave 70+) | as HomingBarrage | homing embers | outrun, shoot down | as `HomingBarrage` |
 | Erupt (replaces Devour, all waves) | dives; a gold ring (120 radius) follows the player for 1.7 s, turning red and stopping for the last 0.45 s | the jaws come up through the ring; a ship inside is swallowed (Boss QTE) | leave the ring, or dash at the moment | 10 slag gobs and a 2 damage bite when the QTE is on its gap |
-| Tunnel Run (`BurrowCharge`, new for Slagmaw) | dives 1 s; a dashed gold line to just past the player | races underground at 950 units a second along the locked line, magma pools behind, then breaches | step off the line and away from its end | breach radius 130, 2 damage, 10 slag gobs |
+| Tunnel Run (`BurrowCharge`, new for Slagmaw) | dives 1 s; a dashed gold line to just past the player | races underground at 1400 units a second along the locked line, magma pools behind, then breaches | step off the line and away from its end | breach radius 130, 2 damage, 10 slag gobs |
 | Petal Volley (`Spread`, new for Slagmaw) | collar flares 0.8 s | 7 crystal petals (12 bloomed) burst out in a ring, slow to a hover for 0.75 s, then each darts once at the ship | keep moving once they hover; shoot them down | dart speed 12 per frame |
 
 ### Boss QTE: Swallowed

@@ -7950,37 +7950,8 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
         return;
     }
 
-    // Body sections, tail first, tapering.
+    // How far the petals stand open: flared for attacks, locked open once bloomed.
     const auto paint = [&](Color c, float a) { return Fade(ColorLerp(c, WHITE, 0.2F * flash), a * seen); };
-    const Vector2 light = Vector2Normalize(Vector2{.x = -1, .y = -1});
-    const float glow = std::clamp(0.35F + 0.2F * std::sin(t * 2.0F + seed), 0.0F, 1.0F);
-    for (int32_t i = static_cast<int32_t>(boss.moleBody.size()) - 1; i >= 0; i--)
-    {
-        const Vector2 at = boss.moleBody.at(static_cast<size_t>(i));
-        const Vector2 ahead = i == 0 ? center : boss.moleBody.at(static_cast<size_t>(i - 1));
-        const Vector2 along = Vector2Length(Vector2Subtract(ahead, at)) > 0.01F ? Vector2Normalize(Vector2Subtract(ahead, at)) : face;
-        const Vector2 across{.x = -along.y, .y = along.x};
-        const float r = radius * (0.74F - 0.055F * static_cast<float>(i));
-        DrawCircleV(at, r, paint(ColorLerp(basalt, Palette::Void, 0.5F), 1.0F)); // outline
-        DrawCircleV(at, r * 0.92F, paint(basalt, 1.0F));
-        DrawCircleV(Vector2Add(at, Vector2Scale(light, r * 0.22F)), r * 0.62F, paint(ColorLerp(basalt, basaltLit, 0.45F), 1.0F));
-        // A molten seam across the section and two crystal nubs on its back.
-        DrawLineEx(Vector2Add(at, Vector2Scale(across, r * 0.8F)), Vector2Subtract(at, Vector2Scale(across, r * 0.8F)), r * 0.09F,
-                   paint(ember, 0.4F * glow));
-        DrawLineEx(Vector2Add(at, Vector2Scale(across, r * 0.75F)), Vector2Subtract(at, Vector2Scale(across, r * 0.75F)), r * 0.04F,
-                   paint(gold, glow));
-        for (const float sideSign : {-1.0F, 1.0F})
-        {
-            const Vector2 base = Vector2Add(at, Vector2Scale(across, sideSign * r * 0.55F));
-            const Vector2 tip = Vector2Add(base, Vector2Add(Vector2Scale(across, sideSign * r * 0.45F), Vector2Scale(along, -r * 0.25F)));
-            const Vector2 b1 = Vector2Add(base, Vector2Scale(along, r * 0.16F));
-            const Vector2 b2 = Vector2Subtract(base, Vector2Scale(along, r * 0.16F));
-            DrawTriangle(b1, tip, b2, paint(ColorLerp(gold, basalt, 0.35F), 0.9F));
-            DrawTriangle(b1, b2, tip, paint(ColorLerp(gold, basalt, 0.35F), 0.9F));
-        }
-    }
-
-    // Crystal collar behind the jaws.
     float open = 0.15F;
     if (winding && (boss.attack == BossAttack::Spread || boss.attack == BossAttack::Barrage))
     {
@@ -7994,9 +7965,99 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
     if (boss.slagmawBloomed)
     {
         open = 0.9F + 0.1F * std::sin(t * 5.0F);
-        DrawCircleV(center, radius * 1.5F, paint(ember, 0.1F + 0.05F * std::sin(t * 5.0F)));
+        DrawCircleV(center, radius * 1.5F, paint(Palette::ElementBurn, 0.1F + 0.05F * std::sin(t * 5.0F)));
     }
     open *= 1.0F - boss.moleUnder;
+
+    // The body: one rigid tube tapering back from the head to a drill point, a molten seam down
+    // its spine and screw ridges that turn as the drill spins (fast while underground).
+    const Vector2 light = Vector2Normalize(Vector2{.x = -1, .y = -1});
+    const float glow = std::clamp(0.35F + 0.2F * std::sin(t * 2.0F + seed), 0.0F, 1.0F);
+    {
+        const Vector2 back = Vector2Negate(face);
+        const Vector2 across{.x = -back.y, .y = back.x};
+        const float length = radius * 2.4F;
+        const auto width = [&](float u) { return radius * 0.8F * std::pow(1.0F - u, 0.7F) + radius * 0.02F; };
+        const auto at = [&](float u, float v) // u along 0 head .. 1 tip, v across -1 .. 1
+        { return Vector2Add(Vector2Add(center, Vector2Scale(back, length * u)), Vector2Scale(across, width(u) * v)); };
+        const bool litSide = Vector2DotProduct(across, light) > 0; // which half catches the light
+        constexpr int32_t slices = 18;
+        const Color dark = ColorLerp(basalt, Palette::Void, 0.5F);
+        const Color lit = ColorLerp(basalt, basaltLit, 0.5F);
+        for (int32_t i = 0; i < slices; i++)
+        {
+            const float u0 = static_cast<float>(i) / slices;
+            const float u1 = static_cast<float>(i + 1) / slices;
+            const auto quad = [&](float v0, float v1, Color c)
+            {
+                const Vector2 p0 = at(u0, v0), p1 = at(u0, v1), p2 = at(u1, v1), p3 = at(u1, v0);
+                DrawTriangle(p0, p1, p2, c);
+                DrawTriangle(p0, p2, p1, c);
+                DrawTriangle(p0, p2, p3, c);
+                DrawTriangle(p0, p3, p2, c);
+            };
+            quad(-1.12F, 1.12F, paint(dark, 1.0F)); // outline
+            quad(-1.0F, 0.0F, paint(litSide ? basalt : lit, 1.0F));
+            quad(0.0F, 1.0F, paint(litSide ? lit : basalt, 1.0F));
+        }
+        // Screw ridges: slanted bands sliding toward the tip as the drill turns.
+        constexpr int32_t ridges = 7;
+        for (int32_t k = 0; k < ridges; k++)
+        {
+            const float u = std::fmod((static_cast<float>(k) + boss.moleDrill) / ridges, 1.0F) * 0.92F + 0.04F;
+            const float slant = 0.07F;
+            const Vector2 l = at(std::min(u + slant, 0.99F), -0.95F);
+            const Vector2 r = at(u, 0.95F);
+            DrawLineEx(l, r, radius * 0.07F * (1.0F - u * 0.6F), paint(dark, 0.9F));
+            DrawLineEx(Vector2Add(l, Vector2Scale(back, -radius * 0.03F)), Vector2Add(r, Vector2Scale(back, -radius * 0.03F)),
+                       radius * 0.02F, paint(basaltLit, 0.8F));
+        }
+        // Molten spine seam.
+        DrawLineEx(at(0.05F, 0), at(0.9F, 0), radius * 0.07F, paint(ember, 0.4F * glow));
+        DrawLineEx(at(0.05F, 0), at(0.9F, 0), radius * 0.025F, paint(gold, glow));
+        DrawCircleV(at(0.97F, 0), radius * 0.05F, paint(gold, 0.6F + 0.4F * glow)); // hot drill point
+        // Opened, the tube glows through the gaps.
+        DrawLineEx(at(0.02F, 0), at(0.9F, 0), radius * 0.5F * open, paint(ember, 0.25F * open));
+
+        // Petal sheath: overlapping crystal petals over the whole tube, scales pointing back.
+        // Closed they lie flat along it; open they flare out like a flower.
+        constexpr int32_t rows = 6;
+        const float faceAngle = std::atan2(back.y, back.x);
+        for (int32_t row = rows - 1; row >= 0; row--)
+        {
+            const float u = 0.06F + 0.8F * static_cast<float>(row) / static_cast<float>(rows - 1);
+            for (const float v : {-0.6F, 0.6F, 0.0F})
+            {
+                const float sideSign = v != 0 ? (v > 0 ? 1.0F : -1.0F) : (row % 2 == 0 ? 1.0F : -1.0F);
+                // Across is back turned +90 degrees, so +v petals turn the positive way.
+                const float angle =
+                    faceAngle + sideSign * Lerp(v != 0 ? 0.18F : 0.06F, v != 0 ? 1.75F : 1.2F, open);
+                const Vector2 dir{.x = std::cos(angle), .y = std::sin(angle)};
+                const Vector2 side{.x = -dir.y, .y = dir.x};
+                const float len = (width(u) * 1.25F + radius * 0.25F) * (1.0F + 0.25F * open);
+                const float half = width(u) * (v != 0 ? 0.42F : 0.5F);
+                const Vector2 root = at(u, v * 0.85F);
+                const Vector2 tip = Vector2Add(root, Vector2Scale(dir, len));
+                const Vector2 mid = Vector2Add(root, Vector2Scale(dir, len * 0.38F));
+                const Vector2 l = Vector2Add(mid, Vector2Scale(side, half));
+                const Vector2 r = Vector2Subtract(mid, Vector2Scale(side, half));
+                const float heat = 0.3F + 0.7F * open;
+                const Color face1 = paint(ColorLerp(basalt, gold, 0.45F + 0.4F * heat), 1.0F);
+                const Color face2 = paint(ColorLerp(basalt, ember, 0.35F + 0.35F * heat), 1.0F);
+                DrawTriangle(root, l, tip, face1);
+                DrawTriangle(root, tip, l, face1);
+                DrawTriangle(root, r, tip, face2);
+                DrawTriangle(root, tip, r, face2);
+                DrawLineEx(root, tip, 1.5F, paint(WHITE, 0.2F + 0.45F * heat * glow));
+                DrawLineEx(l, tip, 1.2F, paint(basalt, 0.85F));
+                DrawLineEx(r, tip, 1.2F, paint(basalt, 0.85F));
+                DrawLineEx(l, root, 1.2F, paint(basalt, 0.85F));
+                DrawLineEx(r, root, 1.2F, paint(basalt, 0.85F));
+            }
+        }
+    }
+
+    // Crystal collar behind the jaws.
     const float faceAngle = std::atan2(face.y, face.x);
     constexpr int32_t petals = 8;
     for (int32_t k = 0; k < petals; k++)

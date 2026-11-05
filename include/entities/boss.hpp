@@ -306,9 +306,7 @@ class Boss
     Vector2 slagmawFacing{.x = 0, .y = 1}; // the maw turns to track the player
     Vector2 devourDir{};                   // the inhale cone's axis, locked when it starts
     float slagmawPunishTimer = 0;          // Punish Window after a clean Swallowed
-    // Lava mole body: sections trailing the head (centres), set on the first update.
-    std::array<Vector2, 8> moleBody{};
-    bool moleBodySet = false;
+    float moleDrill = 0;        // drill ridge phase
     float moleUnder = 0;        // 0 surfaced .. 1 burrowed (untouchable, body hidden)
     Vector2 eruptAt{};          // Erupt: where the jaws come up
     bool slagmawBloomed = false; // collar locked open below the bloom HP

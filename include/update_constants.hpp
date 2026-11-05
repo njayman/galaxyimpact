@@ -273,14 +273,13 @@ constexpr auto meteorHellDuration(int32_t wave) -> float
     return 3.0F;
 }
 
-constexpr float slagmawMoveSpeedMult = 0.6F; // lava mole: quicker than the old mass
+constexpr float slagmawMoveSpeedMult = 1.5F; // lava mole: outruns the ship
 constexpr float slagSprayTell = 0.5F;      // body flares gold before Slag Spray
 constexpr float slagSpraySpreadDeg = 14.0F; // each gob's random angle off the aim, +-
 constexpr float slagmawMawOffset = 0.55F;  // maw centre, in body radii from the centre
 constexpr float slagmawHeadSize = 200.0F;
-constexpr float moleSectionSpacing = 0.8F;  // body sections apart, in head radii
 constexpr float moleDiveRate = 2.5F;        // moleUnder per second, diving or surfacing
-constexpr float moleTunnelSpeed = 950.0F;   // burrowed travel, units per second
+constexpr float moleTunnelSpeed = 1400.0F;   // burrowed travel, units per second
 // Erupt (replaces Devour): dive, a gold ring hunts the player, the jaws come up through it.
 constexpr float eruptTell = 1.7F;
 constexpr float eruptLockTime = 0.45F; // the ring stops following for the last of the tell

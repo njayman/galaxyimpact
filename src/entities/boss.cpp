@@ -2499,7 +2499,7 @@ void throwSlagRing(Game& game, Vector2 at, int32_t count)
     }
 }
 
-// Lava mole, every frame: dive or surface, the body sections trail the head, and the collar
+// Lava mole, every frame: dive or surface, spin the drill, and the collar
 // blooms open for good below the bloom HP.
 void updateLavaMole(Game& game, Boss& boss, Vector2 bossCenter, float deltaTime)
 {
@@ -2507,29 +2507,11 @@ void updateLavaMole(Game& game, Boss& boss, Vector2 bossCenter, float deltaTime)
                         (boss.attack == BossAttack::Devour || boss.attack == BossAttack::BurrowCharge)) ||
                        (boss.state == BossState::SHOOTING && boss.attack == BossAttack::BurrowCharge);
     boss.moleUnder = std::clamp(boss.moleUnder + (under ? 1.0F : -1.0F) * moleDiveRate * deltaTime, 0.0F, 1.0F);
-
-    const float radius = boss.size.x / 2;
-    const float spacing = radius * moleSectionSpacing;
-    if (!boss.moleBodySet)
+    if (under)
     {
-        boss.moleBodySet = true;
-        for (size_t i = 0; i < boss.moleBody.size(); i++)
-        {
-            boss.moleBody.at(i) =
-                Vector2Subtract(bossCenter, Vector2Scale(boss.slagmawFacing, spacing * static_cast<float>(i + 1)));
-        }
+        boss.moleDrill += deltaTime * 6.0F; // the drill spins up underground
     }
-    Vector2 prev = bossCenter;
-    for (auto& section : boss.moleBody)
-    {
-        const Vector2 d = Vector2Subtract(section, prev);
-        const float len = Vector2Length(d);
-        if (len > spacing)
-        {
-            section = Vector2Add(prev, Vector2Scale(d, spacing / len));
-        }
-        prev = section;
-    }
+    boss.moleDrill += deltaTime * 1.5F;
 
     if (!boss.slagmawBloomed && boss.health > 0 &&
         static_cast<float>(boss.health) <= static_cast<float>(boss.maxHealth) * slagmawBloomHealthFrac)
@@ -2569,7 +2551,6 @@ void slagmawErupt(Game& game, Boss& boss)
     // The maw, not the head's centre, comes up on the ring.
     const Vector2 center = Vector2Subtract(boss.eruptAt, Vector2Scale(boss.slagmawFacing, boss.size.x / 2 * slagmawMawOffset));
     boss.position = Vector2Subtract(center, Vector2{.x = boss.size.x / 2, .y = boss.size.y / 2});
-    boss.moleBodySet = false; // the body follows out of the hole
     boss.stateTimer = eruptHold;
     const bool caught = player.health > 0 && !player.dashing && !bossQteActive(game) &&
                         Vector2Length(toPlayer) <= eruptRadius + player.radius;
