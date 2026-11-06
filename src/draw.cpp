@@ -7785,8 +7785,10 @@ namespace
 void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flash)
 {
     constexpr Color gold{.r = 255, .g = 188, .b = 72, .a = 255};
-    constexpr Color basalt{.r = 34, .g = 27, .b = 27, .a = 255};
-    constexpr Color basaltLit{.r = 104, .g = 84, .b = 76, .a = 255};
+    // Iron hide: dark brown-grey metal, steel highlights, molten lines between the plates.
+    constexpr Color basalt{.r = 36, .g = 29, .b = 29, .a = 255};
+    constexpr Color basaltLit{.r = 104, .g = 92, .b = 88, .a = 255};
+    constexpr Color molten{.r = 255, .g = 128, .b = 40, .a = 255};
     const Color ember = Palette::ElementBurn;
     const auto t = static_cast<float>(GetTime());
     const float radius = boss.size.x / 2;
@@ -7945,7 +7947,9 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
             constexpr int32_t steps = 14;
             const float lo = vc - 0.3F;
             const float hi = vc + 0.3F;
-            const Color fill = paint(ColorLerp(basalt, k % 2 == 0 ? gold : ember, 0.5F + 0.35F * open), 1.0F);
+            const bool litStrip = (sign * (litSide ? 1.0F : -1.0F)) > 0;
+            const Color plate = ColorLerp(basalt, basaltLit, litStrip ? 0.28F : 0.06F);
+            const Color fill = paint(ColorLerp(plate, ember, 0.3F * open), 1.0F);
             const Color inner = paint(ColorLerp(ember, gold, 0.4F), 0.9F);
             for (int32_t i = 0; i < steps; i++)
             {
@@ -7965,7 +7969,32 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
                 DrawTriangle(a0, a1, b1, c);
                 DrawLineEx(a0, a1, 1.5F, paint(basalt, 0.9F));
                 DrawLineEx(b0, b1, 1.5F, paint(basalt, 0.9F));
-                DrawLineEx(peel(u0, vc), peel(u1, vc), 1.2F, paint(WHITE, 0.15F + 0.4F * open * glow)); // vein
+                // Steel glint along the lit edge.
+                DrawLineEx(litStrip ? b0 : a0, litStrip ? b1 : a1, 1.5F, paint(basaltLit, 0.7F));
+            }
+            // Molten zigzag down the plate, Heatran-style hot lines in iron.
+            const float hot = std::clamp(0.7F + 0.3F * glow + 0.3F * open, 0.0F, 1.0F);
+            Vector2 prev = peel(0.08F, vc);
+            for (int32_t i = 1; i <= 7; i++)
+            {
+                const float u = 0.08F + 0.8F * static_cast<float>(i) / 7.0F;
+                const float zig = (i % 2 == 0 ? 0.13F : -0.13F) * (1.0F - std::pow(u, 4.0F));
+                const Vector2 q = peel(u, vc + zig);
+                DrawLineEx(prev, q, radius * 0.07F, paint(molten, 0.3F * hot));
+                DrawLineEx(prev, q, radius * 0.03F, paint(molten, hot));
+                DrawLineEx(prev, q, radius * 0.012F, paint(gold, hot));
+                prev = q;
+            }
+            // Rivets along both edges.
+            for (const float u : {0.25F, 0.6F})
+            {
+                const float n = 1.0F - std::pow(u, 4.0F);
+                for (const float edge : {lo + 0.07F, hi - 0.07F})
+                {
+                    const Vector2 r = peel(u, vc + (edge - vc) * n);
+                    DrawCircleV(r, radius * 0.03F, paint(Palette::Void, 0.9F));
+                    DrawCircleV(Vector2Add(r, Vector2Scale(light, radius * 0.01F)), radius * 0.015F, paint(basaltLit, 0.9F));
+                }
             }
         }
     }
@@ -8022,18 +8051,33 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
         }
         // Base rim where the peel attaches.
         DrawLineEx(nose(0, -1.05F), nose(0, 1.05F), radius * 0.08F, paint(dark, 1.0F));
-        // Molten seams sweeping to the tip.
-        const float seamGlow = std::clamp(glow + 0.6F * heat, 0.0F, 1.0F);
-        for (const float v : {-0.55F, 0.0F, 0.55F})
+        // Steel glint down the lit flank.
+        for (int32_t i = 0; i < 8; i++)
         {
-            for (int32_t i = 0; i < 10; i++)
-            {
-                const float s0 = 0.05F + 0.9F * static_cast<float>(i) / 10.0F;
-                const float s1 = 0.05F + 0.9F * static_cast<float>(i + 1) / 10.0F;
-                const float taper = v == 0 ? 1.0F : 0.7F;
-                DrawLineEx(nose(s0, v), nose(s1, v), radius * 0.06F * taper, paint(ember, 0.35F * seamGlow));
-                DrawLineEx(nose(s0, v), nose(s1, v), radius * 0.022F * taper, paint(gold, seamGlow));
-            }
+            const float s0 = 0.08F + 0.7F * static_cast<float>(i) / 8.0F;
+            const float s1 = 0.08F + 0.7F * static_cast<float>(i + 1) / 8.0F;
+            const float v = litSide ? 0.6F : -0.6F;
+            DrawLineEx(nose(s0, v), nose(s1, v), radius * 0.03F, paint(basaltLit, 0.8F));
+        }
+        // Molten chevrons pointing to the tip, and a hot line up the crest.
+        const float seamGlow = std::clamp(0.7F + 0.3F * glow + 0.3F * heat, 0.0F, 1.0F);
+        const auto hotLine = [&](Vector2 a, Vector2 b, float w)
+        {
+            DrawLineEx(a, b, radius * 0.08F * w, paint(molten, 0.3F * seamGlow));
+            DrawLineEx(a, b, radius * 0.035F * w, paint(molten, seamGlow));
+            DrawLineEx(a, b, radius * 0.014F * w, paint(gold, seamGlow));
+        };
+        for (const float c : {0.12F, 0.36F, 0.58F})
+        {
+            const float w = 1.0F - c * 0.6F;
+            hotLine(nose(c, -0.8F), nose(c + 0.14F, 0), w);
+            hotLine(nose(c + 0.14F, 0), nose(c, 0.8F), w);
+        }
+        hotLine(nose(0.74F, 0), nose(0.95F, 0), 0.8F);
+        for (const float v : {-0.7F, -0.35F, 0.0F, 0.35F, 0.7F}) // rivets on the base rim
+        {
+            DrawCircleV(nose(0.03F, v), radius * 0.035F, paint(Palette::Void, 0.9F));
+            DrawCircleV(nose(0.03F, v), radius * 0.017F, paint(basaltLit, 0.9F));
         }
         const Vector2 tip = nose(1.0F, 0);
         DrawCircleV(tip, radius * (0.1F + 0.12F * heat), paint(ember, 0.25F + 0.4F * heat));
