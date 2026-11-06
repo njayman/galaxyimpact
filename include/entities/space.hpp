@@ -137,6 +137,8 @@ auto asteroidRadius(AsteroidTier tier) -> float;
 auto asteroidScore(AsteroidTier tier) -> int;
 
 auto isSolarForgeCaveOpen(Vector2 worldPos) -> bool;
+void setSolarForgeCaveWidthScale(float scale);
+auto solarForgeCaveWidthScale() -> float;
 
 auto rustbloomNearestPodCenter(Vector2 worldPos) -> Vector2;
 

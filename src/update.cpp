@@ -1310,6 +1310,7 @@ void updateGameplay(Game& game, float deltaTime)
     updateWormhole(game, deltaTime);
     updateEliteHazards(game, deltaTime);
     updateBeltbreakerRubble(game, deltaTime);
+    updateMagmaDensity(game, deltaTime);
 
     if (game.run.player.health > 0 && game.run.blackhole.active &&
         Vector2Distance(game.run.player.position, game.run.blackhole.position) <=

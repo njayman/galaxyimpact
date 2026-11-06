@@ -369,6 +369,7 @@ void resetRun(Game& game)
     game.run.debrisSquallPhase = 0;
     game.run.rustPatches.clear();
     game.run.magmaPools.clear();
+    setSolarForgeCaveWidthScale(1.0F);
     game.run.magmaPoolTick = 0;
     game.run.rustPatchTickTimer = rustPatchEntryGrace;
     game.run.punctumTrapActive = false;

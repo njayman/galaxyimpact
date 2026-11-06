@@ -451,6 +451,8 @@ void spawnSlagmaw(Game& game, int32_t wave)
               .instanceId = game.run.bossSpawnCount,
               .isSlagmaw = true};
 
+    boss.moleHidden = true; // its first appearance is out of a magma blob near the ship
+    boss.moleUnder = 1;
     if (wave == 75)
     {
         boss.slagmawBreaksIntoHalves = true;
@@ -1440,7 +1442,11 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
 
     }
 
-    if (boss.isSlagmaw && boss.health > 0)
+    if (boss.isSlagmaw)
+    {
+        return; // the lava mole never flies: it moves blob to blob under the magma (updateLavaMole)
+    }
+    if (false)
     {
         const float offscreenDist =
             std::max(static_cast<float>(game.resources.screenWidth),
@@ -2499,13 +2505,66 @@ void throwSlagRing(Game& game, Vector2 at, int32_t count)
     }
 }
 
+// A point in the magma blobs (not a cave) round `near`, else the last try.
+auto findMagmaBlob(Vector2 near, float minDist, float maxDist) -> Vector2
+{
+    Vector2 p = near;
+    for (int32_t i = 0; i < 40; i++)
+    {
+        const float a = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+        const float d = Lerp(minDist, maxDist, static_cast<float>(GetRandomValue(0, 100)) / 100.0F);
+        p = Vector2Add(near, Vector2{.x = std::cos(a) * d, .y = std::sin(a) * d});
+        if (!isSolarForgeCaveOpen(p))
+        {
+            return p;
+        }
+    }
+    return p;
+}
+
+// While any Slagmaw lives the magma blobs thicken; they ease back once it dies.
+void updateMagmaDensity(Game& game, float deltaTime)
+{
+    const bool slagmaw = std::ranges::any_of(game.run.bosses, [](const Boss& b) { return b.isSlagmaw && b.health > 0; });
+    const float target = slagmaw ? slagmawCaveWidthScale : 1.0F;
+    const float now = solarForgeCaveWidthScale();
+    const float step = magmaDensityRate * deltaTime;
+    setSolarForgeCaveWidthScale(now < target ? std::min(target, now + step) : std::max(target, now - step));
+}
+
 // Lava mole, every frame: dive or surface, spin the drill, and the collar
 // blooms open for good below the bloom HP.
 void updateLavaMole(Game& game, Boss& boss, Vector2 bossCenter, float deltaTime)
 {
     const bool under = (boss.state == BossState::WINDING_UP &&
                         (boss.attack == BossAttack::Devour || boss.attack == BossAttack::BurrowCharge)) ||
-                       (boss.state == BossState::SHOOTING && boss.attack == BossAttack::BurrowCharge);
+                       (boss.state == BossState::SHOOTING && boss.attack == BossAttack::BurrowCharge) ||
+                       boss.moleHidden;
+    if (boss.moleHidden && boss.state == BossState::IDLE)
+    {
+        if (boss.moleRumble > 0)
+        {
+            boss.moleRumble -= deltaTime;
+            if (boss.moleRumble <= 0)
+            {
+                boss.moleHidden = false; // peeks out of the blob
+                boss.attackTimer = boss.rampageDashesLeft > 0 ? 0.0F
+                                                              : static_cast<float>(GetRandomValue(6, 12)) / 10.0F;
+                spawnBlastRing(game, bossCenter, boss.size.x * 0.5F + 60.0F);
+                playSFX(game, game.resources.sounds.rockBreak);
+            }
+        }
+        else
+        {
+            boss.moleHideTimer -= deltaTime;
+            if (boss.moleHideTimer <= 0 && boss.moleUnder >= 0.99F)
+            {
+                const Vector2 spot = findMagmaBlob(game.run.player.position, moleSpotMin, moleSpotMax);
+                boss.position = Vector2Subtract(spot, Vector2{.x = boss.size.x / 2, .y = boss.size.y / 2});
+                boss.moleRumble = moleRumbleTime;
+            }
+        }
+    }
     boss.moleUnder = std::clamp(boss.moleUnder + (under ? 1.0F : -1.0F) * moleDiveRate * deltaTime, 0.0F, 1.0F);
     if (under)
     {
@@ -4119,10 +4178,21 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         boss.attackTimer -= deltaTime;
 
         if (boss.attackTimer <= 0 && boss.health > 0 && boss.wreckwormPunishTimer <= 0 &&
-            boss.slagmawPunishTimer <= 0 && boss.qteStunTimer <= 0 && bossOnScreen(game, bossCenter))
+            boss.slagmawPunishTimer <= 0 && boss.qteStunTimer <= 0 && bossOnScreen(game, bossCenter) &&
+            !(boss.isSlagmaw && (boss.moleHidden || boss.moleUnder > 0.05F)))
         {
             boss.attack = boss.moveset.at(static_cast<size_t>(
                 GetRandomValue(0, static_cast<int32_t>(boss.moveset.size()) - 1)));
+            const bool pounceChained = boss.isSlagmaw && boss.rampageDashesLeft > 0;
+            if (pounceChained)
+            {
+                boss.attack = BossAttack::ChargeDash;
+                boss.rampageDashesLeft--;
+            }
+            else if (boss.isSlagmaw && boss.attack == BossAttack::ChargeDash)
+            {
+                boss.rampageDashesLeft = slagmawPounceCount - 1; // Pounce Frenzy
+            }
             // A bare Beltbreaker has no plates for Ring Crush or Plate Hurl: it rampages
             // (chained dashes) or bursts a shard nova, at random.
             bool shardNova = false;
@@ -4172,6 +4242,10 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             else if (boss.isSlagmaw && boss.attack == BossAttack::Spread)
             {
                 boss.stateTimer = petalTell; // the collar flares
+            }
+            else if (pounceChained)
+            {
+                boss.stateTimer = pounceChainTell;
             }
 
             switch (boss.attack)
@@ -4448,7 +4522,7 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
         {
             // The charge bends toward the player while they are still ahead of it.
             const Vector2 toPlayer = Vector2Subtract(game.run.player.position, bossCenter);
-            if (!boss.isBeltbreakerPlate && Vector2DotProduct(toPlayer, boss.chargeVelocity) > 0)
+            if (!boss.isBeltbreakerPlate && !boss.isSlagmaw && Vector2DotProduct(toPlayer, boss.chargeVelocity) > 0)
             {
                 const float speed = Vector2Length(boss.chargeVelocity);
                 boss.chargeVelocity = Vector2Scale(
@@ -4863,6 +4937,12 @@ void updateBoss(Game& game, float deltaTime, Boss& boss, Vector2 bossCenter)
             boss.attackTimer = static_cast<float>(GetRandomValue(15, 40)) / 10.0F * rateMult;
             boss.color = boss.baseColor;
             boss.recoveryTimer = bossRecoveryDuration;
+            if (boss.isSlagmaw)
+            {
+                boss.moleHidden = true; // dives back into the magma and moves to another blob
+                boss.moleHideTimer = moleHideTime;
+                boss.moleRumble = 0;
+            }
         }
         break;
     }
@@ -5100,6 +5180,28 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         break;
     }
     case BossAttack::ChargeDash:
+        if (boss.isSlagmaw)
+        {
+            // Pounce: launch through the ship into the first blob past it.
+            const float toShip = Vector2Length(direction);
+            float travel = toShip + 600.0F;
+            for (float d = toShip + 150.0F; d < toShip + 900.0F; d += 30.0F)
+            {
+                if (!isSolarForgeCaveOpen(Vector2Add(bossCenter, Vector2Scale(aimDirection, d))))
+                {
+                    travel = d;
+                    break;
+                }
+            }
+            boss.stateTimer = travel / pounceSpeed;
+            boss.chargeVelocity = Vector2Scale(aimDirection, pounceSpeed);
+            boss.dashHitPlayer = false;
+            boss.magmaTrailDist = 0;
+            spawnBlastRing(game, bossCenter, boss.size.x * 0.5F + 60.0F);
+            playSFX(game, game.resources.sounds.bossWindUp);
+            triggerShake(game, 6, 0.2F);
+            break;
+        }
         boss.stateTimer = chargeDashDuration;
         boss.chargeVelocity = Vector2Scale(
             aimDirection,

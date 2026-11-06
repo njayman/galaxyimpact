@@ -38,13 +38,21 @@ auto hashNoise1D(float seed) -> float
 
 }
 
+namespace
+{
+float caveWidthScale = 1.0F; // ponytail: global, the one caller that sets it is the Slagmaw update
+}
+
+void setSolarForgeCaveWidthScale(float scale) { caveWidthScale = scale; }
+auto solarForgeCaveWidthScale() -> float { return caveWidthScale; }
+
 auto isSolarForgeCaveOpen(Vector2 worldPos) -> bool
 {
     const float base = valueNoise2D(worldPos.x / caveNoiseScaleCoarse, worldPos.y / caveNoiseScaleCoarse);
     const float edgeJitter =
         (valueNoise2D(worldPos.x / caveNoiseScaleFine, worldPos.y / caveNoiseScaleFine) - 0.5F) *
         0.05F;
-    return std::abs(base - 0.5F + edgeJitter) < caveTunnelHalfWidth;
+    return std::abs(base - 0.5F + edgeJitter) < caveTunnelHalfWidth * caveWidthScale;
 }
 
 auto rustbloomNearestPodCenter(Vector2 worldPos) -> Vector2

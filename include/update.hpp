@@ -289,6 +289,7 @@ auto bossAimPoint(const Game& game, const Boss& boss) -> Vector2;
 auto bossDirectorDamageMult(const Boss& boss) -> float;
 void forceBossPattern(Game& game, Boss& boss, BossPattern pattern);
 void updateBeltbreakerCore(Game& game, Boss& core, float deltaTime);
+void updateMagmaDensity(Game& game, float deltaTime);
 void updateBeltbreakerRubble(Game& game, float deltaTime);
 auto countAttachedAlivePlates(Game& game, const Boss& core) -> int32_t;
 auto beltbreakerPlateSlotPosition(const Boss& core, int32_t slotIndex) -> Vector2;

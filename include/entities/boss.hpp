@@ -308,6 +308,9 @@ class Boss
     float slagmawPunishTimer = 0;          // Punish Window after a clean Swallowed
     float moleDrill = 0;        // drill ridge phase
     float moleUnder = 0;        // 0 surfaced .. 1 burrowed (untouchable, body hidden)
+    bool moleHidden = false;    // Slagmaw: down in the magma, moving to its next blob
+    float moleHideTimer = 0;    // until it picks the next blob
+    float moleRumble = 0;       // > 0: under the new blob, about to surface
     Vector2 eruptAt{};          // Erupt: where the jaws come up
     bool slagmawBloomed = false; // collar locked open below the bloom HP
     float qteStunTimer = 0;                // any other boss: stunned after a clean Rush QTE

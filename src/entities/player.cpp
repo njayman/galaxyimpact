@@ -449,7 +449,8 @@ void updatePlayerMovement(Game& game, float deltaTime)
 
         touchingAnyBoss = true;
 
-        if ((boss.isBeltbreakerPlate || boss.isBeltbreaker || boss.usesDirector) && boss.state == BossState::SHOOTING &&
+        if ((boss.isBeltbreakerPlate || boss.isBeltbreaker || boss.usesDirector || boss.isSlagmaw) &&
+            boss.state == BossState::SHOOTING &&
             boss.attack == BossAttack::ChargeDash && !boss.dashHitPlayer &&
             !game.run.player.dashing && !game.run.player.shieldActive &&
             game.run.player.immunityTimer <= 0)

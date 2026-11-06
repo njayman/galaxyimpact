@@ -7890,13 +7890,28 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
         const auto at = [&](float u, float v) // u along 0 head .. 1 tip, v across -1 .. 1
         { return Vector2Add(Vector2Add(center, Vector2Scale(back, length * u)), Vector2Scale(across, width(u) * v)); };
         const bool litSide = Vector2DotProduct(across, light) > 0; // which half catches the light
+        // Peeking out of a magma blob only the front shows; a pounce brings the whole tube out.
+        const bool flying = shooting && boss.attack == BossAttack::ChargeDash;
+        const float uMax = flying ? 1.0F : 0.45F;
+        const Vector2 holeAt = at(uMax, 0);
+        const float holeR = width(uMax) * 1.35F;
+        if (!flying) // the hole it came up through
+        {
+            DrawCircleV(holeAt, holeR * 1.25F, paint(Palette::ElementBurn, 0.18F));
+            DrawCircleV(holeAt, holeR, paint(ColorLerp(basalt, Palette::Void, 0.6F), 1.0F));
+            DrawRing(holeAt, holeR - 3.0F, holeR + 2.0F, 0, 360, 40, paint(molten, 0.85F));
+        }
         constexpr int32_t slices = 18;
         const Color dark = ColorLerp(basalt, Palette::Void, 0.5F);
         const Color lit = ColorLerp(basalt, basaltLit, 0.5F);
         for (int32_t i = 0; i < slices; i++)
         {
             const float u0 = static_cast<float>(i) / slices;
-            const float u1 = static_cast<float>(i + 1) / slices;
+            const float u1 = std::min(static_cast<float>(i + 1) / slices, uMax);
+            if (u0 >= uMax)
+            {
+                break;
+            }
             const auto quad = [&](float v0, float v1, Color c)
             {
                 const Vector2 p0 = at(u0, v0), p1 = at(u0, v1), p2 = at(u1, v1), p3 = at(u1, v0);
@@ -7915,6 +7930,10 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
         {
             const float u = std::fmod((static_cast<float>(k) + boss.moleDrill) / ridges, 1.0F) * 0.92F + 0.04F;
             const float slant = 0.07F;
+            if (u + slant > uMax)
+            {
+                continue;
+            }
             const Vector2 l = at(std::min(u + slant, 0.99F), -0.95F);
             const Vector2 r = at(u, 0.95F);
             DrawLineEx(l, r, radius * 0.07F * (1.0F - u * 0.6F), paint(dark, 0.9F));
@@ -7922,11 +7941,15 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
                        radius * 0.02F, paint(basaltLit, 0.8F));
         }
         // Molten spine seam.
-        DrawLineEx(at(0.05F, 0), at(0.9F, 0), radius * 0.07F, paint(ember, 0.4F * glow));
-        DrawLineEx(at(0.05F, 0), at(0.9F, 0), radius * 0.025F, paint(gold, glow));
-        DrawCircleV(at(0.97F, 0), radius * 0.05F, paint(gold, 0.6F + 0.4F * glow)); // hot drill point
+        const float spineEnd = std::min(0.9F, uMax);
+        DrawLineEx(at(0.05F, 0), at(spineEnd, 0), radius * 0.07F, paint(ember, 0.4F * glow));
+        DrawLineEx(at(0.05F, 0), at(spineEnd, 0), radius * 0.025F, paint(gold, glow));
+        if (flying)
+        {
+            DrawCircleV(at(0.97F, 0), radius * 0.05F, paint(gold, 0.6F + 0.4F * glow)); // hot drill point
+        }
         // Opened, the tube glows through the gaps.
-        DrawLineEx(at(0.02F, 0), at(0.9F, 0), radius * 0.5F * open, paint(ember, 0.25F * open));
+        DrawLineEx(at(0.02F, 0), at(spineEnd, 0), radius * 0.5F * open, paint(ember, 0.25F * open));
 
         // Peel: four long petals, each covering a strip of the tube from behind the head to the
         // drill point. Closed they wrap it; opening, they stay fixed behind the head and peel
@@ -7954,7 +7977,11 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
             for (int32_t i = 0; i < steps; i++)
             {
                 const float u0 = 0.04F + 0.93F * static_cast<float>(i) / steps;
-                const float u1 = 0.04F + 0.93F * static_cast<float>(i + 1) / steps;
+                const float u1 = std::min(0.04F + 0.93F * static_cast<float>(i + 1) / steps, uMax);
+                if (u0 >= uMax)
+                {
+                    break;
+                }
                 // The tip narrows to a point; peeled, the strip shows its glowing inner face.
                 const float n0 = 1.0F - std::pow(u0, 4.0F);
                 const float n1 = 1.0F - std::pow(u1, 4.0F);
@@ -7978,6 +8005,10 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
             for (int32_t i = 1; i <= 7; i++)
             {
                 const float u = 0.08F + 0.8F * static_cast<float>(i) / 7.0F;
+                if (u > uMax)
+                {
+                    break;
+                }
                 const float zig = (i % 2 == 0 ? 0.13F : -0.13F) * (1.0F - std::pow(u, 4.0F));
                 const Vector2 q = peel(u, vc + zig);
                 DrawLineEx(prev, q, radius * 0.07F, paint(molten, 0.3F * hot));
@@ -7988,6 +8019,10 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
             // Rivets along both edges.
             for (const float u : {0.25F, 0.6F})
             {
+                if (u > uMax)
+                {
+                    continue;
+                }
                 const float n = 1.0F - std::pow(u, 4.0F);
                 for (const float edge : {lo + 0.07F, hi - 0.07F})
                 {

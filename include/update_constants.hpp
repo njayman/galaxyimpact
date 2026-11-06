@@ -320,6 +320,18 @@ constexpr int32_t meteorSwarmSpawnCount = 16; // x slagmawSwarmMult for Slagmaw;
 constexpr float caveNoiseScaleCoarse = 380.0F;
 constexpr float caveNoiseScaleFine = 60.0F;
 constexpr float caveTunnelHalfWidth = 0.17F;
+// While a Slagmaw lives the magma blobs thicken (caves narrow to this share), easing back after.
+constexpr float slagmawCaveWidthScale = 0.55F;
+constexpr float magmaDensityRate = 0.5F; // width-scale change per second
+// Lava mole: it lives in the magma blobs, peeks out of one to attack, then dives and moves on.
+constexpr float moleHideTime = 0.45F;  // under, before it picks the next blob
+constexpr float moleRumbleTime = 0.5F; // the swell under the new blob before it surfaces
+constexpr float moleSpotMin = 280.0F;  // next blob's distance from the ship
+constexpr float moleSpotMax = 520.0F;
+// Pounce Frenzy: peek, aim, launch through the ship into a blob past it, dive, repeat.
+constexpr int32_t slagmawPounceCount = 4;
+constexpr float pounceSpeed = 3200.0F;
+constexpr float pounceChainTell = 0.4F;
 
 // Tilt of the Belt planets' debris rings.
 constexpr float beltPlanetRingAngleDeg = 33.0F;
