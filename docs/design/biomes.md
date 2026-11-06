@@ -506,7 +506,7 @@ Arm attacks (2026-10-22, replacing the portal spin): each active tentacle slot r
 
 **Thunder Strike** stays on during the fight, unchanged, and still hits summons. Paused in the Boss QTE; suppressed during the outro.
 
-**Outro (wave 100):** kept beat for beat in cyan and lavender: the Kraken approaches, opens the portal ("Follow me, if you dare."), and the trap pulls the player into the Banished realm.
+**Outro (wave 100):** kept beat for beat in cyan and lavender: the Kraken approaches, opens the portal ("Follow me, if you dare."), and the trap pulls the player into the Banished realm. The portal has a lavender halo, swirling arcs and a gold rim so it reads on Punctum black; when it opens the scene recentres on it, since the trap wraps the ship in a strip round the origin.
 
 ### Boss QTE: Dragged Under
 

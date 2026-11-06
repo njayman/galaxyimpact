@@ -3106,6 +3106,28 @@ void drawGameplayWorld(const Game& game)
     {
         drawBlackHoleTwirl(game.run.blackhole.position, game.run.blackhole.influenceRadius,
                            game.run.blackHoleDust);
+        if (game.run.blackhole.isKrakenPortal)
+        {
+            // The way to the Banished realm: lit rim and swirling arcs so it reads on Punctum black.
+            const Vector2 c = game.run.blackhole.position;
+            const float r = game.run.blackhole.radius;
+            const auto t = static_cast<float>(GetTime());
+            const float pulse = 0.5F + 0.5F * std::sin(t * 3.0F);
+            for (int32_t g = 6; g >= 1; g--)
+            {
+                DrawCircleV(c, r * (1.0F + 0.25F * static_cast<float>(g)),
+                            Fade(Palette::PunctumHaze, 0.05F + 0.02F * pulse));
+            }
+            DrawCircleV(c, r, BLACK);
+            for (int32_t a = 0; a < 6; a++)
+            {
+                const float base = t * 90.0F + static_cast<float>(a) * 60.0F;
+                const float ar = r * (1.15F + 0.12F * static_cast<float>(a % 3));
+                DrawRing(c, ar, ar + 3.0F, base, base + 70.0F, 24,
+                         Fade(a % 2 == 0 ? Palette::PunctumHaze : Palette::Shield, 0.8F));
+            }
+            DrawRing(c, r - 2.0F, r + 2.0F + 2.0F * pulse, 0, 360, 64, Palette::PunctumAccent);
+        }
     }
 
     if (game.run.wormhole.active)

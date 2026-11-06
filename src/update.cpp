@@ -1009,11 +1009,20 @@ auto updateBossCutscene(Game& game, float deltaTime) -> bool
         {
             game.run.bossCutscenePhase = 3;
             game.run.bossCutsceneTimer = krakenOutroHoldDuration;
-            game.run.blackhole.position = game.run.krakenFleePos;
+            // The trap wraps the ship in a strip round the origin, so recentre the scene on the portal.
+            const Vector2 shift = Vector2Negate(game.run.krakenFleePos);
+            game.run.player.position = Vector2Add(game.run.player.position, shift);
+            kraken->position = Vector2Add(kraken->position, shift);
+            game.run.krakenFleePos = Vector2{};
+            game.run.blackhole.position = Vector2{};
             game.run.blackhole.radius = 60;
             game.run.blackhole.influenceRadius = 260;
             game.run.blackhole.active = true;
             game.run.blackhole.isKrakenPortal = true;
+            for (auto& dust : game.run.blackHoleDust)
+            {
+                dust.color = spawnBlackHoleDustParticle(game).color;
+            }
             game.run.punctumTrapActive = true;
             game.run.achievementToast = "Follow me, if you dare.";
             game.run.achievementToastTimer = krakenOutroHoldDuration;

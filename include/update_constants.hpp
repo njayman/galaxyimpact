@@ -711,7 +711,7 @@ constexpr float krakenOutroHoldDuration = 4.0F;
 constexpr float krakenOutroTwirlDuration = 2.0F;
 constexpr float krakenOutroApproachSpeed = 260.0F;
 constexpr float krakenOutroApproachStopDistance = 220.0F;
-constexpr float krakenOutroSideOffset = 260.0F;
+constexpr float krakenOutroSideOffset = 220.0F;
 constexpr float krakenOutroTwirlSpeedMult = 1.4F;
 
 constexpr float krakenLimbGrabAnimDuration = 1.5F;
