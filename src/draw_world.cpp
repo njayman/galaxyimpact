@@ -1445,23 +1445,11 @@ void drawEliteHazard(const EliteHazard& hazard, Color body)
     const Color auraColor =
         hazard.role == EliteHazardRole::Warlord ? Palette::Accent : Palette::Shield;
 
-    DrawCircleLines(static_cast<int32_t>(hazard.position.x),
-                    static_cast<int32_t>(hazard.position.y), EliteHazardConstants::auraRadius,
-                    Fade(auraColor, 0.12F));
-
-    for (int i = 0; i < 6; i++)
-    {
-        const float angle = static_cast<float>(i) * 60.0F * DEG2RAD;
-        const Vector2 tip = Vector2Add(
-            hazard.position, Vector2{.x = std::cos(angle) * (EliteHazardConstants::radius + 8),
-                                     .y = std::sin(angle) * (EliteHazardConstants::radius + 8)});
-        DrawLineEx(hazard.position, tip, 3, Fade(auraColor, 0.7F));
-    }
-
-    DrawCircleV(hazard.position, EliteHazardConstants::radius, body);
-    DrawCircleLines(static_cast<int32_t>(hazard.position.x),
-                    static_cast<int32_t>(hazard.position.y), EliteHazardConstants::radius,
-                    auraColor);
+    const bool warlord = hazard.role == EliteHazardRole::Warlord;
+    drawEliteHazardAura(hazard.position, EliteHazardConstants::auraRadius, auraColor, warlord ? 8.0F : -8.0F);
+    // A dark hull would vanish into the void: lift it a little toward its signal colour.
+    drawEliteHazardShape(hazard.role, hazard.position, EliteHazardConstants::radius,
+                         ColorLerp(body, auraColor, 0.18F), auraColor);
 
     const float healthFrac =
         static_cast<float>(hazard.health) / static_cast<float>(hazard.maxHealth);

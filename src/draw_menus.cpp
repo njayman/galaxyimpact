@@ -606,11 +606,10 @@ void drawBestiary(Game& game)
         game, "HAZARDS", y, scale, bestiaryHazardKindCount,
         [&](size_t i) { return bestiary.hazardKilled.at(i); },
         [](size_t i) { return hazardBestiaryName(static_cast<EliteHazardRole>(i)); },
-        [](size_t /*i*/, Vector2 c, float r, Color col)
+        [](size_t i, Vector2 c, float r, Color col)
         {
-            DrawCircleV(c, r, Palette::StructDark);
-            DrawCircleLines(static_cast<int32_t>(c.x), static_cast<int32_t>(c.y), r, col);
-            DrawPolyLines(c, 6, r * 1.3F, 0, Fade(col, 0.7F));
+            drawEliteHazardShape(static_cast<EliteHazardRole>(i), c, r * 0.85F,
+                                 ColorLerp(Palette::StructDark, col, 0.18F), col);
         },
         [](size_t i)
         {

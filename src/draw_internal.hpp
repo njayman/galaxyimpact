@@ -49,6 +49,8 @@ inline const Color wreckwormSlime = ColorLerp(Palette::RustbloomAccent, Palette:
 
 void drawTitle(const Game& game);
 void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float facingDeg, Color color, float seed = 0);
+void drawEliteHazardShape(EliteHazardRole role, Vector2 center, float radius, Color body, Color signal);
+void drawEliteHazardAura(Vector2 center, float radius, Color signal, float turn);
 void drawBossHull(BossShape shape, Vector2 center, Vector2 size, Color color);
 void drawShipSelect(const Game& game);
 void drawGameOver(const Game& game);

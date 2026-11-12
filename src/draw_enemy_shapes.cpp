@@ -361,4 +361,37 @@ void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float facing
     }
 }
 
+// Elite Hazards, in the same matte parts as the Enemies. The Warlord drives the swarm on: a
+// crown of spikes turning fast round a hard core. The Suppressor damps the ship's weapons: two
+// broken rings turning against each other, closing on a still core. `body` is the biome-tinted
+// hull colour, `signal` the role's colour.
+void drawEliteHazardShape(EliteHazardRole role, Vector2 center, float radius, Color body, Color signal)
+{
+    const auto t = static_cast<float>(GetTime());
+    const Frame still = frameAt(center, radius, 0);
+    if (role == EliteHazardRole::Warlord)
+    {
+        spikes(frameAt(center, radius * 1.05F, t * 1.6F), 8, 0.78F, signal);
+        regular(still, 6, 0.74F, body);
+        regular(frameAt(center, radius, t * -0.9F), 4, 0.4F, signal);
+        return;
+    }
+    facetRing(center, radius * 1.08F, radius * 1.28F, 8, t * 40.0F, signal, 2);
+    facetRing(center, radius * 0.8F, radius * 0.98F, 6, t * -60.0F, shade(signal, -0.3F), 3);
+    regular(still, 8, 0.7F, body);
+    DrawCircleV(center, radius * 0.26F, signal);
+}
+
+// The reach of a Hazard's aura: a slow ring of dashes, not a hard line.
+void drawEliteHazardAura(Vector2 center, float radius, Color signal, float turn)
+{
+    const auto t = static_cast<float>(GetTime());
+    constexpr int32_t dashes = 36;
+    for (int32_t i = 0; i < dashes; i += 2)
+    {
+        const float a0 = t * turn + static_cast<float>(i) * 360.0F / dashes;
+        DrawRing(center, radius - 1.5F, radius + 1.5F, a0, a0 + 360.0F / dashes, 4, Fade(signal, 0.22F));
+    }
+}
+
 } // namespace DrawDetail
