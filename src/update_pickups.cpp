@@ -49,6 +49,7 @@ void updatePickups(Game& game, float deltaTime)
                                        static_cast<size_t>(SkillType::PickupRadius))) *
                                    0.2F +
                                pickupRadiusPerLevel * static_cast<float>(game.run.level - 1);
+    const float pullRadius = magnetRadius * (1.0F + hoarderMagnet * ascension(game, AscensionType::Hoarder));
 
     for (auto& pickup : game.run.pickups)
     {
@@ -77,7 +78,7 @@ void updatePickups(Game& game, float deltaTime)
 
         // Danger is never pulled: the player has to fly into it.
         const bool pulled =
-            pickup.type != PickupType::Danger && (pickup.homing || dist <= magnetRadius);
+            pickup.type != PickupType::Danger && (pickup.homing || dist <= pullRadius);
         pickup.pull = std::clamp(
             pickup.pull + deltaTime * (pulled ? pickupPullRampUp : -pickupPullRampDown), 0.0F, 1.0F);
         if (pickup.pull > 0 && dist > 0)
@@ -99,7 +100,8 @@ void updatePickups(Game& game, float deltaTime)
 
             if (pickup.type == PickupType::XP)
             {
-                game.run.xp += pickup.value;
+                game.run.xp += static_cast<int>(std::lround(
+                    static_cast<float>(pickup.value) * (1.0F + bountyXp * ascension(game, AscensionType::Bounty))));
             }
             else
             {
@@ -120,7 +122,7 @@ void applyPickupEffect(Game& game, PickupType type, ElementType element, Element
         collectLifeOrb(game);
         break;
     case PickupType::Shield:
-        if (game.run.player.shieldStacks < currentShip(game).maxShieldStacks)
+        if (game.run.player.shieldStacks < maxShieldStacks(game))
         {
             game.run.player.shieldStacks++;
         }
@@ -292,6 +294,8 @@ auto demoSkillAllowed(const Game& game, SkillType id) -> bool
     return true;
 }
 
+auto rollAscensionChoices(const Game& game) -> std::vector<LevelUpChoice>;
+
 auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
 {
     const bool slotsFull = equippedSlotCount(game) >= weaponSlotCap(game);
@@ -315,12 +319,7 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
     std::vector<LevelUpChoice> choices;
     if (eligible.empty())
     {
-        choices = rollRewardChoices(game);
-
-        if (game.run.postCapDamageLevels < postCapDamageLevelsCap)
-        {
-            game.run.postCapDamageLevels++;
-        }
+        choices = rollAscensionChoices(game); // every skill is capped
     }
     else
     {
@@ -409,26 +408,57 @@ auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>
     return choices;
 }
 
-auto rollRewardChoices(const Game& game) -> std::vector<LevelUpChoice>
+auto ascensionCount(const Game& game, AscensionType type) -> int
 {
-    std::vector<size_t> picked;
-    while (picked.size() < 3 && picked.size() < pickupCatalog.size())
+    return game.run.ascensionStacks.at(static_cast<size_t>(type));
+}
+
+// Weighted stacks: 1 + f + f^2 + ..., so the tenth stack still counts, just barely.
+auto ascension(const Game& game, AscensionType type) -> float
+{
+    return (1.0F - std::pow(ascensionFalloff, static_cast<float>(ascensionCount(game, type)))) /
+           (1.0F - ascensionFalloff);
+}
+
+auto maxShieldStacks(const Game& game) -> int
+{
+    return currentShip(game).maxShieldStacks + ascensionCount(game, AscensionType::Bulwark);
+}
+
+void applyAscension(Game& game, AscensionType type)
+{
+    game.run.ascensionStacks.at(static_cast<size_t>(type))++;
+    if (type == AscensionType::GlassCore)
     {
-        const size_t idx = pickWeightedPickupIndex(game.run.waveNumber);
-        if (std::ranges::find(picked, idx) == picked.end())
+        game.run.player.maxHealth -= glassCoreHealthCost;
+        game.run.player.health = std::min(game.run.player.health, game.run.player.maxHealth);
+    }
+    playSFX(game, game.resources.sounds.menuConfirm);
+}
+
+// Three different Ascension passives; ones at their stack cap, or that the ship could not
+// survive (Glass Core near 1 max health), are left out.
+auto rollAscensionChoices(const Game& game) -> std::vector<LevelUpChoice>
+{
+    std::vector<AscensionType> pool;
+    for (size_t i = 0; i < ascensions.size(); i++)
+    {
+        const auto type = static_cast<AscensionType>(i);
+        const int cap = ascensions.at(i).maxStacks;
+        if ((cap > 0 && ascensionCount(game, type) >= cap) ||
+            (type == AscensionType::GlassCore && game.run.player.maxHealth - glassCoreHealthCost < 2.0F))
         {
-            picked.push_back(idx);
+            continue;
         }
+        pool.push_back(type);
     }
 
     std::vector<LevelUpChoice> choices;
-    for (const auto idx : picked)
+    while (choices.size() < 3 && !pool.empty())
     {
-        const auto& entry = pickupCatalog.at(idx);
-        choices.push_back(LevelUpChoice{.type = ChoiceType::Pickup,
-                                        .pickupType = entry.type,
-                                        .element = entry.element,
-                                        .mechanism = entry.mechanism});
+        const auto at = static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(pool.size()) - 1));
+        choices.push_back(LevelUpChoice{.type = ChoiceType::Ascension, .ascension = pool.at(at)});
+        pool.erase(pool.begin() + static_cast<std::ptrdiff_t>(at));
     }
     return choices;
 }
@@ -517,7 +547,8 @@ void applyEvolution(Game& game, WeaponType kind)
 void spawnPickup(Game& game, Vector2 position, int value, PickupType type, ElementType element,
                  ElementMechanism mechanism)
 {
-    const float lifetime = type == PickupType::XP ? xpPickupLifetime : bonusPickupLifetime;
+    const float lifetime = (type == PickupType::XP ? xpPickupLifetime : bonusPickupLifetime) *
+                           (1.0F + hoarderMagnet * ascension(game, AscensionType::Hoarder));
     game.run.pickups.push_back(Pickup{.position = position,
                                       .value = value,
                                       .type = type,

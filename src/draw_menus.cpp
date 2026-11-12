@@ -1016,6 +1016,15 @@ void drawLevelUp(const Game& game)
             }
             break;
         }
+        case ChoiceType::Ascension:
+        {
+            const auto& def = ascensions.at(static_cast<size_t>(choice.ascension));
+            const int stacks = game.run.ascensionStacks.at(static_cast<size_t>(choice.ascension));
+            name = stacks > 0 ? std::format("{} (x{})", def.name, stacks + 1) : std::string(def.name);
+            desc = def.description;
+            color = Palette::Charge;
+            break;
+        }
         case ChoiceType::Skill:
         default:
         {

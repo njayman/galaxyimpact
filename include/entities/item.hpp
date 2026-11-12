@@ -298,11 +298,50 @@ constexpr std::array<bool, static_cast<size_t>(WeaponType::Count)> weaponEvolves
     true,  true,  true,  true,  false, true,  false, false,
     false, false, false, false, false, false, false, true};
 
+// Ascension passives: offered at level-up once every skill is capped. Tied to no weapon; each
+// one is a trade. Stacks have diminishing weight (see ascension() in update_pickups.cpp).
+enum class AscensionType : std::uint8_t
+{
+    GlassCore,
+    HeavyRounds,
+    Thrusters,
+    Hoarder,
+    Bulwark,
+    NerveJunkie,
+    Bounty,
+
+    Count
+};
+
+struct Ascension
+{
+    std::string_view name;
+    std::string_view description;
+    int maxStacks; // 0 = endless
+};
+
+constexpr std::array<Ascension, static_cast<size_t>(AscensionType::Count)> ascensions{
+    Ascension{.name = "Glass Core", .description = "+15% damage.  Cost: -1 max health.", .maxStacks = 0},
+    Ascension{.name = "Heavy Rounds", .description = "+20% damage.  Cost: weapons fire 10% slower.", .maxStacks = 0},
+    Ascension{.name = "Overclocked Thrusters",
+              .description = "+10% move speed.  Cost: charges refill 15% slower.",
+              .maxStacks = 0},
+    Ascension{.name = "Hoarder",
+              .description = "+25% magnet radius, pickups last longer.  Cost: -10% damage.",
+              .maxStacks = 0},
+    Ascension{.name = "Bulwark", .description = "+1 shield stack.  Cost: -10% move speed.", .maxStacks = 3},
+    Ascension{.name = "Nerve Junkie",
+              .description = "Kills fill Nerve 30% faster.  Cost: every hit hurts 1 more.",
+              .maxStacks = 2},
+    Ascension{.name = "Bounty", .description = "+20% XP.  Cost: enemies move 10% faster.", .maxStacks = 0},
+};
+
 enum class ChoiceType : std::uint8_t
 {
     Skill,
     Evolve,
-    Pickup
+    Pickup,
+    Ascension
 };
 
 struct LevelUpChoice
@@ -313,6 +352,7 @@ struct LevelUpChoice
     PickupType pickupType = PickupType::Regen;
     ElementType element = ElementType::Static;
     ElementMechanism mechanism = ElementMechanism::Infusion;
+    AscensionType ascension = AscensionType::GlassCore;
 };
 
 enum class DamageSource : std::uint8_t

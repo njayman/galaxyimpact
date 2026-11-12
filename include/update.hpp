@@ -401,7 +401,11 @@ void collectLifeOrb(Game& game);
 auto equippedSlotCount(const Game& game) -> int;
 auto sampleDistinct(std::vector<SkillType> ids, int count) -> std::vector<SkillType>;
 auto rollLevelUpChoices(Game& game) -> std::vector<LevelUpChoice>;
-auto rollRewardChoices(const Game& game) -> std::vector<LevelUpChoice>;
+// Ascension passives: weighted stacks (diminishing) and raw stack count.
+auto ascension(const Game& game, AscensionType type) -> float;
+auto ascensionCount(const Game& game, AscensionType type) -> int;
+void applyAscension(Game& game, AscensionType type);
+auto maxShieldStacks(const Game& game) -> int;
 void applySkill(Game& game, SkillType id);
 void grantOrLevelWeapon(Game& game, WeaponType kind);
 void applyEvolution(Game& game, WeaponType kind);

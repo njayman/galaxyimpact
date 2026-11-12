@@ -147,9 +147,21 @@ constexpr float nerveStormSpreadDeg = 30.0F;
 constexpr int32_t nerveStormDamageDivisor = 6;
 constexpr float maxHealthPerLevel = 0.4F;
 constexpr float pickupRadiusPerLevel = 1.5F;
-constexpr float postCapDamageBonusPerLevel = 0.05F;
-
-constexpr int32_t postCapDamageLevelsCap = 20;
+// Ascension passives: what one full-weight stack is worth. A stack's weight falls off by
+// ascensionFalloff each time (1, 0.7, 0.49...), so gains and costs both level out.
+constexpr float ascensionFalloff = 0.7F;
+constexpr float glassCoreDamage = 0.15F;
+constexpr float glassCoreHealthCost = 1.0F;
+constexpr float heavyRoundsDamage = 0.20F;
+constexpr float heavyRoundsCooldown = 0.10F;
+constexpr float thrustersSpeed = 0.10F;
+constexpr float thrustersChargeRegen = 0.15F;
+constexpr float hoarderMagnet = 0.25F;
+constexpr float hoarderDamageCost = 0.10F;
+constexpr float bulwarkSpeedCost = 0.10F;
+constexpr float nerveJunkieGain = 0.30F;
+constexpr float bountyXp = 0.20F;
+constexpr float bountyEnemySpeed = 0.10F;
 constexpr float mineLifetime = 5.0F;
 constexpr float mineHomeSpeed = 3.5F;
 constexpr float mineSeekRadius = 320;

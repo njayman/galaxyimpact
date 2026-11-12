@@ -291,6 +291,8 @@ auto weaponCooldown(const Game& game, WeaponType kind, int32_t level, bool evolv
         }
     }
 
+    base *= 1.0F + heavyRoundsCooldown * ascension(game, AscensionType::HeavyRounds);
+
     if (base < 0.08F)
     {
         base = 0.08F;
@@ -303,7 +305,9 @@ auto weaponDamage(const Game& game, int32_t level) -> int32_t
     auto dmg = static_cast<float>(baseBulletDamage + level * 2);
     dmg *= 1 + 0.15F * static_cast<float>(
                            game.run.skillLevels.at(static_cast<size_t>(SkillType::Damage)));
-    dmg *= 1 + postCapDamageBonusPerLevel * static_cast<float>(game.run.postCapDamageLevels);
+    dmg *= 1 + glassCoreDamage * ascension(game, AscensionType::GlassCore) +
+           heavyRoundsDamage * ascension(game, AscensionType::HeavyRounds) -
+           hoarderDamageCost * ascension(game, AscensionType::Hoarder);
     dmg *= playerConstant(game);
     dmg *= currentShip(game).damageMult;
     if (game.run.player.overchargeTimer > 0)

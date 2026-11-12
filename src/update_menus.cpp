@@ -356,6 +356,9 @@ auto updateLevelUp(Game& game) -> bool
         case ChoiceType::Pickup:
             applyPickupEffect(game, choice.pickupType, choice.element, choice.mechanism);
             break;
+        case ChoiceType::Ascension:
+            applyAscension(game, choice.ascension);
+            break;
         case ChoiceType::Skill:
         default:
             applySkill(game, choice.skill);

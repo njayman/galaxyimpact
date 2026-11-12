@@ -24,7 +24,7 @@ auto nerveFrac(const Game& game) -> float
 
 void gainNerve(Game& game)
 {
-    game.run.player.nerve += nerveKillGain;
+    game.run.player.nerve += nerveKillGain * (1.0F + nerveJunkieGain * ascension(game, AscensionType::NerveJunkie));
     if (game.run.player.nerve > UpdateConstants::nerveMax)
     {
         game.run.player.nerve = UpdateConstants::nerveMax;
@@ -129,7 +129,9 @@ void damagePlayer(Game& game, int32_t amount)
         return;
     }
 
-    const float reduced = std::max(1.0F, static_cast<float>(amount) - currentShip(game).armor);
+    const float reduced =
+        std::max(1.0F, static_cast<float>(amount + ascensionCount(game, AscensionType::NerveJunkie)) -
+                           currentShip(game).armor);
     game.run.player.health -= reduced;
     game.run.player.immunityTimer = 1.0F;
 
@@ -304,7 +306,9 @@ void updatePlayerMovement(Game& game, float deltaTime)
     }
     else
     {
-        float effectiveSpeed = game.run.player.speed;
+        float effectiveSpeed = game.run.player.speed *
+                               (1.0F + thrustersSpeed * ascension(game, AscensionType::Thrusters) -
+                                bulwarkSpeedCost * ascension(game, AscensionType::Bulwark));
         if (inBlackHole)
         {
             effectiveSpeed -= blackHoleSlow;
@@ -644,7 +648,8 @@ void updateAbilityCharges(Game& game, float deltaTime)
     }
     if (game.run.player.charges < UpdateConstants::maxCharges)
     {
-        game.run.player.chargeRegenTimer -= deltaTime;
+        game.run.player.chargeRegenTimer -=
+            deltaTime / (1.0F + thrustersChargeRegen * ascension(game, AscensionType::Thrusters));
         if (game.run.player.chargeRegenTimer <= 0)
         {
             game.run.player.charges++;

@@ -218,7 +218,7 @@ struct GameplayState
     std::vector<Weapon> weapons;
     std::array<int, static_cast<size_t>(SkillType::Count)> skillLevels;
     std::vector<LevelUpChoice> pendingChoices;
-    int postCapDamageLevels;
+    std::array<int, static_cast<size_t>(AscensionType::Count)> ascensionStacks{};
     DamageMeter damageMeter;
     DamageMeter damageMeterDisplay;
     float damageMeterHoldTimer;

@@ -303,7 +303,7 @@ void resetRun(Game& game)
     game.run.skillLevels.fill(0);
     game.run.skillLevels.at(
         static_cast<size_t>(weaponGrantSkill.at(static_cast<size_t>(ship.defaultWeapon)))) = 1;
-    game.run.postCapDamageLevels = 0;
+    game.run.ascensionStacks = {};
     game.run.damageMeter = DamageMeter{};
     game.run.damageMeterDisplay = DamageMeter{};
     game.run.damageMeterHoldTimer = 0;

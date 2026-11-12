@@ -973,6 +973,7 @@ void updateEnemies(Game& game, float deltaTime)
         {
             speedMod *= warlordSpeedBuff;
         }
+        speedMod *= 1.0F + bountyEnemySpeed * ascension(game, AscensionType::Bounty);
 
         if (enemy.debuffFreeze)
         {

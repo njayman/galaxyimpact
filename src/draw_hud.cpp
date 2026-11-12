@@ -443,7 +443,7 @@ auto drawVitals(const Game& game, int32_t x, int32_t y) -> int32_t
         }
     }
     px += 6;
-    for (int32_t i = 0; i < currentShip(game).maxShieldStacks; i++, px += 11)
+    for (int32_t i = 0; i < maxShieldStacks(game); i++, px += 11)
     {
         const bool full = i < player.shieldStacks;
         const Vector2 a{.x = px - 3.5F, .y = py - 2.5F};

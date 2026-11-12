@@ -76,7 +76,7 @@ void sandboxClearBoard(Game& game)
 void sandboxFullHeal(Game& game)
 {
     game.run.player.health = game.run.player.maxHealth;
-    game.run.player.shieldStacks = currentShip(game).maxShieldStacks;
+    game.run.player.shieldStacks = maxShieldStacks(game);
     game.run.player.nerve = UpdateConstants::nerveMax;
 }
 
