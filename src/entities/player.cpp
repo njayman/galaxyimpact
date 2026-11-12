@@ -1331,6 +1331,8 @@ void updatePlayerBuffs(Game& game, float deltaTime)
     {
         player.overchargeTimer = std::max(0.0F, player.overchargeTimer - deltaTime);
     }
+    player.blindTimer = std::max(0.0F, player.blindTimer - deltaTime);
+    player.frenzyTimer = std::max(0.0F, player.frenzyTimer - deltaTime);
 
     if (player.overdriveTimer > 0)
     {

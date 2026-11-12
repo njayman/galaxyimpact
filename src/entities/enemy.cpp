@@ -69,6 +69,97 @@ auto activeRangedEnemyCount(const Game& game) -> int
     return count;
 }
 
+// The far end of a Hacker's ray: through its aim point and a little beyond.
+auto hackRayEnd(const Enemy& enemy) -> Vector2
+{
+    const Vector2 toAim = Vector2Subtract(enemy.hackAim, enemy.position);
+    const float len = Vector2Length(toAim);
+    if (len < 1.0F)
+    {
+        return Vector2Add(enemy.position, Vector2{.x = 1.0F, .y = 0});
+    }
+    return Vector2Add(enemy.position, Vector2Scale(toAim, (len + hackRayOvershoot) / len));
+}
+
+// Hacker: glides to a spot far from the ship and reaches a ray out to it. The ray's aim point
+// trails the ship slower than the ship flies, so moving shakes it off and sitting still does not.
+// hackExposureTime inside the ray switches one weapon off for hackDuration.
+static void updateHacker(Game& game, Enemy& enemy, float deltaTime)
+{
+    const Vector2 ship = game.run.player.position;
+
+    const Vector2 toSpot = Vector2Subtract(enemy.repositionTarget, enemy.position);
+    const float spotDist = Vector2Length(toSpot);
+    const float spotFromShip = Vector2Distance(enemy.repositionTarget, ship);
+    if (spotDist < 8.0F || spotFromShip < 480.0F || spotFromShip > 820.0F)
+    {
+        const float a = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
+        const auto d = static_cast<float>(GetRandomValue(560, 740));
+        enemy.repositionTarget = Vector2Add(ship, Vector2{.x = std::cos(a) * d, .y = std::sin(a) * d});
+    }
+    else
+    {
+        enemy.position = Vector2Add(
+            enemy.position,
+            Vector2Scale(toSpot, std::min(1.0F, sniperRepositionSpeed * deltaTime * frameScale / spotDist)));
+    }
+
+    const bool anyWeaponOn = std::any_of(game.run.weapons.begin(), game.run.weapons.end(),
+                                         [](const auto& w) { return !w.disabled; });
+    if (game.run.weaponDowngrade.has_value() || !anyWeaponOn ||
+        Vector2Distance(enemy.position, ship) > hackRange)
+    {
+        enemy.hackRayOn = false;
+        enemy.hackExposure = 0;
+        return;
+    }
+    if (!enemy.hackRayOn)
+    {
+        enemy.hackRayOn = true;
+        enemy.hackAim = enemy.position; // the ray reaches out from the Hacker: that is its tell
+    }
+
+    const Vector2 toShip = Vector2Subtract(ship, enemy.hackAim);
+    const float aimDist = Vector2Length(toShip);
+    if (aimDist > 0)
+    {
+        const float speed = hackAimSpeed * (aimDist > 250.0F ? 2.5F : 1.0F); // catch up, then trail
+        enemy.hackAim =
+            Vector2Add(enemy.hackAim, Vector2Scale(toShip, std::min(1.0F, speed * deltaTime / aimDist)));
+    }
+
+    const Vector2 rayEnd = hackRayEnd(enemy);
+    const Vector2 ray = Vector2Subtract(rayEnd, enemy.position);
+    const float along = std::clamp(
+        Vector2DotProduct(Vector2Subtract(ship, enemy.position), ray) / Vector2LengthSqr(ray), 0.0F, 1.0F);
+    const bool exposed =
+        Vector2Distance(ship, Vector2Add(enemy.position, Vector2Scale(ray, along))) <= hackRayHalfWidth;
+    enemy.hackExposure =
+        std::max(0.0F, enemy.hackExposure + (exposed ? deltaTime : -hackExposureDecay * deltaTime));
+    if (enemy.hackExposure < hackExposureTime)
+    {
+        return;
+    }
+
+    std::vector<Weapon*> live;
+    for (auto& w : game.run.weapons)
+    {
+        if (!w.disabled)
+        {
+            live.push_back(&w);
+        }
+    }
+    Weapon& weapon = *live.at(static_cast<size_t>(GetRandomValue(0, static_cast<int32_t>(live.size()) - 1)));
+    weapon.disabled = true;
+    game.run.weaponDowngrade = WeaponDowngrade{.type = weapon.type, .timer = hackDuration};
+    game.run.achievementToast = std::string(effectiveWeaponName(weapon)) + " hacked!";
+    game.run.achievementToastTimer = 3.0F;
+    triggerShake(game, 6, 0.25F);
+    playSFX(game, game.resources.sounds.explosion);
+    enemy.hackRayOn = false;
+    enemy.hackExposure = 0;
+}
+
 void spawnEnemy(Game& game)
 {
 
@@ -143,6 +234,13 @@ void spawnEnemyAt(Game& game, int kindIndex, Vector2 pos)
     if (static_cast<int>(game.run.enemies.size()) >= UpdateConstants::maxEnemies)
     {
         return;
+    }
+
+    if (kindIndex == enemyKindHacker &&
+        std::any_of(game.run.enemies.begin(), game.run.enemies.end(),
+                    [](const Enemy& e) { return e.active && e.kind == enemyKindHacker; }))
+    {
+        return; // one Hacker at a time, whoever asks
     }
 
     const auto& kind = enemyKinds.at(static_cast<size_t>(kindIndex));
@@ -871,6 +969,10 @@ void updateEnemies(Game& game, float deltaTime)
                 break;
             }
         }
+        if (game.run.player.frenzyTimer > 0)
+        {
+            speedMod *= warlordSpeedBuff;
+        }
 
         if (enemy.debuffFreeze)
         {
@@ -1075,6 +1177,11 @@ void updateEnemies(Game& game, float deltaTime)
             }
             case EnemyPattern::Turret:
             {
+                if (enemy.kind == enemyKindHacker)
+                {
+                    updateHacker(game, enemy, deltaTime);
+                    break;
+                }
                 if (enemy.kind != enemyKindSniper)
                 {
                     updateTurretPattern(game, enemy, deltaTime);

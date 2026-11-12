@@ -59,6 +59,8 @@ class Pickup
     bool active;
     float lifetime;
     float maxLifetime;
+    float pull = 0;      // 0..1 magnet ramp: eases the flight in and out
+    bool homing = false; // Magnet Pulse: flies to the ship from anywhere
 };
 
 constexpr std::array<std::string_view, static_cast<size_t>(ElementType::Count)> elementNames{
@@ -140,12 +142,11 @@ class Weapon
     bool disabled = false;
 };
 
+// A weapon the Hacker switched off; it comes back when the timer runs out.
 class WeaponDowngrade
 {
   public:
     WeaponType type;
-    bool unevolved = false;
-    bool disabled = false;
     float timer;
 };
 

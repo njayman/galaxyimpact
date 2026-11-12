@@ -45,6 +45,9 @@ class Player
 
     float overdriveTimer;
 
+    float blindTimer = 0;  // Danger pickup: view shrunk to a circle
+    float frenzyTimer = 0; // Danger pickup: enemies sped up
+
     float burnDps = 0;
     float burnDamageAccum = 0;
     float burnRefreshTimer = 0;

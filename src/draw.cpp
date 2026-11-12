@@ -1540,7 +1540,7 @@ auto pickupChoiceDescription(PickupType type, ElementType element, ElementMechan
     case PickupType::Regen:
         return "Heals gradually for a while.";
     case PickupType::MagnetPulse:
-        return "Instantly pulls every pickup on screen to you.";
+        return "Pulls every pickup on the map to you.";
     case PickupType::Overcharge:
         return "+50% weapon damage for a while.";
     case PickupType::SecondWind:
@@ -3210,6 +3210,18 @@ void drawGameplayWorld(const Game& game)
             p.lifetime <= UpdateConstants::pickupExpiryWarning
                 ? 0.35F + 0.65F * (0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 12.0F))
                 : 1.0F;
+        if (p.type == PickupType::Danger)
+        {
+            continue; // drawn last, over everything (see the end of this function)
+        }
+        if (p.pull > 0)
+        {
+            // Magnet flight: a streak trailing away from the ship, longer as the pull ramps up.
+            const Vector2 away = Vector2Normalize(Vector2Subtract(p.position, game.run.player.position));
+            const float len = (p.homing ? 34.0F : 16.0F) * p.pull * p.pull;
+            DrawLineEx(p.position, Vector2Add(p.position, Vector2Scale(away, len)), 2.0F,
+                       Fade(p.type == PickupType::XP ? Palette::Charge : Palette::Crit, 0.45F * alpha * p.pull));
+        }
         drawPickupIcon(p.type, p.element, p.position, alpha);
     }
 
@@ -3618,6 +3630,41 @@ void drawGameplayWorld(const Game& game)
         drawText(game, text.c_str(), static_cast<int32_t>(number.position.x - size.x / 2),
                  static_cast<int32_t>(number.position.y - size.y / 2), fontSize,
                  Fade(big ? Palette::Crit : Palette::StructLight, alpha));
+    }
+
+    // Danger pickups go over the swarm, each with a beacon of rings so it reads in a crowd.
+    for (const auto& p : game.run.pickups)
+    {
+        if (!p.active || p.type != PickupType::Danger)
+        {
+            continue;
+        }
+        const auto now = static_cast<float>(GetTime());
+        for (int32_t k = 0; k < 2; k++)
+        {
+            const float phase = std::fmod(now * 0.9F + static_cast<float>(k) * 0.5F, 1.0F);
+            DrawRing(p.position, 14.0F + 30.0F * phase, 16.5F + 30.0F * phase, 0, 360, 32,
+                     Fade(Palette::Accent, 0.8F * (1.0F - phase)));
+        }
+        DrawCircleV(p.position, 15.0F, Fade(Palette::Void, 0.85F));
+        drawPickupIcon(p.type, p.element, p.position, 1.0F);
+    }
+
+    if (game.run.player.blindTimer > 0)
+    {
+        // Blind: the dark closes in to a circle round the ship, feathered over a few rings.
+        const float t = game.run.player.blindTimer;
+        const float a = 0.97F * std::min({1.0F, t / 0.6F, (blindDuration - t) / 0.4F + 0.05F});
+        constexpr int32_t feather = 6;
+        constexpr float band = 14.0F;
+        for (int32_t k = 0; k < feather; k++)
+        {
+            const float inner = blindRadius + static_cast<float>(k) * band;
+            DrawRing(game.run.player.position, inner, inner + band, 0, 360, 64,
+                     Fade(Palette::Void, a * static_cast<float>(k + 1) / static_cast<float>(feather + 1)));
+        }
+        DrawRing(game.run.player.position, blindRadius + static_cast<float>(feather) * band, 6000.0F, 0, 360, 64,
+                 Fade(Palette::Void, a));
     }
 
     if (game.run.punctumThunderFlashTimer > 0)
@@ -4187,6 +4234,23 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     }
 
     const auto t = static_cast<float>(GetTime());
+    if (enemy.kind == enemyKindHacker && enemy.hackRayOn)
+    {
+        // The ray: a soft wide glow with a bright core, both swelling as the hack fills; a ring
+        // round the ship fills with the exposure.
+        const float fill = std::clamp(enemy.hackExposure / hackExposureTime, 0.0F, 1.0F);
+        const Vector2 end = hackRayEnd(enemy);
+        const float flicker = 0.75F + 0.25F * std::sin(t * 30.0F);
+        DrawLineEx(enemy.position, end, hackRayHalfWidth * (0.8F + 1.2F * fill), Fade(Palette::Heal, 0.16F + 0.2F * fill));
+        DrawLineEx(enemy.position, end, 2.0F + 5.0F * fill, Fade(ColorLerp(Palette::Heal, WHITE, 0.7F), (0.7F + 0.3F * fill) * flicker));
+        if (fill > 0)
+        {
+            const Vector2 ship = game.run.player.position;
+            const float r = game.run.player.radius + 14.0F;
+            DrawRing(ship, r, r + 3.0F, 0, 360, 32, Fade(Palette::StructDark, 0.7F));
+            DrawRing(ship, r, r + 3.0F, -90, -90 + 360 * fill, 32, ColorLerp(Palette::Heal, Palette::Accent, fill));
+        }
+    }
     if (kind.pattern == EnemyPattern::Charge && enemy.telegraphing)
     {
         // Sniper-style aim: a line through the player that thickens and blinks faster to the lock.
@@ -7146,6 +7210,21 @@ void drawStatusRow(const Game& game, int32_t x, int32_t y)
             .label = std::format("Overdrive {:.0f}s", std::ceil(player.overdriveTimer))});
     }
 
+    if (player.blindTimer > 0)
+    {
+        entries.push_back(StatusEntry{.iconKind = StatusIconKind::Exclaim,
+                                      .color = Palette::Accent,
+                                      .fracRemaining = player.blindTimer / blindDuration,
+                                      .label = std::format("Blinded {:.0f}s", std::ceil(player.blindTimer))});
+    }
+    if (player.frenzyTimer > 0)
+    {
+        entries.push_back(StatusEntry{.iconKind = StatusIconKind::Exclaim,
+                                      .color = Palette::Accent,
+                                      .fracRemaining = player.frenzyTimer / frenzyDuration,
+                                      .label = std::format("Enemy frenzy {:.0f}s", std::ceil(player.frenzyTimer))});
+    }
+
     if (game.run.weaponDowngrade.has_value())
     {
         const auto& downgrade = *game.run.weaponDowngrade;
@@ -7153,8 +7232,8 @@ void drawStatusRow(const Game& game, int32_t x, int32_t y)
             StatusEntry{.iconKind = StatusIconKind::Weapon,
                         .color = Palette::Accent,
                         .weaponType = downgrade.type,
-                        .fracRemaining = downgrade.timer / dangerDowngradeDuration,
-                        .label = std::format("{} stolen {:.0f}s", weaponDisplayName(downgrade.type),
+                        .fracRemaining = downgrade.timer / hackDuration,
+                        .label = std::format("{} hacked {:.0f}s", weaponDisplayName(downgrade.type),
                                              std::ceil(downgrade.timer))});
     }
 
@@ -7382,10 +7461,14 @@ void drawPickupIcon(PickupType type, ElementType element, Vector2 position, floa
     case PickupType::Danger:
     {
         const float pulse = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 10.0F);
-        DrawPoly(position, 5, 9, static_cast<float>(GetTime()) * -140.0F,
-                 Fade(Palette::Void, alpha));
-        DrawPolyLines(position, 5, 10, static_cast<float>(GetTime()) * -140.0F,
-                      Fade(Palette::Crit, alpha * pulse));
+        DrawPoly(position, 5, 12, static_cast<float>(GetTime()) * -140.0F,
+                 Fade(Palette::Accent, alpha));
+        DrawPolyLines(position, 5, 13, static_cast<float>(GetTime()) * -140.0F,
+                      Fade(Palette::Crit, alpha * (0.5F + 0.5F * pulse)));
+        DrawRectangleV(Vector2{.x = position.x - 1.5F, .y = position.y - 6.0F}, Vector2{.x = 3.0F, .y = 7.0F},
+                       Fade(Palette::Crit, alpha));
+        DrawRectangleV(Vector2{.x = position.x - 1.5F, .y = position.y + 3.0F}, Vector2{.x = 3.0F, .y = 3.0F},
+                       Fade(Palette::Crit, alpha));
         break;
     }
     default:

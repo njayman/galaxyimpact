@@ -139,20 +139,8 @@ void updateWeaponDowngrade(Game& game, float deltaTime)
     {
         if (weapon.type == downgrade.type)
         {
-            if (downgrade.unevolved)
-            {
-                weapon.evolved = true;
-            }
-            else if (downgrade.disabled)
-            {
-                weapon.disabled = false;
-            }
-            else
-            {
-                weapon.level += 1;
-            }
-            game.run.achievementToast =
-                std::string(effectiveWeaponName(weapon)) + " restored!";
+            weapon.disabled = false;
+            game.run.achievementToast = std::string(effectiveWeaponName(weapon)) + " restored!";
             game.run.achievementToastTimer = 3.0F;
             break;
         }
@@ -4119,11 +4107,22 @@ void updatePickups(Game& game, float deltaTime)
         const Vector2 toPlayer = Vector2Subtract(game.run.player.position, pickup.position);
         const float dist = Vector2Length(toPlayer);
 
-        if (dist <= magnetRadius && dist > 0)
+        // Danger is never pulled: the player has to fly into it.
+        const bool pulled =
+            pickup.type != PickupType::Danger && (pickup.homing || dist <= magnetRadius);
+        pickup.pull = std::clamp(
+            pickup.pull + deltaTime * (pulled ? pickupPullRampUp : -pickupPullRampDown), 0.0F, 1.0F);
+        if (pickup.pull > 0 && dist > 0)
         {
-            const Vector2 pull = Vector2Scale(Vector2Normalize(toPlayer), pickupMagnetSpeed);
-            pickup.position =
-                Vector2Add(pickup.position, Vector2Scale(pull, deltaTime * frameScale));
+            const float ease = pickup.pull * pickup.pull;
+            float speed = pickupMagnetSpeed * frameScale *
+                          (pickupMagnetMinFrac + (pickupMagnetMaxFrac - pickupMagnetMinFrac) * ease);
+            if (pickup.homing)
+            {
+                speed = std::max(speed, dist * pickupHomingRate * ease);
+            }
+            pickup.position = Vector2Add(
+                pickup.position, Vector2Scale(toPlayer, std::min(1.0F, speed * deltaTime / dist)));
         }
 
         if (dist <= game.run.player.radius + 6)
@@ -4171,15 +4170,11 @@ void applyPickupEffect(Game& game, PickupType type, ElementType element, Element
     case PickupType::MagnetPulse:
         for (auto& other : game.run.pickups)
         {
-            if (other.active && &other != except)
+            if (other.active && &other != except && other.type != PickupType::Danger)
             {
-                const Vector2 toPlayer = Vector2Subtract(game.run.player.position, other.position);
-                if (Vector2Length(toPlayer) > magnetPulseSnapDistance)
-                {
-                    other.position = Vector2Subtract(
-                        game.run.player.position,
-                        Vector2Scale(Vector2Normalize(toPlayer), magnetPulseSnapDistance));
-                }
+                other.homing = true;
+                // long enough for the flight in, however close it was to expiring
+                other.lifetime = std::max(other.lifetime, 4.0F);
             }
         }
         playSFX(game, game.resources.sounds.menuConfirm);
@@ -4199,35 +4194,19 @@ void applyPickupEffect(Game& game, PickupType type, ElementType element, Element
         playSFX(game, game.resources.sounds.menuConfirm);
         break;
     case PickupType::Danger:
-
-        if (!game.run.weaponDowngrade.has_value() && !game.run.weapons.empty())
+        if (GetRandomValue(0, 1) == 0)
         {
-            auto& weapon = game.run.weapons.at(static_cast<size_t>(
-                GetRandomValue(0, static_cast<int32_t>(game.run.weapons.size()) - 1)));
-
-            WeaponDowngrade downgrade{.type = weapon.type, .timer = dangerDowngradeDuration};
-            if (weapon.evolved)
-            {
-                weapon.evolved = false;
-                downgrade.unevolved = true;
-            }
-            else if (weapon.level > 1)
-            {
-                weapon.level -= 1;
-            }
-            else
-            {
-                weapon.disabled = true;
-                downgrade.disabled = true;
-            }
-
-            game.run.achievementToast =
-                std::string(effectiveWeaponName(weapon)) + " stolen!";
-            game.run.achievementToastTimer = 3.0F;
-            game.run.weaponDowngrade = downgrade;
-            triggerShake(game, 6, 0.25F);
-            playSFX(game, game.resources.sounds.explosion);
+            game.run.player.blindTimer = blindDuration;
+            game.run.achievementToast = "Blinded!";
         }
+        else
+        {
+            game.run.player.frenzyTimer = frenzyDuration;
+            game.run.achievementToast = "Enemy frenzy!";
+        }
+        game.run.achievementToastTimer = 3.0F;
+        triggerShake(game, 6, 0.25F);
+        playSFX(game, game.resources.sounds.explosion);
         break;
     case PickupType::Count:
         break;

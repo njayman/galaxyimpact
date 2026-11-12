@@ -15,7 +15,7 @@
 namespace
 {
 
-constexpr size_t sandboxPickupCount = pickupCatalog.size() + 1;
+constexpr size_t sandboxPickupCount = pickupCatalog.size() + 2; // XP, the catalog, Danger
 
 auto sandboxPickupOption(int32_t index) -> PickupCatalogEntry
 {
@@ -23,6 +23,11 @@ auto sandboxPickupOption(int32_t index) -> PickupCatalogEntry
     {
         return PickupCatalogEntry{PickupType::XP, ElementType::Static, ElementMechanism::Infusion,
                                   "XP"};
+    }
+    if (static_cast<size_t>(index) > pickupCatalog.size())
+    {
+        return PickupCatalogEntry{PickupType::Danger, ElementType::Static, ElementMechanism::Infusion,
+                                  "Danger"};
     }
     return pickupCatalog.at(static_cast<size_t>(index) - 1);
 }

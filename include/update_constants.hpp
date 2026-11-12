@@ -80,8 +80,27 @@ constexpr float overchargeDamageMult = 1.5F;
 constexpr float flameParticleLife = 0.35F;
 constexpr float flameParticleRadius = 16.0F;
 constexpr int32_t flameParticlesPerConePerSecond = 40;
-constexpr float magnetPulseSnapDistance = 40.0F;
-constexpr float dangerDowngradeDuration = 10.0F;
+// Pickup magnet: the pull eases in over ~0.4 s and out faster; a Magnet Pulse flight covers the
+// remaining distance at pickupHomingRate of it a second, so far pickups arrive with near ones.
+constexpr float pickupPullRampUp = 2.5F;
+constexpr float pickupPullRampDown = 5.0F;
+constexpr float pickupMagnetMinFrac = 0.25F;
+constexpr float pickupMagnetMaxFrac = 2.4F;
+constexpr float pickupHomingRate = 3.5F;
+// Danger pickup: one of two debuffs. Blind shrinks the view to a circle round the ship; Frenzy
+// gives every enemy the Warlord speed buff.
+constexpr float blindDuration = 8.0F;
+constexpr float blindRadius = 300.0F;
+constexpr float frenzyDuration = 8.0F;
+// Hacker: one at a time, far out. Its ray trails the ship; hackExposureTime in the ray switches
+// a weapon off for hackDuration.
+constexpr float hackDuration = 10.0F;
+constexpr float hackExposureTime = 2.5F;
+constexpr float hackExposureDecay = 0.6F;  // exposure lost a second out of the ray
+constexpr float hackAimSpeed = 200.0F;     // px a second; the ship moves 300
+constexpr float hackRayHalfWidth = 26.0F;
+constexpr float hackRayOvershoot = 160.0F;
+constexpr float hackRange = 900.0F;
 
 constexpr int32_t dangerPickupChance = 2;
 

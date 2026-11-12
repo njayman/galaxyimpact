@@ -106,7 +106,10 @@ class Enemy
     int32_t patternKind = 0;  // turret: 0 spiral, 1 rings
     int32_t chainLeft = 0;    // dasher: lunges left in this chain
     float dropDist = 0;       // bomber: distance since the last dropped bomb
-    Vector2 repositionTarget{}; // sniper: where it glides to between shots
+    Vector2 repositionTarget{}; // sniper, hacker: where it glides to between shots
+    bool hackRayOn = false;     // hacker: the ray is out
+    Vector2 hackAim{};          // hacker: the point its ray trails the ship with
+    float hackExposure = 0;     // hacker: seconds the ship has sat in the ray
 
     float fadeAlpha = 1.0F;
 
@@ -195,7 +198,9 @@ constexpr int enemyKindCarrionDrone = 26;
 
 constexpr int enemyKindMeteorChunk = 33;
 
-constexpr std::array<EnemyKind, 35> enemyKinds{
+constexpr int enemyKindHacker = 35;
+
+constexpr std::array<EnemyKind, 36> enemyKinds{
     EnemyKind{.name = "Drifter",
               .radius = 14,
               .health = 10,
@@ -633,4 +638,15 @@ constexpr std::array<EnemyKind, 35> enemyKinds{
               .minWave = 76,
               .biomeExclusive = true,
               .biome = Biome::Punctum},
+    // Never more than one alive (see spawnEnemyAt). Keeps far out and holds a ray on the ship.
+    EnemyKind{.name = "Hacker",
+              .radius = 15,
+              .health = 30,
+              .speed = 0,
+              .contactDamage = 1,
+              .score = 30,
+              .pattern = EnemyPattern::Turret,
+              .color = Palette::Heal,
+              .shape = EnemyShape::Diamond,
+              .minWave = 12},
 };

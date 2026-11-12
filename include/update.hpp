@@ -174,6 +174,7 @@ void fireNerveBall(Game& game);
 void sniperLineHit(Game& game, Vector2 start, Vector2 end, int32_t dmg);
 void updateDashWedgesAndBlasts(Game& game, float deltaTime);
 void updateSniperShots(Game& game, float deltaTime);
+auto hackRayEnd(const Enemy& enemy) -> Vector2;
 void updateOrbitBladeContact(Game& game, float deltaTime);
 void updateOrbitBladeLaunch(Game& game, float deltaTime);
 void updatePiercingProjectiles(Game& game, float deltaTime,
