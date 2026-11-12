@@ -6,8 +6,18 @@ set(GALAXYIMPACT_SOURCES
     src/bestiary.cpp
     src/democonfig.cpp
     src/draw.cpp
+    src/draw_background.cpp
+    src/draw_boss.cpp
+    src/draw_hud.cpp
+    src/draw_menus.cpp
+    src/draw_world.cpp
     src/entities/boss.cpp
+    src/entities/boss_banished.cpp
+    src/entities/boss_beltbreaker.cpp
     src/entities/boss_director.cpp
+    src/entities/boss_kraken.cpp
+    src/entities/boss_slagmaw.cpp
+    src/entities/boss_wreckworm.cpp
     src/entities/enemy.cpp
     src/entities/player.cpp
     src/entities/space.cpp
@@ -29,4 +39,8 @@ set(GALAXYIMPACT_SOURCES
     src/ships/ranger.cpp
     src/sound.cpp
     src/update.cpp
+    src/update_menus.cpp
+    src/update_pickups.cpp
+    src/update_weapons.cpp
+    src/update_world.cpp
 )
