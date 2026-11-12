@@ -163,6 +163,29 @@ void windowText(const Game& game, const char* text, int32_t centerX, int32_t y, 
     windowText(game.resources.font, game, text, centerX, y, size, color);
 }
 
+// Pause screen: the Ascension passives held this run, left of the menu. Nothing until one is taken.
+void drawAscensionList(const Game& game)
+{
+    const int32_t centerX = game.resources.windowWidth / 5;
+    int32_t y = MenuLayout::pausedMenuY;
+    for (size_t i = 0; i < ascensions.size(); i++)
+    {
+        const int stacks = game.run.ascensionStacks.at(i);
+        if (stacks <= 0)
+        {
+            continue;
+        }
+        if (y == MenuLayout::pausedMenuY)
+        {
+            windowText(game, "ASCENSION", centerX, y, 22, Palette::Accent);
+            y += 38;
+        }
+        windowText(game, std::format("{}  x{}", ascensions.at(i).name, stacks).c_str(), centerX, y, 18,
+                   Palette::Charge);
+        y += 28;
+    }
+}
+
 void drawTitle(const Game& game)
 {
     applyGuiScale(game);
@@ -645,6 +668,7 @@ auto drawGame(Game& game) -> void
         drawMenu(game, "PAUSED",
                  {"Resume", "Achievements", "Bestiary", "Settings", "New Game", "Exit"},
                  MenuLayout::pausedMenuY);
+        drawAscensionList(game);
         break;
     case GameState::LEVEL_UP:
         drawOverlay(game);
