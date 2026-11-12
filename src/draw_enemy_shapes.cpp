@@ -2,9 +2,9 @@
 
 #include <span>
 
-// Enemy silhouettes. Each one is a unit-space outline (+x is forward) filled as a fan of facets
-// lit from the upper left, the way the asteroids and planets are, plus a few parts that say what
-// the Enemy does: a barrel on what shoots, pods on what spawns, spikes on what blows up.
+// Enemy silhouettes. Each one is a unit-space outline (+x is forward), filled flat and matte with
+// no outline, plus a few parts that say what the Enemy does: a barrel on what shoots, pods on what
+// spawns, spikes on what blows up. Only ring plates and spikes carry light and shade.
 
 namespace DrawDetail
 {
@@ -41,15 +41,6 @@ auto shade(Color color, float amount) -> Color
     return out;
 }
 
-// Dark bodies get a light rim and light bodies a dark one, so both read against the void.
-auto rimColor(Color color) -> Color
-{
-    const int32_t luma = (color.r * 3 + color.g * 6 + color.b) / 10;
-    Color out = luma < 70 ? ColorLerp(color, Palette::Haze, 0.55F) : ColorLerp(color, Palette::Void, 0.60F);
-    out.a = color.a;
-    return out;
-}
-
 void triangle(Vector2 a, Vector2 b, Vector2 c, Color color)
 {
     // raylib culls one winding
@@ -60,8 +51,9 @@ void triangle(Vector2 a, Vector2 b, Vector2 c, Color color)
     DrawTriangle(a, b, c, color);
 }
 
-// The outline must be star-shaped about `hub` (every edge visible from it).
-void facets(const Frame& f, std::span<const Vector2> unit, Color color, Vector2 hub = Vector2{})
+// The outline must be star-shaped about `hub` (every edge visible from it). `relief` 0 fills it
+// flat; 1 lights each facet, which shows the fan's seams, so only spikes use it.
+void facets(const Frame& f, std::span<const Vector2> unit, Color color, Vector2 hub = Vector2{}, float relief = 0)
 {
     constexpr Vector2 light{.x = -0.6F, .y = -0.8F};
     const Vector2 c = f.at(hub);
@@ -72,12 +64,7 @@ void facets(const Frame& f, std::span<const Vector2> unit, Color color, Vector2 
         const Vector2 b = f.at(unit[(i + 1) % n]);
         const Vector2 out = Vector2Normalize(
             Vector2{.x = (a.x + b.x) / 2 - c.x, .y = (a.y + b.y) / 2 - c.y});
-        triangle(c, a, b, shade(color, Vector2DotProduct(out, light)));
-    }
-    const Color rim = rimColor(color);
-    for (size_t i = 0; i < n; i++)
-    {
-        DrawLineEx(f.at(unit[i]), f.at(unit[(i + 1) % n]), 1.2F, rim);
+        triangle(c, a, b, relief > 0 ? shade(color, relief * Vector2DotProduct(out, light)) : color);
     }
 }
 
@@ -118,7 +105,7 @@ void spikes(const Frame& f, int32_t points, float inner, Color color)
         const float r = i % 2 == 0 ? 1.15F : inner;
         pts.at(static_cast<size_t>(i)) = Vector2{.x = std::cos(a) * r, .y = std::sin(a) * r};
     }
-    facets(f, std::span(pts.data(), static_cast<size_t>(points * 2)), color);
+    facets(f, std::span(pts.data(), static_cast<size_t>(points * 2)), color, Vector2{}, 1.0F);
 }
 
 // A lump of rock: eight corners at seeded distances.
@@ -141,12 +128,10 @@ void barrel(const Frame& f, float length, float halfWidth, Color color)
     facets(f, pts, shade(color, -0.5F), Vector2{.x = (0.2F + length) / 2, .y = 0});
 }
 
-// A lit point: an eye, a fuse, a core.
-void glow(const Frame& f, Vector2 unit, float size, Color color, float alpha)
+// A flat dot: a fuse, a core.
+void dot(const Frame& f, Vector2 unit, float size, Color color, float alpha)
 {
-    const Vector2 p = f.at(unit);
-    DrawCircleV(p, f.radius * size * 1.8F, Fade(color, 0.25F * alpha));
-    DrawCircleV(p, f.radius * size, Fade(color, alpha));
+    DrawCircleV(f.at(unit), f.radius * size, Fade(color, alpha));
 }
 
 } // namespace
@@ -161,13 +146,10 @@ void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float facing
 
     switch (shape)
     {
-    case EnemyShape::Pod: // Drifter: a blunt pod with one eye
+    case EnemyShape::Pod: // Drifter: a disc with a crescent cut toward where it is going
     {
-        constexpr std::array<Vector2, 8> hull{Vector2{1.0F, 0},        Vector2{0.6F, 0.7F},   Vector2{-0.2F, 0.85F},
-                                              Vector2{-0.9F, 0.5F},    Vector2{-1.0F, 0},     Vector2{-0.9F, -0.5F},
-                                              Vector2{-0.2F, -0.85F},  Vector2{0.6F, -0.7F}};
-        facets(face, hull, color);
-        glow(face, Vector2{.x = 0.4F, .y = 0}, 0.2F, Palette::Crit, alpha);
+        DrawCircleV(center, radius, color);
+        DrawCircleV(face.at(Vector2{.x = -0.3F, .y = 0}), radius * 0.62F, shade(color, -0.55F));
         break;
     }
     case EnemyShape::Dart: // Swarmling: small and sharp
@@ -200,7 +182,7 @@ void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float facing
                                               Vector2{-0.9F, 0.4F},  Vector2{-0.6F, 0},     Vector2{-0.9F, -0.4F},
                                               Vector2{-0.65F, -0.95F}, Vector2{0.2F, -0.45F}};
         facets(face, hull, color);
-        glow(face, Vector2{.x = -0.7F, .y = 0}, 0.16F, Palette::Charge, alpha * (0.5F + 0.5F * pulse));
+        dot(face, Vector2{.x = -0.7F, .y = 0}, 0.16F, Palette::Charge, alpha * (0.5F + 0.5F * pulse));
         break;
     }
     case EnemyShape::Orbiter: // a ring with its own moon
@@ -231,13 +213,12 @@ void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float facing
         regular(face, 6, 0.42F, shade(color, 0.7F));
         break;
     }
-    case EnemyShape::LongBarrel: // Sniper, Solar Turret: all barrel
+    case EnemyShape::LongBarrel: // Sniper, Solar Turret: a needle inside a turning reticle
     {
-        constexpr std::array<Vector2, 5> hull{Vector2{0.9F, 0}, Vector2{0.1F, 0.75F}, Vector2{-0.9F, 0.5F},
-                                              Vector2{-0.9F, -0.5F}, Vector2{0.1F, -0.75F}};
-        barrel(face, 2.0F, 0.1F, color);
-        facets(face, hull, color);
-        glow(face, Vector2{.x = 0.15F, .y = 0}, 0.16F, Palette::Crit, alpha);
+        constexpr std::array<Vector2, 4> needle{Vector2{1.7F, 0}, Vector2{-0.2F, 0.32F}, Vector2{-0.9F, 0},
+                                                Vector2{-0.2F, -0.32F}};
+        facets(face, needle, color);
+        facetRing(center, radius * 0.72F, radius * 0.9F, 4, t * 35.0F + seed, shade(color, -0.2F), 2);
         break;
     }
     case EnemyShape::ShieldDrone: // a core behind plates
@@ -285,7 +266,7 @@ void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float facing
     {
         spikes(frameAt(center, radius, t * 0.5F + seed), 4, 0.6F, color);
         const float blink = std::fmod(t * 1.5F + seed, 1.0F) < 0.25F ? 1.0F : 0.25F;
-        glow(still, Vector2{}, 0.2F, Palette::Accent, alpha * blink);
+        dot(still, Vector2{}, 0.2F, Palette::Accent, alpha * blink);
         break;
     }
     case EnemyShape::Rift: // Void Rift: a hole with rings turning round it
@@ -311,7 +292,7 @@ void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float facing
     case EnemyShape::MoltenRock: // Forgeborn, Meteor Chunk: rock round a live core
     {
         rock(still, seed, color);
-        glow(still, Vector2{}, 0.28F, Palette::ElementBurn, alpha * (0.6F + 0.4F * pulse));
+        dot(still, Vector2{}, 0.28F, Palette::ElementBurn, alpha * (0.6F + 0.4F * pulse));
         break;
     }
     case EnemyShape::Strafer: // Ricochet Strafer: a ring with fins
@@ -325,7 +306,7 @@ void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float facing
     }
     case EnemyShape::Crawler: // Vent Crawler: a body on legs
     {
-        const Color leg = rimColor(color);
+        const Color leg = shade(color, -0.45F);
         for (int32_t i = 0; i < 3; i++)
         {
             const float x = 0.5F - static_cast<float>(i) * 0.5F;
@@ -336,8 +317,8 @@ void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float facing
                            face.at(Vector2{.x = x + kick * side, .y = side * 1.2F}), 1.6F, leg);
             }
         }
-        constexpr std::array<Vector2, 6> hull{Vector2{1.1F, 0}, Vector2{0.3F, 0.55F}, Vector2{-0.7F, 0.45F},
-                                              Vector2{-1.0F, 0}, Vector2{-0.7F, -0.45F}, Vector2{0.3F, -0.55F}};
+        constexpr std::array<Vector2, 4> hull{Vector2{1.1F, 0}, Vector2{0, 0.55F}, Vector2{-1.0F, 0},
+                                              Vector2{0, -0.55F}};
         facets(face, hull, color);
         break;
     }
@@ -348,14 +329,18 @@ void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float facing
         facetRing(center, radius * 1.05F, radius * 1.18F, 12, t * 25.0F, color, 3);
         break;
     }
-    case EnemyShape::Hacker: // a dish on a small body
+    case EnemyShape::Hacker: // a small core in a turning ring, sending
     {
-        constexpr std::array<Vector2, 4> hull{Vector2{0.5F, 0}, Vector2{-0.3F, 0.7F}, Vector2{-1.1F, 0},
-                                              Vector2{-0.3F, -0.7F}};
-        facets(face, hull, color);
-        DrawRing(center, radius * 0.95F, radius * 1.15F, facingDeg - 55.0F, facingDeg + 55.0F, 8, shade(color, 0.5F));
-        DrawLineEx(center, face.at(Vector2{.x = 1.05F, .y = 0}), 1.6F, rimColor(color));
-        glow(face, Vector2{.x = 1.05F, .y = 0}, 0.14F, WHITE, alpha * (0.5F + 0.5F * pulse));
+        regular(still, 6, 0.42F, color);
+        facetRing(center, radius * 0.66F, radius * 0.82F, 6, t * -45.0F, color, 3);
+        for (int32_t i = 0; i < 2; i++)
+        {
+            // two arcs leave toward the target, one after the other
+            const float phase = std::fmod(t * 0.9F + static_cast<float>(i) * 0.5F, 1.0F);
+            const float r = radius * (1.05F + 0.7F * phase);
+            DrawRing(center, r, r + radius * 0.1F, facingDeg - 32.0F, facingDeg + 32.0F, 8,
+                     Fade(color, alpha * (1.0F - phase)));
+        }
         break;
     }
     case EnemyShape::Pylon: // Laser Fence: a post with live emitters
@@ -365,7 +350,7 @@ void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float facing
         for (int32_t i = 0; i < 4; i++)
         {
             const float a = seed + static_cast<float>(i) * tau / 4.0F;
-            glow(still, Vector2{.x = std::cos(a - seed) * 0.95F, .y = std::sin(a - seed) * 0.95F}, 0.13F, Palette::Crit,
+            dot(still, Vector2{.x = std::cos(a - seed) * 0.95F, .y = std::sin(a - seed) * 0.95F}, 0.13F, Palette::Crit,
                  alpha * (0.4F + 0.6F * pulse));
         }
         break;
