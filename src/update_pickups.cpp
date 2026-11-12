@@ -433,6 +433,10 @@ void applyAscension(Game& game, AscensionType type)
         game.run.player.maxHealth -= glassCoreHealthCost;
         game.run.player.health = std::min(game.run.player.health, game.run.player.maxHealth);
     }
+    if (type == AscensionType::Bulwark)
+    {
+        game.run.player.shieldStacks = std::min(game.run.player.shieldStacks + 1, maxShieldStacks(game));
+    }
     playSFX(game, game.resources.sounds.menuConfirm);
 }
 

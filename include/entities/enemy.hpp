@@ -641,7 +641,7 @@ constexpr std::array<EnemyKind, 36> enemyKinds{
     // Never more than one alive (see spawnEnemyAt). Keeps far out and holds a ray on the ship.
     EnemyKind{.name = "Hacker",
               .radius = 15,
-              .health = 30,
+              .health = 18, // x2.5 as a special; it sits off-screen, so reaching it is the cost
               .speed = 0,
               .contactDamage = 1,
               .score = 30,

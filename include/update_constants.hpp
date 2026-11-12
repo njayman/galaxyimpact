@@ -90,7 +90,7 @@ constexpr float pickupHomingRate = 3.5F;
 // Danger pickup: one of two debuffs. Blind shrinks the view to a circle round the ship; Frenzy
 // gives every enemy the Warlord speed buff.
 constexpr float blindDuration = 8.0F;
-constexpr float blindRadius = 300.0F;
+constexpr float blindRadius = 240.0F; // the view is 1280x720 world units; shots cross this in ~0.7 s
 constexpr float frenzyDuration = 8.0F;
 // Hacker: one at a time, far out. Its ray trails the ship; hackExposureTime in the ray switches
 // a weapon off for hackDuration.
@@ -157,9 +157,9 @@ constexpr float heavyRoundsCooldown = 0.10F;
 constexpr float thrustersSpeed = 0.10F;
 constexpr float thrustersChargeRegen = 0.15F;
 constexpr float hoarderMagnet = 0.25F;
-constexpr float hoarderDamageCost = 0.10F;
+constexpr float hoarderDamageCost = 0.05F;
 constexpr float bulwarkSpeedCost = 0.10F;
-constexpr float nerveJunkieGain = 0.30F;
+constexpr float nerveJunkieGain = 0.50F;
 constexpr float bountyXp = 0.20F;
 constexpr float bountyEnemySpeed = 0.10F;
 constexpr float mineLifetime = 5.0F;

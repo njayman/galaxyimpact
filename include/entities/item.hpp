@@ -327,12 +327,12 @@ constexpr std::array<Ascension, static_cast<size_t>(AscensionType::Count)> ascen
               .description = "+10% move speed.  Cost: charges refill 15% slower.",
               .maxStacks = 0},
     Ascension{.name = "Hoarder",
-              .description = "+25% magnet radius, pickups last longer.  Cost: -10% damage.",
+              .description = "+25% magnet radius, pickups last longer.  Cost: -5% damage.",
               .maxStacks = 0},
-    Ascension{.name = "Bulwark", .description = "+1 shield stack.  Cost: -10% move speed.", .maxStacks = 3},
+    Ascension{.name = "Bulwark", .description = "+1 shield slot, filled.  Cost: -10% move speed.", .maxStacks = 3},
     Ascension{.name = "Nerve Junkie",
-              .description = "Kills fill Nerve 30% faster.  Cost: every hit hurts 1 more.",
-              .maxStacks = 2},
+              .description = "Kills fill Nerve 50% faster.  Cost: every hit hurts 1 more.",
+              .maxStacks = 1}, // +1 on a 1-damage hit already doubles it
     Ascension{.name = "Bounty", .description = "+20% XP.  Cost: enemies move 10% faster.", .maxStacks = 0},
 };
 
