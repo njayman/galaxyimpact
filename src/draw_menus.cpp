@@ -574,7 +574,21 @@ void drawBestiary(Game& game)
         game, "ENEMIES", y, scale, enemyKinds.size(),
         [&](size_t i) { return bestiary.enemyKilled.at(i); }, [](size_t i) -> std::string_view
         { return enemyKinds.at(i).name; }, [](size_t i, Vector2 c, float r, Color col)
-        { drawEnemyShape(enemyKinds.at(i).shape, c, r, 0, col); },
+        {
+            const EnemyShape shape = enemyKinds.at(i).shape;
+            if (shape == EnemyShape::Organic)
+            {
+                drawOrganicEnemyShape(c, r, static_cast<float>(i), col);
+            }
+            else if (shape == EnemyShape::Cluster)
+            {
+                drawClusterEnemyShape(c, r, static_cast<float>(i), col);
+            }
+            else
+            {
+                drawEnemyShape(shape, c, r, -90, col, 1);
+            }
+        },
         [](size_t i) { return enemyKinds.at(i).color; });
 
     y = drawBestiarySection(

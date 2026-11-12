@@ -4,7 +4,9 @@
 #include "palette.hpp"
 #include "platform.hpp"
 #include "progression.hpp"
+#include <algorithm>
 #include <fstream>
+#include <vector>
 #include <string>
 
 namespace
@@ -22,25 +24,30 @@ auto loadBestiary() -> Bestiary
         return bestiary;
     }
 
-    for (auto& killed : bestiary.enemyKilled)
+    // The file is enemies, bosses, hazards with no counts. New Enemies are appended to the kind
+    // list, so a save from before one was added is short by that many enemy flags: the bosses and
+    // hazards are the tail, whatever is in front of them is the enemies.
+    std::vector<int32_t> values;
+    for (int32_t value = 0; file >> value;)
     {
-        if (int32_t value = 0; file >> value)
-        {
-            killed = value != 0;
-        }
+        values.push_back(value);
     }
-    for (auto& killed : bestiary.bossKilled)
+    const size_t tail = bestiary.bossKilled.size() + bestiary.hazardKilled.size();
+    const size_t enemies = values.size() > tail ? std::min(values.size() - tail, bestiary.enemyKilled.size()) : 0;
+    for (size_t i = 0; i < enemies; i++)
     {
-        if (int32_t value = 0; file >> value)
-        {
-            killed = value != 0;
-        }
+        bestiary.enemyKilled.at(i) = values.at(i) != 0;
     }
-    for (auto& killed : bestiary.hazardKilled)
+    for (size_t i = 0; i < tail && enemies + i < values.size(); i++)
     {
-        if (int32_t value = 0; file >> value)
+        const bool killed = values.at(enemies + i) != 0;
+        if (i < bestiary.bossKilled.size())
         {
-            killed = value != 0;
+            bestiary.bossKilled.at(i) = killed;
+        }
+        else
+        {
+            bestiary.hazardKilled.at(i - bestiary.bossKilled.size()) = killed;
         }
     }
 

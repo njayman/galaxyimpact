@@ -992,62 +992,6 @@ void drawNerveSpiralProjectiles(const Game& game)
     }
 }
 
-void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float rotationDeg, Color color)
-{
-    switch (shape)
-    {
-    case EnemyShape::Circle:
-        DrawCircleV(center, radius, color);
-        break;
-    case EnemyShape::Triangle:
-        DrawPoly(center, 3, radius, rotationDeg - 90, color);
-        break;
-    case EnemyShape::Square:
-        DrawPoly(center, 4, radius, rotationDeg + 45, color);
-        break;
-    case EnemyShape::Diamond:
-        DrawPoly(center, 4, radius, rotationDeg, color);
-        break;
-    case EnemyShape::Pentagon:
-        DrawPoly(center, 5, radius, rotationDeg, color);
-        break;
-    case EnemyShape::Hexagon:
-        DrawPoly(center, 6, radius, rotationDeg, color);
-        break;
-    case EnemyShape::Octagon:
-        DrawPoly(center, 8, radius, rotationDeg, color);
-        break;
-    case EnemyShape::Ring:
-        DrawRing(center, radius * 0.5F, radius, 0, 360, 24, color);
-        DrawCircleV(center, radius * 0.25F, color);
-        break;
-    case EnemyShape::Star:
-    {
-        constexpr size_t points = 5;
-        const float rot = rotationDeg * DEG2RAD;
-        std::array<Vector2, points * 2> verts{};
-        for (size_t i = 0; i < points * 2; i++)
-        {
-            const float rad = (i % 2 == 0) ? radius : radius * 0.42F;
-            const float a = rot + static_cast<float>(i) * std::numbers::pi_v<float> /
-                                      static_cast<float>(points);
-            verts.at(static_cast<size_t>(i)) =
-                Vector2{.x = center.x + std::cos(a) * rad, .y = center.y + std::sin(a) * rad};
-        }
-        for (size_t i = 0; i < verts.size(); i++)
-        {
-
-            DrawTriangle(center, verts.at((i + 1) % verts.size()), verts.at(i), color);
-        }
-        break;
-    }
-    case EnemyShape::Organic:
-    case EnemyShape::Cluster:
-
-        break;
-    }
-}
-
 void drawClusterEnemyShape(Vector2 center, float baseRadius, float seed, Color color)
 {
     const std::array<Color, 4> palette{color, Palette::PunctumHaze, Palette::Crit, Palette::Void};
@@ -1419,16 +1363,24 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
                         Fade(Palette::PunctumAccent, warn * 0.6F));
     }
 
-    if (kind.pattern == EnemyPattern::Turret &&
+    if (kind.pattern == EnemyPattern::Turret && enemy.kind != enemyKindHacker && // its ray is its tell
         Vector2Distance(enemy.position, game.run.player.position) < 700.0F)
     {
         float blink = 0.5F + 0.5F * std::sin(static_cast<float>(GetTime()) * 12.0F);
         DrawLineEx(enemy.position, game.run.player.position, 2, Fade(Palette::Crit, blink * 0.5F));
     }
 
-    const float spin = std::fmod(static_cast<float>(GetTime()) * 20.0F +
-                                     (enemy.position.x + enemy.position.y) * 0.15F,
-                                 360.0F);
+    // What the body points along: its aim for what shoots, its travel for everything else.
+    Vector2 heading = Vector2Subtract(game.run.player.position, enemy.position);
+    if (enemy.kind == enemyKindHacker && enemy.hackRayOn)
+    {
+        heading = Vector2Subtract(hackRayEnd(enemy), enemy.position);
+    }
+    else if (kind.pattern != EnemyPattern::Turret && Vector2LengthSqr(enemy.velocity) > 0.01F)
+    {
+        heading = enemy.velocity;
+    }
+    const float facing = std::atan2(heading.y, heading.x) * RAD2DEG;
     if (enemy.kind == enemyKindHuskSentinel)
     {
         drawHuskSentinelShape(enemy.position, kind.radius * enemy.organicRadiusMult,
@@ -1451,7 +1403,8 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
     }
     else
     {
-        drawEnemyShape(kind.shape, enemy.position, kind.radius, spin, color);
+        drawEnemyShape(kind.shape, enemy.position, kind.radius, facing, color,
+                       static_cast<float>(enemy.id % 97));
     }
     drawElementalDebuffEffects(enemy.position, kind.radius, enemy.burnDps > 0, enemy.debuffStatic,
                                enemy.debuffFreeze);

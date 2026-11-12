@@ -8,6 +8,7 @@ set(GALAXYIMPACT_SOURCES
     src/draw.cpp
     src/draw_background.cpp
     src/draw_boss.cpp
+    src/draw_enemy_shapes.cpp
     src/draw_hud.cpp
     src/draw_menus.cpp
     src/draw_world.cpp
