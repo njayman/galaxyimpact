@@ -361,6 +361,69 @@ void drawEnemyShape(EnemyShape shape, Vector2 center, float radius, float facing
     }
 }
 
+// Roaming Boss hulls (the Biome Bosses have their own drawing), in the same matte parts as the
+// Enemies, at Boss size: turning rings and plates round a still core.
+void drawBossHull(BossShape shape, Vector2 center, Vector2 size, Color color)
+{
+    const auto t = static_cast<float>(GetTime());
+    const float radius = size.x / 2;
+    const float alpha = static_cast<float>(color.a) / 255.0F;
+    const Frame still = frameAt(center, radius, 0);
+    // A hull as dark as the void would not read: lift it, and give its moving parts a lighter tone.
+    const int32_t luma = (color.r * 3 + color.g * 6 + color.b) / 10;
+    Color body = luma < 40 ? ColorLerp(color, Palette::StructMid, 0.55F) : color;
+    body.a = color.a;
+    Color part = luma < 70 ? ColorLerp(body, Palette::StructLight, 0.5F) : shade(color, 0.7F);
+    part.a = color.a;
+    const Color dark = shade(body, -0.55F);
+
+    switch (shape)
+    {
+    case BossShape::Saucer: // a hollow disc, something turning in the hole
+        regular(still, 12, 1.0F, body);
+        DrawCircleV(center, radius * 0.58F, Fade(Palette::Void, alpha));
+        facetRing(center, radius * 0.36F, radius * 0.5F, 6, t * -40.0F, part, 2);
+        facetRing(center, radius * 1.08F, radius * 1.18F, 16, t * 12.0F, part, 4);
+        DrawCircleV(center, radius * 0.14F, part);
+        break;
+    case BossShape::SpikedRing: // a crown of spikes turning round a plated core
+        spikes(frameAt(center, radius * 1.05F, t * 0.5F), 8, 0.74F, part);
+        regular(still, 8, 0.8F, body);
+        facetRing(center, radius * 0.42F, radius * 0.58F, 8, t * -30.0F, dark, 2);
+        regular(frameAt(center, radius, t * 0.8F), 4, 0.26F, part);
+        break;
+    case BossShape::TwinDome: // two cores on a spar, each in its own ring
+    {
+        const std::array<Vector2, 4> spar{Vector2{.x = -0.5F, .y = -0.14F}, Vector2{.x = 0.5F, .y = -0.14F},
+                                          Vector2{.x = 0.5F, .y = 0.14F}, Vector2{.x = -0.5F, .y = 0.14F}};
+        facets(still, spar, dark);
+        for (const float side : {-1.0F, 1.0F})
+        {
+            const Vector2 lobe{.x = center.x + side * radius * 0.5F, .y = center.y};
+            regular(frameAt(lobe, radius, 0), 8, 0.4F, body);
+            facetRing(lobe, radius * 0.46F, radius * 0.56F, 6, side * t * 45.0F, part, 2);
+            DrawCircleV(lobe, radius * 0.14F, part);
+        }
+        break;
+    }
+    case BossShape::Crystal: // a shard, with shards circling it
+        regular(frameAt(center, radius, t * 0.14F), 6, 0.72F, body);
+        regular(frameAt(center, radius, t * -0.3F), 4, 0.34F, part);
+        facetRing(center, radius * 0.86F, radius * 1.04F, 6, t * -22.0F, part, 2);
+        break;
+    case BossShape::HexPlated: // armour: six plates bolted round a hex
+        regular(still, 6, 0.74F, body);
+        facetRing(center, radius * 0.84F, radius * 1.0F, 6, -30.0F, part);
+        regular(still, 6, 0.4F, dark);
+        DrawCircleV(center, radius * 0.14F, part);
+        break;
+    case BossShape::Segment:
+        DrawCircleV(center, radius, body);
+        DrawCircleV(center, radius * 0.55F, Fade(Palette::StructLight, 0.3F * alpha));
+        break;
+    }
+}
+
 // Elite Hazards, in the same matte parts as the Enemies. The Warlord drives the swarm on: a
 // crown of spikes turning fast round a hard core. The Suppressor damps the ship's weapons: two
 // broken rings turning against each other, closing on a still core. `body` is the biome-tinted

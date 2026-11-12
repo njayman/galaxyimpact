@@ -3,62 +3,6 @@
 namespace DrawDetail
 {
 
-void drawBossHull(BossShape shape, Vector2 center, Vector2 size, Color color)
-{
-    const auto cx = static_cast<int32_t>(center.x);
-    const auto cy = static_cast<int32_t>(center.y);
-    const float spin = std::fmod(static_cast<float>(GetTime()) * 8.0F, 360.0F);
-
-    switch (shape)
-    {
-    case BossShape::Saucer:
-        DrawEllipse(cx, cy + static_cast<int32_t>(size.y / 4), size.x / 2, size.y / 4, color);
-        DrawCircle(cx, cy - static_cast<int32_t>(size.y / 8), size.x / 3.5F, Fade(color, 0.8F));
-        break;
-    case BossShape::SpikedRing:
-    {
-        DrawEllipse(cx, cy + static_cast<int32_t>(size.y / 4), size.x / 2, size.y / 4, color);
-        DrawCircle(cx, cy - static_cast<int32_t>(size.y / 8), size.x / 3.5F, Fade(color, 0.8F));
-        constexpr int spikeCount = 8;
-        for (int i = 0; i < spikeCount; i++)
-        {
-            const float a = (static_cast<float>(i) * 360.0F / spikeCount + spin) * DEG2RAD;
-            const Vector2 dir{.x = std::cos(a), .y = std::sin(a)};
-            const Vector2 perp{.x = -dir.y, .y = dir.x};
-            const Vector2 base = Vector2Add(center, Vector2Scale(dir, size.x * 0.46F));
-            const Vector2 tip = Vector2Add(center, Vector2Scale(dir, size.x * 0.64F));
-            const Vector2 sideA = Vector2Add(base, Vector2Scale(perp, size.x * 0.05F));
-            const Vector2 sideB = Vector2Subtract(base, Vector2Scale(perp, size.x * 0.05F));
-            DrawTriangle(sideA, tip, sideB, color);
-        }
-        break;
-    }
-    case BossShape::TwinDome:
-        DrawEllipse(cx, cy + static_cast<int32_t>(size.y / 4), size.x / 2, size.y / 4, color);
-        DrawCircle(cx - static_cast<int32_t>(size.x / 4), cy - static_cast<int32_t>(size.y / 10),
-                   size.x / 4.5F, Fade(color, 0.8F));
-        DrawCircle(cx + static_cast<int32_t>(size.x / 4), cy - static_cast<int32_t>(size.y / 10),
-                   size.x / 4.5F, Fade(color, 0.8F));
-        break;
-    case BossShape::Crystal:
-        DrawPoly(center, 6, size.x / 2, spin, color);
-        DrawPolyLines(center, 6, size.x / 2 * 1.18F, -spin * 0.6F, Fade(color, 0.5F));
-        DrawPoly(center, 6, size.x / 4, spin * 1.4F, Fade(Palette::StructLight, 0.6F));
-        break;
-    case BossShape::HexPlated:
-        DrawPoly(center, 6, size.x / 2, 0, color);
-        DrawPolyLines(center, 6, size.x / 2, 0, Fade(Palette::StructDark, 0.8F));
-        DrawPolyLines(center, 6, size.x / 2 * 0.65F, 0, Fade(Palette::StructDark, 0.6F));
-        break;
-    case BossShape::Segment:
-
-        DrawCircle(cx, cy, size.x / 2, color);
-        DrawCircle(cx, cy, size.x / 2 * 0.55F, Fade(Palette::StructLight, 0.3F));
-        DrawCircleLines(cx, cy, size.x / 2, Fade(Palette::StructDark, 0.6F));
-        break;
-    }
-}
-
 void drawMeteorBossShape(Vector2 center, float radius, int32_t seed, Color baseColor)
 {
     const auto t = static_cast<float>(GetTime());
