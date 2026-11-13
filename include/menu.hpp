@@ -14,7 +14,7 @@ constexpr int32_t buttonGap = 14;
 constexpr int32_t pausedMenuY = 360;
 constexpr int32_t gameOverMenuY = 420;
 
-constexpr int32_t levelUpWidth = 720;
+constexpr int32_t levelUpWidth = 840;
 constexpr int32_t levelUpHeight = 92;
 constexpr int32_t levelUpGap = 16;
 constexpr int32_t levelUpMenuY = 260;
@@ -69,8 +69,7 @@ struct ShipSelectLayout
     // since tapping precisely on it turned out fiddly.
     Rectangle leftTapZone;
     Rectangle rightTapZone;
-    int32_t descY; // unscaled, for windowText
-    int32_t statsY;
+    Rectangle weaponCard; // starting-weapon panel under the preview
     Rectangle selectRect;
 };
 auto shipSelectLayout(const Game& game) -> ShipSelectLayout;

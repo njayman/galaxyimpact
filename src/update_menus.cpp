@@ -389,34 +389,44 @@ void playSFX(Game& game, Sound sound)
         return;
     }
 
-    // ponytail: dedupe by buffer pointer identity, small fixed table, linear scan is fine at this size
-    struct SfxThrottleEntry
+    // Mix guard. A raylib Sound is one voice (replaying restarts it), so this throttles each sound
+    // and caps how many different ones sound at once: busy scenes cannot stack into clipping or bury the BGM.
+    // ponytail: no priorities, a late sound is simply dropped; add a priority flag if a boss tell ever goes missing.
+    struct Voice
     {
-        void* handle = nullptr;
+        Sound sound{};
         double lastPlayTime = -1000.0;
     };
-    static std::array<SfxThrottleEntry, 48> throttleTable{};
+    static std::array<Voice, 48> voices{};
 
     const double now = GetTime();
-    for (auto& entry : throttleTable)
+    Voice* slot = nullptr;
+    int playing = 0;
+    for (auto& voice : voices)
     {
-        if (entry.handle == sound.stream.buffer)
+        if (voice.sound.stream.buffer == nullptr)
         {
-            if (now - entry.lastPlayTime < sfxThrottleInterval)
-            {
-                return;
-            }
-            entry.lastPlayTime = now;
-            PlaySound(sound);
-            return;
+            slot = slot != nullptr ? slot : &voice;
+            break;
         }
-        if (entry.handle == nullptr)
+        if (voice.sound.stream.buffer == sound.stream.buffer)
         {
-            entry.handle = sound.stream.buffer;
-            entry.lastPlayTime = now;
-            PlaySound(sound);
-            return;
+            slot = &voice;
         }
+        else if (IsSoundPlaying(voice.sound))
+        {
+            playing++;
+        }
+    }
+    const bool known = slot != nullptr && slot->sound.stream.buffer == sound.stream.buffer;
+    if ((known && now - slot->lastPlayTime < sfxThrottleInterval) || playing >= sfxMaxVoices)
+    {
+        return;
+    }
+    if (slot != nullptr)
+    {
+        slot->sound = sound;
+        slot->lastPlayTime = now;
     }
     PlaySound(sound);
 }
@@ -597,7 +607,10 @@ void applyBGMState(Game& game)
         ResumeMusicStream(game.resources.bgm.base);
         ResumeMusicStream(game.resources.bgm.intensity);
         ResumeMusicStream(game.resources.bgm.miniboss);
-        ResumeMusicStream(game.resources.bgm.megaboss);
+        for (const Music& track : game.resources.bgm.megaboss)
+        {
+            ResumeMusicStream(track);
+        }
         ResumeMusicStream(game.resources.bgm.swarmBoss);
     }
     else
@@ -605,7 +618,10 @@ void applyBGMState(Game& game)
         PauseMusicStream(game.resources.bgm.base);
         PauseMusicStream(game.resources.bgm.intensity);
         PauseMusicStream(game.resources.bgm.miniboss);
-        PauseMusicStream(game.resources.bgm.megaboss);
+        for (const Music& track : game.resources.bgm.megaboss)
+        {
+            PauseMusicStream(track);
+        }
         PauseMusicStream(game.resources.bgm.swarmBoss);
     }
 }
@@ -684,6 +700,12 @@ void updateBgmLayers(Game& game, float deltaTime)
     SetMusicVolume(game.resources.bgm.base, SoundConstants::baseVolume * duckFactor);
     SetMusicVolume(game.resources.bgm.intensity, game.resources.bgm.intensityVolume * duckFactor);
     SetMusicVolume(game.resources.bgm.miniboss, game.resources.bgm.minibossVolume * duckFactor);
-    SetMusicVolume(game.resources.bgm.megaboss, game.resources.bgm.megabossVolume * duckFactor);
+    // Only the current biome's boss track is audible; all four keep running so they stay in step.
+    const auto biome = static_cast<size_t>(currentBiome(game.run.waveNumber));
+    for (size_t i = 0; i < game.resources.bgm.megaboss.size(); i++)
+    {
+        SetMusicVolume(game.resources.bgm.megaboss.at(i),
+                       i == biome ? game.resources.bgm.megabossVolume * duckFactor : 0.0F);
+    }
     SetMusicVolume(game.resources.bgm.swarmBoss, game.resources.bgm.swarmBossVolume * duckFactor);
 }

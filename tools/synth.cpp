@@ -13,6 +13,7 @@
 // [WAV]             export to wav
 
 #include "raylib.h"
+#include "sound.hpp" // the game's BGM, for the click-to-play track list
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -83,14 +84,16 @@ void addSaw(std::vector<float>& b, float t0, float freq, float amp, float decay)
     }
 }
 
-void addNoise(std::vector<float>& b, float t0, float amp, float decay)
+void addNoise(std::vector<float>& b, float t0, float amp, float decay, float smooth = 0.0F)
 {
+    float low = 0.0F;
     size_t s = secToSamp(t0);
     for (size_t i = s; i < b.size(); i++)
     {
         float e = static_cast<float>(i - s) / sampleRate;
         if (e > decay * cutDecay) break;
-        b[i] += amp * std::exp(-e / decay) * noise();
+        low += (noise() - low) * (1.0F - smooth);
+        b[i] += amp * std::exp(-e / decay) * low;
     }
 }
 
@@ -159,7 +162,7 @@ auto encodeWAV(const std::vector<int16_t>& s) -> std::vector<std::byte>
     return buf;
 }
 
-auto samplesToSound(const std::vector<float>& s, float vol = 0.5F) -> Sound
+auto samplesToSound(const std::vector<float>& s, float vol = 0.245F) -> Sound // game level: 0.35 default x 0.7 SFX bus
 {
     auto wav = encodeWAV(toPcm16(s));
     auto* d = reinterpret_cast<const unsigned char*>(wav.data());
@@ -221,12 +224,12 @@ void initSounds(std::vector<SoundDef>& sounds)
     });
     addSfx("Hit", 6, []() {
         std::vector<float> b(secToSamp(0.15F), 0);
-        addNoise(b, 0, 0.35F, 0.05F); addTone(b, 0, 180, 0.2F, 0.08F); return b;
+        addNoise(b, 0, 0.4F, 0.05F, 0.5F); addTone(b, 0, 220, 0.22F, 0.08F); return b;
     });
     addSfx("Explosion", 7, []() {
         std::vector<float> b(secToSamp(0.4F), 0);
-        addKickSynth(b, 0, 0.35F, 140, 40, 0.12F, 0.20F);
-        addNoise(b, 0, 0.4F, 0.15F); addNoise(b, 0.02F, 0.2F, 0.10F); return b;
+        addKickSynth(b, 0, 0.32F, 160, 60, 0.12F, 0.20F);
+        addNoise(b, 0, 0.5F, 0.15F, 0.6F); addNoise(b, 0.02F, 0.25F, 0.10F, 0.6F); return b;
     });
     addSfx("Menu Move", 8, []() {
         std::vector<float> b(secToSamp(0.08F), 0);
@@ -285,6 +288,45 @@ void initSounds(std::vector<SoundDef>& sounds)
     addSfx("Nerve Fizzle", 20, []() {
         std::vector<float> b(secToSamp(0.2F), 0);
         addKickSynth(b, 0, 0.18F, 500, 120, 0.15F, 0.12F); addNoise(b, 0, 0.15F, 0.08F);
+        return b;
+    });
+    addSfx("Rock Break", 21, []() {
+        std::vector<float> b(secToSamp(0.22F), 0);
+        addKickSynth(b, 0, 0.2F, 110, 45, 0.10F, 0.14F); addNoise(b, 0, 0.10F, 0.05F);
+        addTone(b, 0, 70, 0.14F, 0.12F); return b;
+    });
+    addSfx("Squish Hit", 22, []() {
+        std::vector<float> b(secToSamp(0.18F), 0);
+        addKickSynth(b, 0, 0.2F, 220, 90, 0.06F, 0.08F); addNoise(b, 0, 0.14F, 0.05F);
+        addTone(b, 0.01F, 140, 0.1F, 0.07F); return b;
+    });
+    addSfx("Thunder (soft)", 23, []() {
+        std::vector<float> b(secToSamp(1.0F), 0);
+        addKickSynth(b, 0, 0.24F, 170, 75, 0.4F, 0.5F); addNoise(b, 0, 0.5F, 0.5F, 0.8F);
+        addTone(b, 0.05F, 110, 0.1F, 0.4F); return b;
+    });
+    addSfx("NEW Pickup", 25, []() {
+        std::vector<float> b(secToSamp(0.14F), 0);
+        addTone(b, 0, 988, 0.16F, 0.04F); addTone(b, 0.045F, 1319, 0.16F, 0.05F); return b;
+    });
+    addSfx("NEW Heal", 26, []() {
+        std::vector<float> b(secToSamp(0.3F), 0);
+        addTone(b, 0, 659.25F, 0.13F, 0.08F); addTone(b, 0.07F, 880, 0.13F, 0.08F);
+        addTone(b, 0.14F, 1108.73F, 0.13F, 0.1F); return b;
+    });
+    addSfx("NEW Power Up", 27, []() {
+        std::vector<float> b(secToSamp(0.22F), 0);
+        addSquare(b, 0, 783.99F, 0.07F, 0.035F); addSquare(b, 0.05F, 1046.5F, 0.07F, 0.035F);
+        addSquare(b, 0.10F, 1567.98F, 0.08F, 0.06F); return b;
+    });
+    addSfx("NEW Debuff", 28, []() {
+        std::vector<float> b(secToSamp(0.3F), 0);
+        addSquare(b, 0, 739.99F, 0.08F, 0.07F); addSquare(b, 0.09F, 523.25F, 0.09F, 0.12F);
+        addSaw(b, 0.09F, 527, 0.04F, 0.12F); return b;
+    });
+    addSfx("Enemy Death", 24, []() {
+        std::vector<float> b(secToSamp(0.1F), 0);
+        addKickSynth(b, 0, 0.22F, 130, 55, 0.03F, 0.05F); addNoise(b, 0, 0.03F, 0.015F);
         return b;
     });
 }
@@ -629,6 +671,18 @@ auto main() -> int
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(1100, 720, "Synth - Galaxy Impact Music Composer");
     InitAudioDevice();
+
+    // The game's real BGM streams (from src/sound.cpp), auditioned from the right panel.
+    BgmLayers gameBgm = loadBGM();
+    struct BgmRow { const char* name; Music* music; };
+    BgmRow bgmRows[] = {{"Base", &gameBgm.base},
+                        {"Intensity", &gameBgm.intensity},
+                        {"Miniboss", &gameBgm.miniboss},
+                        {"Boss: Shattered Belt", &gameBgm.megaboss[0]},
+                        {"Boss: Rustbloom", &gameBgm.megaboss[1]},
+                        {"Boss: Solar Forge", &gameBgm.megaboss[2]},
+                        {"Boss: Punctum", &gameBgm.megaboss[3]}};
+    int bgmPlaying = -1;
     SetTargetFPS(60);
     SetMasterVolume(0.5F);
 
@@ -1176,6 +1230,8 @@ auto main() -> int
         }
 
         // ── draw ────────────────────────────────────────────────
+        if (bgmPlaying >= 0) UpdateMusicStream(*bgmRows[bgmPlaying].music);
+
         BeginDrawing();
         ClearBackground({8, 8, 12, 255});
 
@@ -1386,10 +1442,44 @@ auto main() -> int
         }
         else
         {
-            DrawText("Select a track", rightX + 4, topH + 10, 11, DARKGRAY);
-            DrawText("then click its", rightX + 4, topH + 26, 11, DARKGRAY);
-            DrawText("sound name", rightX + 4, topH + 42, 11, DARKGRAY);
-            DrawText("to choose sound.", rightX + 4, topH + 58, 11, DARKGRAY);
+            // No chooser open: the game's SFX list, click a row to hear it.
+            DrawText("GAME SFX (click = play)", rightX + 4, topH + 6, 10, DARKGRAY);
+            int sy = topH + 24;
+            for (int i = 5; i < static_cast<int>(sounds.size()); i++, sy += 20)
+            {
+                const bool hover = st.mouse.x >= rightX + 2 && st.mouse.x < rightX + rightW - 2 &&
+                                   st.mouse.y >= sy && st.mouse.y < sy + 20;
+                if (hover)
+                {
+                    DrawRectangle(rightX + 2, sy, rightW - 4, 20, {30, 30, 40, 255});
+                    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) PlaySound(sounds[i].sound);
+                }
+                DrawRectangle(rightX + 4, sy + 6, 8, 8, sounds[i].color);
+                DrawText(sounds[i].name.c_str(), rightX + 16, sy + 4, 12, hover ? WHITE : LIGHTGRAY);
+            }
+
+            sy += 6;
+            DrawText("GAME BGM (click = play / stop)", rightX + 4, sy, 10, DARKGRAY);
+            sy += 16;
+            for (int i = 0; i < 7; i++, sy += 18)
+            {
+                const bool hover = st.mouse.x >= rightX + 2 && st.mouse.x < rightX + rightW - 2 &&
+                                   st.mouse.y >= sy && st.mouse.y < sy + 18;
+                const bool on = bgmPlaying == i;
+                if (hover || on) DrawRectangle(rightX + 2, sy, rightW - 4, 18, on ? (Color){40, 60, 50, 255} : (Color){30, 30, 40, 255});
+                if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+                {
+                    if (bgmPlaying >= 0) StopMusicStream(*bgmRows[bgmPlaying].music);
+                    bgmPlaying = on ? -1 : i;
+                    if (bgmPlaying >= 0)
+                    {
+                        SetMusicVolume(*bgmRows[i].music, 0.6F);
+                        PlayMusicStream(*bgmRows[i].music);
+                    }
+                }
+                DrawRectangle(rightX + 4, sy + 5, 8, 8, {120, 160, 220, 255});
+                DrawText(bgmRows[i].name, rightX + 16, sy + 3, 12, (hover || on) ? WHITE : LIGHTGRAY);
+            }
         }
 
         // ── bottom bar bg ────────────────────────────────────────

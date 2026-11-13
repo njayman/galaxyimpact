@@ -84,7 +84,10 @@ auto main(int argc, char* argv[]) -> int
     UnloadMusicStream(game.resources.bgm.base);
     UnloadMusicStream(game.resources.bgm.intensity);
     UnloadMusicStream(game.resources.bgm.miniboss);
-    UnloadMusicStream(game.resources.bgm.megaboss);
+    for (const Music& track : game.resources.bgm.megaboss)
+    {
+        UnloadMusicStream(track);
+    }
     UnloadMusicStream(game.resources.bgm.swarmBoss);
     UnloadSound(game.resources.sounds.shoot);
     UnloadSound(game.resources.sounds.hit);
@@ -103,6 +106,10 @@ auto main(int argc, char* argv[]) -> int
     UnloadSound(game.resources.sounds.nerveRelease);
     UnloadSound(game.resources.sounds.nerveFizzle);
     UnloadSound(game.resources.sounds.enemyDeath);
+    UnloadSound(game.resources.sounds.pickup);
+    UnloadSound(game.resources.sounds.heal);
+    UnloadSound(game.resources.sounds.powerUp);
+    UnloadSound(game.resources.sounds.debuff);
     game.resources.pixelTarget.reset();
     game.resources.worldTarget.reset();
     UnloadFont(game.resources.font);

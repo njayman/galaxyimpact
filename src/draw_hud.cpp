@@ -217,15 +217,15 @@ void drawHUD(const Game& game)
 
     // XP: a hairline along the very top edge.
     const float xpFrac = std::min(static_cast<float>(game.run.xp) / static_cast<float>(game.run.xpToNext), 1.0F);
-    DrawRectangle(0, 0, width, 2, Fade(Palette::StructDark, 0.8F));
-    DrawRectangle(0, 0, static_cast<int32_t>(static_cast<float>(width) * xpFrac), 2, Fade(Palette::Charge, 0.85F));
+    DrawRectangle(0, 0, width, 4, Fade(Palette::StructMid, 0.6F));
+    DrawRectangle(0, 0, static_cast<int32_t>(static_cast<float>(width) * xpFrac), 4, Palette::Charge);
 
     drawOffscreenBosses(game, width, height);
     const int32_t vitalsBottom = drawVitals(game, margin, margin);
     drawStatusRow(game, margin, vitalsBottom + 10);
     drawRunNumbers(game, width - margin, margin - 6);
     drawBossLines(game, width, height);
-    drawAbilitySlots(game, margin, height - margin - 26);
+    drawAbilitySlots(game, margin, height - margin - 54);
 
     // Controls: below the ship, clear of the HUD, only at the start of a run, then gone.
     constexpr float hintTime = 8.0F;
@@ -351,7 +351,7 @@ void drawTouchControls(const Game& game)
 auto hudCalmAlpha(const Game& game) -> float
 {
     const float t = std::clamp((game.run.hud.calmTimer - 3.0F) / 1.5F, 0.0F, 1.0F);
-    return 1.0F - 0.55F * t;
+    return 1.0F - 0.2F * t;
 }
 
 auto withThousands(int32_t value) -> std::string
@@ -364,7 +364,7 @@ auto withThousands(int32_t value) -> std::string
     return digits;
 }
 
-// HP as one thin segment per hit point, Nerve as a hairline under it, dash charges and shield
+// HP as one full bar with the count beside it, Nerve as a hairline under it, dash charges and shield
 // stacks as pips after the count. Returns the bottom y.
 auto drawVitals(const Game& game, int32_t x, int32_t y) -> int32_t
 {
@@ -372,93 +372,86 @@ auto drawVitals(const Game& game, int32_t x, int32_t y) -> int32_t
     const HudState& hud = game.run.hud;
     const float alpha = hudCalmAlpha(game);
     const auto time = static_cast<float>(GetTime());
-    const int32_t segments = std::max(1, static_cast<int32_t>(std::ceil(player.maxHealth)));
-    constexpr float lineWidth = 190.0F;
-    constexpr float gap = 3.0F;
-    const float segW = std::min(26.0F, (lineWidth - gap * static_cast<float>(segments - 1)) / static_cast<float>(segments));
-    const float hpWidth = segW * static_cast<float>(segments) + gap * static_cast<float>(segments - 1);
+    constexpr float hpWidth = 190.0F;
     const bool low = player.health <= player.maxHealth / 3.0F;
     const float lowPulse = low ? 0.5F + 0.5F * std::sin(time * 7.0F) : 0.0F;
     const auto fx = static_cast<float>(x);
     const auto fy = static_cast<float>(y);
 
-    for (int32_t i = 0; i < segments; i++)
+    // One full bar; the part lost to the last hit flashes white, then fades.
+    const float maxHp = std::max(1.0F, player.maxHealth);
+    const float fill = std::clamp(player.health / maxHp, 0.0F, 1.0F);
+    DrawRectangleRec(Rectangle{.x = fx, .y = fy, .width = hpWidth, .height = 8}, Fade(Palette::StructDark, alpha));
+    const Color hp = ColorLerp(Palette::Accent, Palette::Crit, lowPulse * 0.6F);
+    DrawRectangleRec(Rectangle{.x = fx, .y = fy, .width = hpWidth * fill, .height = 8}, Fade(hp, alpha));
+    const float lost = std::clamp(hud.hitFrom / maxHp, 0.0F, 1.0F) - fill;
+    if (hud.hitFlashTimer > 0 && lost > 0)
     {
-        const float sx = fx + static_cast<float>(i) * (segW + gap);
-        const float fill = std::clamp(player.health - static_cast<float>(i), 0.0F, 1.0F);
-        DrawRectangleRec(Rectangle{.x = sx, .y = fy, .width = segW, .height = 4}, Fade(Palette::StructDark, alpha));
-        const Color hp = ColorLerp(Palette::Accent, Palette::Crit, lowPulse * 0.6F);
-        DrawRectangleRec(Rectangle{.x = sx, .y = fy, .width = segW * fill, .height = 4}, Fade(hp, alpha));
-        // Lost this hit: flashes white, then fades.
-        const float lost = std::clamp(hud.hitFrom - static_cast<float>(i), 0.0F, 1.0F) - fill;
-        if (hud.hitFlashTimer > 0 && lost > 0)
-        {
-            DrawRectangleRec(Rectangle{.x = sx + segW * fill, .y = fy - 1, .width = segW * lost, .height = 6},
-                             Fade(WHITE, hud.hitFlashTimer / 0.6F));
-        }
+        DrawRectangleRec(Rectangle{.x = fx + hpWidth * fill, .y = fy - 1, .width = hpWidth * lost, .height = 10},
+                         Fade(WHITE, hud.hitFlashTimer / 0.6F));
     }
     const std::string count = std::format("{:.0f}", std::ceil(player.health));
-    drawText(game, count.c_str(), static_cast<int32_t>(fx + hpWidth + 8), y - 6, 16,
+    drawText(game, count.c_str(), static_cast<int32_t>(fx + hpWidth + 8), y - 4, 16,
              Fade(low ? Palette::Crit : Palette::Haze, alpha));
 
     // Nerve hairline.
     const float frac = nerveFrac(game);
     const bool ready = frac >= 1.0F;
     const float readyPulse = 0.5F + 0.5F * std::sin(time * 8.0F);
-    const float ny = fy + 9;
-    DrawRectangleRec(Rectangle{.x = fx, .y = ny, .width = hpWidth, .height = 1.5F}, Fade(Palette::StructDark, alpha));
+    const float ny = fy + 13;
+    DrawRectangleRec(Rectangle{.x = fx, .y = ny, .width = hpWidth, .height = 3.0F}, Fade(Palette::StructDark, alpha));
     const Color nerve = ready ? ColorLerp(Palette::Charge, WHITE, readyPulse * 0.5F)
                               : ColorLerp(Palette::Charge, Palette::Crit, frac);
-    DrawRectangleRec(Rectangle{.x = fx, .y = ny, .width = hpWidth * frac, .height = 1.5F},
+    DrawRectangleRec(Rectangle{.x = fx, .y = ny, .width = hpWidth * frac, .height = 3.0F},
                      Fade(nerve, ready ? 1.0F : alpha));
     if (player.nerveCharging)
     {
         const float charge = 1.0F - player.nerveChargeTimer / UpdateConstants::nerveBurstWindup;
-        DrawRectangleRec(Rectangle{.x = fx, .y = ny - 1, .width = hpWidth * charge, .height = 3.5F}, Palette::Crit);
+        DrawRectangleRec(Rectangle{.x = fx, .y = ny - 1, .width = hpWidth * charge, .height = 5.0F}, Palette::Crit);
     }
     else if (ready)
     {
-        drawText(game, "SPACE", static_cast<int32_t>(fx + hpWidth + 8), static_cast<int32_t>(ny) - 2, 11,
+        drawText(game, "SPACE", static_cast<int32_t>(fx + hpWidth + 8), static_cast<int32_t>(ny) - 5, 14,
                  Fade(Palette::Charge, 0.5F + 0.5F * readyPulse));
     }
 
     // Dash charges (dots, the next one refilling as a ring) and shield stacks (small chevrons).
-    float px = fx + 3;
-    const float py = ny + 11;
-    for (int32_t i = 0; i < UpdateConstants::maxCharges; i++, px += 11)
+    float px = fx + 5;
+    const float py = ny + 15;
+    for (int32_t i = 0; i < UpdateConstants::maxCharges; i++, px += 16)
     {
         const Vector2 c{.x = px, .y = py};
         if (i < player.charges)
         {
-            DrawCircleV(c, 3.0F, Fade(Palette::Shield, alpha));
+            DrawCircleV(c, 5.0F, Fade(Palette::Shield, alpha));
             continue;
         }
-        DrawCircleLinesV(c, 3.0F, Fade(Palette::StructMid, alpha));
+        DrawCircleV(c, 5.0F, Fade(Palette::StructMid, alpha)); // empty: flat dim fill, no outline
         if (i == player.charges)
         {
             const float d = chargeRegenDuration(game);
             const float progress = d > 0 ? 1 - player.chargeRegenTimer / d : 1;
-            DrawRing(c, 2.0F, 3.6F, -90, -90 + 360 * progress, 16,
+            DrawRing(c, 2.5F, 5.0F, -90, -90 + 360 * progress, 16,
                      Fade(isNerveChargeFeeding(game) ? Palette::Charge : Palette::Shield, alpha));
         }
     }
     px += 6;
-    for (int32_t i = 0; i < maxShieldStacks(game); i++, px += 11)
+    for (int32_t i = 0; i < maxShieldStacks(game); i++, px += 16)
     {
         const bool full = i < player.shieldStacks;
-        const Vector2 a{.x = px - 3.5F, .y = py - 2.5F};
-        const Vector2 b{.x = px + 3.5F, .y = py - 2.5F};
-        const Vector2 tip{.x = px, .y = py + 3.0F};
+        const Vector2 a{.x = px - 5.5F, .y = py - 4.0F};
+        const Vector2 b{.x = px + 5.5F, .y = py - 4.0F};
+        const Vector2 tip{.x = px, .y = py + 5.0F};
         if (full)
         {
             DrawTriangle(tip, b, a, Fade(Palette::Shield, 0.85F * alpha));
         }
         else
         {
-            DrawTriangleLines(tip, b, a, Fade(Palette::StructMid, alpha));
+            DrawTriangle(tip, b, a, Fade(Palette::StructMid, alpha));
         }
     }
-    return static_cast<int32_t>(py + 4);
+    return static_cast<int32_t>(py + 7);
 }
 
 // Top right, right-aligned: score, then wave and level, DMG, the biome name when it changes,
@@ -468,10 +461,10 @@ void drawRunNumbers(const Game& game, int32_t right, int32_t y)
     const auto line = [&](const std::string& text, int32_t size, Color color, int32_t yy)
     { drawText(game, text.c_str(), right - measureText(game, text.c_str(), size), yy, size, color); };
 
-    line(withThousands(game.run.score), 24, Palette::StructLight, y);
+    line(withThousands(game.run.score), 24, Palette::Haze, y);
     y += 26;
-    line(std::format("WAVE {}   LV {}", game.run.waveNumber, game.run.level), 13, Palette::StructMid, y);
-    y += 17;
+    line(std::format("WAVE {}   LV {}", game.run.waveNumber, game.run.level), 15, Palette::StructLight, y);
+    y += 19;
     const auto& meter = game.run.damageMeterDisplay;
     if (meter.total > 0)
     {

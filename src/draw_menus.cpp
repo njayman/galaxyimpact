@@ -431,15 +431,32 @@ void drawWeaponGallery(const Game& game)
 // updateBestiary can size its scroll range before drawBestiary runs. Keep
 // this in sync with drawBestiarySection's own cellSize/gap/labelGap/columns
 // math below.
+namespace
+{
+// Bestiary grid, shared by the height prediction and the drawing. Big flat tiles, no labels:
+// the name and numbers show in a tooltip on hover.
+constexpr float bestiaryCell = 84.0F;
+constexpr float bestiaryGap = 16.0F;
+
+auto bestiaryColumns(const Game& game, float scale) -> int32_t
+{
+    const float usableWidth = static_cast<float>(game.resources.windowWidth) * 0.78F;
+    return std::max(1, static_cast<int32_t>(usableWidth / ((bestiaryCell + bestiaryGap) * scale)));
+}
+
+struct BestiaryHover
+{
+    bool active = false;
+    Rectangle box{};
+    std::string name;
+    std::string detail;
+};
+}
+
 auto bestiarySectionHeight(const Game& game, float scale, size_t count) -> float
 {
-    constexpr float cellSize = 52.0F;
-    constexpr float gap = 14.0F;
-    constexpr float labelGap = 20.0F;
-    const float cellStep = (cellSize + gap) * scale;
-    const float rowHeight = (cellSize + labelGap + gap) * scale;
-    const float usableWidth = static_cast<float>(game.resources.windowWidth) * 0.88F;
-    const auto columns = std::max(1, static_cast<int32_t>(usableWidth / cellStep));
+    const float rowHeight = (bestiaryCell + bestiaryGap) * scale;
+    const auto columns = bestiaryColumns(game, scale);
     const auto rows = (static_cast<int32_t>(count) + columns - 1) / columns;
     return 34.0F * scale + static_cast<float>(rows) * rowHeight + 16.0F * scale;
 }
@@ -458,13 +475,12 @@ auto drawBestiarySection(const Game& game, std::string_view title, float y, floa
                          size_t count, const std::function<bool(size_t)>& isUnlocked,
                          const std::function<std::string_view(size_t)>& nameFor,
                          const std::function<void(size_t, Vector2, float, Color)>& drawIcon,
-                         const std::function<Color(size_t)>& colorFor) -> float
+                         const std::function<Color(size_t)>& colorFor,
+                         const std::function<std::string(size_t)>& detailFor, BestiaryHover& hover) -> float
 {
-    constexpr float cellSize = 52.0F;
-    constexpr float gap = 14.0F;
-    constexpr float labelGap = 20.0F;
-    const float cellStep = (cellSize + gap) * scale;
-    const float rowHeight = (cellSize + labelGap + gap) * scale;
+    constexpr float cellSize = bestiaryCell;
+    const float cellStep = (bestiaryCell + bestiaryGap) * scale;
+    const float rowHeight = cellStep;
 
     const auto titleSize = static_cast<int32_t>(22 * scale);
     const std::string titleStr(title);
@@ -473,66 +489,53 @@ auto drawBestiarySection(const Game& game, std::string_view title, float y, floa
              static_cast<int32_t>(y), titleSize, Palette::Accent);
     y += 34 * scale;
 
-    const float usableWidth = static_cast<float>(game.resources.windowWidth) * 0.88F;
-    const auto columns = std::max(1, static_cast<int32_t>(usableWidth / cellStep));
-    const float gridWidth = static_cast<float>(columns) * cellStep;
+    const auto columns = bestiaryColumns(game, scale);
+    const float gridWidth = static_cast<float>(columns) * cellStep - bestiaryGap * scale;
     const float leftX = (static_cast<float>(game.resources.windowWidth) - gridWidth) / 2;
 
     const Vector2 mouse = GetMousePosition();
-    std::string hoverName;
-    bool hovering = false;
 
     for (size_t i = 0; i < count; i++)
     {
         const auto column = static_cast<int32_t>(i) % columns;
         const auto row = static_cast<int32_t>(i) / columns;
-        const float x = leftX + static_cast<float>(column) * cellStep;
+        // A short last row is centred under the heading instead of hanging left.
+        const int32_t inRow = std::min(columns, static_cast<int32_t>(count) - row * columns);
+        const float rowShift = static_cast<float>(columns - inRow) * cellStep / 2;
+        const float x = leftX + rowShift + static_cast<float>(column) * cellStep;
         const float cellY = y + static_cast<float>(row) * rowHeight;
         const bool unlocked = isUnlocked(i);
         const Rectangle box{
             .x = x, .y = cellY, .width = cellSize * scale, .height = cellSize * scale};
 
-        DrawRectangleLines(static_cast<int32_t>(box.x), static_cast<int32_t>(box.y),
-                           static_cast<int32_t>(box.width), static_cast<int32_t>(box.height),
-                           Fade(unlocked ? Palette::StructLight : Palette::StructMid, 0.6F));
+        const bool hovered = hoverActive(game) && CheckCollisionPointRec(mouse, box);
+        const float tone = hovered ? 1.0F : unlocked ? 0.7F : 0.35F;
+        DrawRectangleRec(box, hovered ? ColorLerp(Palette::StructDark, Palette::StructMid, 0.35F)
+                                      : ColorLerp(Palette::Void, Palette::StructDark, tone));
 
         const Vector2 center{.x = box.x + box.width / 2, .y = box.y + box.height / 2};
         if (unlocked)
         {
-            drawIcon(i, center, cellSize * scale * 0.36F, colorFor(i));
+            drawIcon(i, center, cellSize * scale * 0.27F, colorFor(i)); // spikes and barrels reach ~1.7x the radius
         }
         else
         {
-            drawText(game, "?", static_cast<int32_t>(center.x - 7 * scale),
-                     static_cast<int32_t>(center.y - 11 * scale), static_cast<int32_t>(22 * scale),
-                     Palette::StructMid);
+            const auto size = static_cast<int32_t>(26 * scale);
+            drawText(game, "?", static_cast<int32_t>(center.x) - measureText(game, "?", size) / 2,
+                     static_cast<int32_t>(center.y) - size / 2, size, Palette::StructMid);
         }
 
-        const std::string label = unlocked ? std::string(nameFor(i)) : std::string("???");
-        const int32_t labelWidth = measureText(game, label.c_str(), 12);
-        drawText(game, label.c_str(),
-                 static_cast<int32_t>(x + box.width / 2 - static_cast<float>(labelWidth) / 2),
-                 static_cast<int32_t>(cellY + box.height + 2 * scale), 12,
-                 unlocked ? Palette::StructLight : Palette::StructMid);
-
-        if (hoverActive(game) && CheckCollisionPointRec(mouse, box))
+        if (hovered)
         {
-            hovering = true;
-            hoverName = unlocked ? std::string(nameFor(i)) : "??? (undiscovered)";
+            hover = BestiaryHover{.active = true,
+                                  .box = box,
+                                  .name = unlocked ? std::string(nameFor(i)) : "???",
+                                  .detail = unlocked ? detailFor(i) : "Not yet defeated."};
         }
     }
 
     const auto rows = (static_cast<int32_t>(count) + columns - 1) / columns;
     const float sectionEnd = y + static_cast<float>(rows) * rowHeight;
-
-    if (hovering)
-    {
-        const auto hoverSize = static_cast<int32_t>(16 * scale);
-        const int32_t hoverWidth = measureText(game, hoverName.c_str(), hoverSize);
-        drawText(game, hoverName.c_str(), game.resources.windowWidth / 2 - hoverWidth / 2,
-                 static_cast<int32_t>(sectionEnd), hoverSize, Palette::Crit);
-        return sectionEnd + 30 * scale;
-    }
 
     return sectionEnd + 16 * scale;
 }
@@ -569,6 +572,7 @@ void drawBestiary(Game& game)
     windowText(game, summary.c_str(), game.resources.windowWidth / 2,
               static_cast<int32_t>((blockTop + 100.0F * scale) / scale), 18, Palette::StructLight);
 
+    BestiaryHover hover;
     float y = blockTop + 140.0F * scale;
     y = drawBestiarySection(
         game, "ENEMIES", y, scale, enemyKinds.size(),
@@ -586,10 +590,18 @@ void drawBestiary(Game& game)
             }
             else
             {
-                drawEnemyShape(shape, c, r, -90, col, 1);
+                // Shapes with a long gun reach further forward (up) than back: drop them so the outline is centred.
+                const float drop = shape == EnemyShape::Turret ? 0.25F : shape == EnemyShape::LongBarrel ? 0.4F : 0.0F;
+                drawEnemyShape(shape, Vector2{.x = c.x, .y = c.y + r * drop}, r, -90, col, 1);
             }
         },
-        [](size_t i) { return enemyKinds.at(i).color; });
+        [](size_t i) { return enemyKinds.at(i).color; },
+        [](size_t i)
+        {
+            const EnemyKind& kind = enemyKinds.at(i);
+            return std::format("HP {}   Speed {:.1f}   From wave {}", kind.health, kind.speed, kind.minWave);
+        },
+        hover);
 
     y = drawBestiarySection(
         game, "BOSSES", y, scale, bestiaryBossKindCount,
@@ -600,7 +612,8 @@ void drawBestiary(Game& game)
             drawBossHull(bossBestiaryShape(static_cast<int32_t>(i)), c,
                          Vector2{.x = r * 2, .y = r * 2}, col);
         },
-        [](size_t i) { return bossBestiaryColor(static_cast<int32_t>(i)); });
+        [](size_t i) { return bossBestiaryColor(static_cast<int32_t>(i)); },
+        [](size_t) { return std::string("Boss"); }, hover);
 
     y = drawBestiarySection(
         game, "HAZARDS", y, scale, bestiaryHazardKindCount,
@@ -615,16 +628,39 @@ void drawBestiary(Game& game)
         {
             return static_cast<EliteHazardRole>(i) == EliteHazardRole::Warlord ? Palette::Accent
                                                                                : Palette::Shield;
-        });
+        },
+        [](size_t) { return std::string("Elite hazard"); }, hover);
 
     const auto footerSize = static_cast<int32_t>(16 * scale);
     const char* footerText =
-        touchInputActive(game) ? "Tap & hold an entry for its name" : "Hover an entry for its name";
+        touchInputActive(game) ? "Tap & hold an entry for details" : "Hover an entry for details";
     const int32_t footerWidth = measureText(game, footerText, footerSize);
     drawText(game, footerText, game.resources.windowWidth / 2 - footerWidth / 2,
              static_cast<int32_t>(y), footerSize, Palette::StructMid);
 
     EndScissorMode();
+
+    if (hover.active && hover.box.y < viewportHeight)
+    {
+        // Tooltip: flat matte box above the tile (below it when there is no room), kept on screen.
+        const auto nameSize = static_cast<int32_t>(20 * scale);
+        const auto detailSize = static_cast<int32_t>(15 * scale);
+        const float pad = 12 * scale;
+        const float width = static_cast<float>(std::max(measureText(game, hover.name.c_str(), nameSize),
+                                                        measureText(game, hover.detail.c_str(), detailSize))) +
+                            pad * 2;
+        const float height = 62 * scale;
+        const float x = std::clamp(hover.box.x + hover.box.width / 2 - width / 2, pad,
+                                   static_cast<float>(game.resources.windowWidth) - width - pad);
+        const float above = hover.box.y - height - 6 * scale;
+        const float tipY = above >= 0 ? above : hover.box.y + hover.box.height + 6 * scale;
+        DrawRectangleRec(Rectangle{.x = x, .y = tipY, .width = width, .height = height}, Palette::StructDark);
+        DrawRectangleRec(Rectangle{.x = x, .y = tipY, .width = 3 * scale, .height = height}, Palette::Accent);
+        drawText(game, hover.name.c_str(), static_cast<int32_t>(x + pad), static_cast<int32_t>(tipY + 9 * scale),
+                 nameSize, Palette::Haze);
+        drawText(game, hover.detail.c_str(), static_cast<int32_t>(x + pad), static_cast<int32_t>(tipY + 36 * scale),
+                 detailSize, Palette::StructLight);
+    }
 
     const Vector2 mouse = GetMousePosition();
     const Rectangle back = backButtonRect(game);
@@ -846,10 +882,10 @@ auto evolutionHint(const Game& game, SkillType id) -> std::string
     return "";
 }
 
-void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
+void drawAbilitySlots(const Game& game, int32_t x, int32_t y, bool hover)
 {
-    constexpr float boxSize = 28;
-    constexpr float gap = 34;
+    constexpr float boxSize = 40;
+    constexpr float gap = 48;
     constexpr float iconScale = 0.4F;
 
     struct Slot
@@ -905,7 +941,7 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
         const Vector2 center{.x = bx + boxSize / 2, .y = by + boxSize / 2};
         if (static_cast<size_t>(i) >= slots.size())
         {
-            DrawCircleLinesV(center, 2.5F, Fade(Palette::StructMid, 0.6F));
+            DrawCircleV(center, 3.5F, Fade(Palette::StructMid, 0.8F));
             continue;
         }
         const Slot& slot = slots.at(static_cast<size_t>(i));
@@ -915,18 +951,15 @@ void drawAbilitySlots(const Game& game, int32_t x, int32_t y)
             DrawCircleV(center, boxSize * 0.5F, Fade(Palette::Crit, 0.08F));
         }
         drawSkillIcon(slot.id, center, boxSize * iconScale, color, slot.evolved);
-        for (int32_t l = 0; l < slot.level; l++) // level dots, two rows of four past level 4
-        {
-            const float dx = center.x - 7.5F + static_cast<float>(l % 4) * 5.0F;
-            const float dy = by + boxSize + 4 + static_cast<float>(l / 4) * 4.0F;
-            DrawRectangleRec(Rectangle{.x = dx - 1, .y = dy - 1, .width = 2, .height = 2}, Fade(color, 0.8F));
-        }
+        const std::string level = std::to_string(slot.level);
+        drawText(game, level.c_str(), static_cast<int32_t>(center.x) - measureText(game, level.c_str(), 12) / 2,
+                 static_cast<int32_t>(by + boxSize) + 1, 12, color);
         if (slot.evolutionReady)
         {
-            DrawTriangle(Vector2{.x = center.x - 3, .y = by - 2}, Vector2{.x = center.x + 3, .y = by - 2},
-                         Vector2{.x = center.x, .y = by - 6}, Palette::Heal);
+            DrawTriangle(Vector2{.x = center.x - 5, .y = by - 2}, Vector2{.x = center.x + 5, .y = by - 2},
+                         Vector2{.x = center.x, .y = by - 9}, Palette::Heal);
         }
-        if (hoverActive(game) &&
+        if (hover && hoverActive(game) &&
             CheckCollisionPointRec(mouse, Rectangle{.x = bx, .y = by, .width = boxSize, .height = boxSize}))
         {
             hovered = slot.id;
@@ -978,10 +1011,7 @@ void drawLevelUp(const Game& game)
     endPop();
 
     const auto count = static_cast<int32_t>(game.run.pendingChoices.size());
-    constexpr int32_t nameFontSize = 24;
-    constexpr int32_t descFontSize = 15;
-    constexpr int32_t iconOffsetX = 24;
-    constexpr float iconRadius = 11;
+    const auto px = [scale](float v) { return static_cast<int32_t>(v * scale); };
 
     for (int32_t i = 0; i < count; i++)
     {
@@ -989,10 +1019,13 @@ void drawLevelUp(const Game& game)
         const Rectangle rect =
             menuColumnRect(game, i, count, MenuLayout::levelUpWidth, MenuLayout::levelUpHeight,
                            MenuLayout::levelUpGap, MenuLayout::levelUpMenuY);
+        const bool selected = i == game.menuIndex;
 
-        Color color = Palette::StructLight;
+        Color color = selected ? Palette::Accent : Palette::Haze; // name, icon and bar
         std::string name;
         std::string desc;
+        std::string hint;
+        const char* tag = "";
         SkillType icon{};
         bool hasIcon = false;
         bool evolvedIcon = false;
@@ -1000,20 +1033,16 @@ void drawLevelUp(const Game& game)
         switch (choice.type)
         {
         case ChoiceType::Evolve:
-            name = std::format("EVOLVE: {}",
-                               evolvedWeaponName.at(static_cast<size_t>(choice.weapon.value())));
+            name = std::string(evolvedWeaponName.at(static_cast<size_t>(choice.weapon.value())));
             desc = "Fuses the weapon and its linked passive into a super weapon.";
+            tag = "EVOLVE";
             icon = weaponGrantSkill.at(static_cast<size_t>(choice.weapon.value()));
             hasIcon = true;
             evolvedIcon = true;
-            if (i == game.menuIndex)
-            {
-                color = Palette::Crit;
-            }
+            color = selected ? Palette::Crit : Palette::Charge;
             break;
         case ChoiceType::Pickup:
         {
-
             const auto found = std::ranges::find_if(pickupCatalog,
                                                     [&](const PickupCatalogEntry& e)
                                                     {
@@ -1023,6 +1052,7 @@ void drawLevelUp(const Game& game)
                                                     });
             name = found != pickupCatalog.end() ? std::string(found->name) : "Pickup";
             desc = pickupChoiceDescription(choice.pickupType, choice.element, choice.mechanism);
+            tag = "PICKUP";
             if (choice.pickupType == PickupType::Elemental)
             {
                 color = elementColors.at(static_cast<size_t>(choice.element));
@@ -1035,7 +1065,8 @@ void drawLevelUp(const Game& game)
             const int stacks = game.run.ascensionStacks.at(static_cast<size_t>(choice.ascension));
             name = stacks > 0 ? std::format("{} (x{})", def.name, stacks + 1) : std::string(def.name);
             desc = def.description;
-            color = Palette::Charge;
+            tag = "ASCENSION";
+            color = selected ? Palette::Crit : Palette::Charge;
             break;
         }
         case ChoiceType::Skill:
@@ -1043,17 +1074,25 @@ void drawLevelUp(const Game& game)
         {
             const auto& def = Skills.at(static_cast<size_t>(choice.skill));
             const int lvl = game.run.skillLevels.at(static_cast<size_t>(choice.skill));
+            const auto weapon = weaponForGrantSkill(choice.skill);
             std::string_view skillName = def.name;
-            if (const auto weapon = weaponForGrantSkill(choice.skill);
-                weapon.has_value() && weaponEvolved(game, *weapon))
+            if (weapon.has_value() && weaponEvolved(game, *weapon))
             {
                 skillName = evolvedWeaponName.at(static_cast<size_t>(*weapon));
             }
-            name = std::format("{} (Lv {})", skillName, lvl + 1);
+            name = lvl > 0 ? std::format("{} (Lv {})", skillName, lvl + 1) : std::string(skillName);
             desc = def.description;
-            if (const auto hint = evolutionHint(game, choice.skill); !hint.empty())
+            if (const auto target = evolutionHint(game, choice.skill); !target.empty())
             {
-                desc = std::format("{}  ->  builds toward {}", desc, hint);
+                hint = std::format("Builds toward {}", target);
+            }
+            if (weapon.has_value())
+            {
+                tag = lvl > 0 ? "WEAPON" : "NEW WEAPON";
+            }
+            else
+            {
+                tag = lvl > 0 ? "PASSIVE" : "NEW PASSIVE";
             }
             icon = choice.skill;
             hasIcon = true;
@@ -1061,45 +1100,73 @@ void drawLevelUp(const Game& game)
         }
         }
 
-        if (i == game.menuIndex)
-        {
-            if (choice.type == ChoiceType::Evolve)
-            {
-                color = Palette::Crit;
-            }
-            else if (choice.type == ChoiceType::Pickup &&
-                     choice.pickupType == PickupType::Elemental)
-            {
-                color = elementColors.at(static_cast<size_t>(choice.element));
-            }
-            else
-            {
-                color = Palette::Accent;
-            }
-        }
-
         beginPop(Vector2{.x = rect.x + rect.width / 2, .y = rect.y + rect.height / 2}, popScale(game, i + 1));
-        const auto nameSize = static_cast<int32_t>(static_cast<float>(nameFontSize) * scale);
-        const auto descSize = static_cast<int32_t>(static_cast<float>(descFontSize) * scale);
-        const int32_t nameY = static_cast<int32_t>(rect.y + rect.height * 0.28F) - nameSize / 2;
-        const int32_t descY = static_cast<int32_t>(rect.y + rect.height * 0.68F) - descSize / 2;
-        const int32_t nameX = static_cast<int32_t>(rect.x + rect.width / 2) -
-                              measureText(game, name.c_str(), nameSize) / 2;
 
+        // Flat matte card, opaque so the battlefield never shows through the text.
+        DrawRectangleRec(rect, selected ? ColorLerp(Palette::StructDark, Palette::StructMid, 0.35F)
+                                        : ColorLerp(Palette::Void, Palette::StructDark, 0.6F));
+        DrawRectangleRec(Rectangle{.x = rect.x, .y = rect.y, .width = 4.0F * scale, .height = rect.height},
+                         selected ? color : Palette::StructMid);
+
+        const Vector2 iconPos{.x = rect.x + 52.0F * scale, .y = rect.y + rect.height / 2};
+        const float iconRadius = 20.0F * scale;
         if (hasIcon)
         {
-            drawSkillIcon(
-                icon,
-                Vector2{.x = static_cast<float>(nameX) - static_cast<float>(iconOffsetX) * scale,
-                        .y = static_cast<float>(nameY) + static_cast<float>(nameSize) / 2},
-                iconRadius * scale, color, evolvedIcon);
+            drawSkillIcon(icon, iconPos, iconRadius, color, evolvedIcon);
         }
-        drawText(game, name.c_str(), nameX, nameY, nameSize, color);
-        windowText(game, desc.c_str(), static_cast<int32_t>(rect.x + rect.width / 2),
-                   static_cast<int32_t>(static_cast<float>(descY) / scale), descFontSize,
-                   Palette::StructMid);
+        else if (choice.type == ChoiceType::Pickup)
+        {
+            rlPushMatrix(); // the world icon is drawn at pickup size; scale it up to the column
+            rlTranslatef(iconPos.x, iconPos.y, 0);
+            rlScalef(2.4F * scale, 2.4F * scale, 1);
+            drawPickupIcon(choice.pickupType, choice.element, Vector2{}, 1.0F);
+            rlPopMatrix();
+        }
+        else // Ascension: a ring round a core
+        {
+            DrawRing(iconPos, iconRadius * 0.7F, iconRadius, 0, 360, 32, color);
+            DrawCircleV(iconPos, iconRadius * 0.3F, color);
+        }
+
+        const auto textX = static_cast<int32_t>(rect.x) + px(100);
+        const auto top = static_cast<int32_t>(rect.y);
+        const bool hasHint = !hint.empty();
+        drawText(game, name.c_str(), textX, top + px(hasHint ? 9 : 17), px(24), color);
+
+        const int32_t tagSize = px(13);
+        drawText(game, tag,
+                 static_cast<int32_t>(rect.x + rect.width) - px(20) - measureText(game, tag, tagSize),
+                 top + px(hasHint ? 14 : 22), tagSize, selected ? color : Palette::StructLight);
+
+        // Description shrinks to fit rather than running off the card.
+        const int32_t descRoom = static_cast<int32_t>(rect.width) - px(120);
+        int32_t descSize = px(18);
+        if (const int32_t w = measureText(game, desc.c_str(), descSize); w > descRoom)
+        {
+            descSize = descSize * descRoom / w;
+        }
+        drawText(game, desc.c_str(), textX, top + px(hasHint ? 39 : 53), descSize,
+                 selected ? Palette::Haze : Palette::StructLight);
+        if (hasHint)
+        {
+            drawText(game, hint.c_str(), textX, top + px(66), px(15), Palette::Charge);
+        }
         endPop();
     }
+
+    // The build so far, under the cards and above the dim, so the pick is not made blind.
+    const float stripScale = 1.4F * scale;
+    const float stripWidth = static_cast<float>(weaponSlotCap(game)) * 48.0F * stripScale;
+    const float stripY =
+        static_cast<float>(MenuLayout::levelUpMenuY +
+                           count * (MenuLayout::levelUpHeight + MenuLayout::levelUpGap) + 20) * scale;
+    beginPop(Vector2{.x = static_cast<float>(game.resources.windowWidth) / 2, .y = stripY}, popScale(game, count + 1));
+    rlPushMatrix();
+    rlTranslatef((static_cast<float>(game.resources.windowWidth) - stripWidth) / 2, stripY, 0);
+    rlScalef(stripScale, stripScale, 1);
+    drawAbilitySlots(game, 0, 0, false);
+    rlPopMatrix();
+    endPop();
 }
 
 void drawMenu(const Game& game, const std::string& heading, const std::vector<std::string>& options,

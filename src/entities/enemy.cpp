@@ -155,7 +155,7 @@ static void updateHacker(Game& game, Enemy& enemy, float deltaTime)
     game.run.achievementToast = std::string(effectiveWeaponName(weapon)) + " hacked!";
     game.run.achievementToastTimer = 3.0F;
     triggerShake(game, 6, 0.25F);
-    playSFX(game, game.resources.sounds.explosion);
+    playSFX(game, game.resources.sounds.debuff);
     enemy.hackRayOn = false;
     enemy.hackExposure = 0;
 }

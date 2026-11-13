@@ -82,8 +82,10 @@ void addSaw(std::vector<float>& buf, float startSeconds, float freq, float amp, 
     }
 }
 
-void addNoise(std::vector<float>& buf, float startSeconds, float amp, float decaySeconds)
+// smooth: one-pole low-pass on the noise. 0 = raw white noise, toward 1 = duller and softer.
+void addNoise(std::vector<float>& buf, float startSeconds, float amp, float decaySeconds, float smooth = 0.0F)
 {
+    float low = 0.0F;
     const size_t start = secondsToSamples(startSeconds);
     for (size_t i = start; i < buf.size(); i++)
     {
@@ -93,7 +95,8 @@ void addNoise(std::vector<float>& buf, float startSeconds, float amp, float deca
             break;
         }
         const float env = std::exp(-elapsed / decaySeconds);
-        buf.at(i) += amp * env * noiseSample();
+        low += (noiseSample() - low) * (1.0F - smooth);
+        buf.at(i) += amp * env * low;
     }
 }
 
@@ -279,6 +282,323 @@ auto generateMegaboss(size_t loopSamples) -> std::vector<float>
     return out;
 }
 
+// --- Boss tracks per biome ---------------------------------------------------------------
+// A full boss track is eight bars written for the biome (B), then the megaboss loop twice (A A):
+// 16 bars, so it still lines up with the 4-bar base loop. B is a build-up. It opens sparse, on the
+// biome's own voice over a pad, and brings the loop's parts in bar by bar (bass, hats, arpeggio,
+// snare, stabs, a roll) until it lands on the full loop. Same tempo and key centre (A) throughout;
+// each biome changes the scale, the harmony and the lead voice.
+
+auto midi(int note) -> float
+{
+    return 440.0F * std::pow(2.0F, static_cast<float>(note - 69) / 12.0F);
+}
+
+auto at(int bar, float beat) -> float
+{
+    return (static_cast<float>(bar) * 4.0F + beat) * beatSeconds;
+}
+
+struct Chord
+{
+    int root;  // bass register (midi)
+    int third; // 3 = minor, 4 = major
+    int fifth; // 7 = perfect, 6 = diminished
+};
+
+// How loud each part of the loop is at each of the build's eight bars.
+constexpr std::array<float, 8> buildBass{0.0F, 0.5F, 0.8F, 1.0F, 1.0F, 1.0F, 1.0F, 1.0F};
+constexpr std::array<float, 8> buildArp{0.0F, 0.0F, 0.3F, 0.5F, 0.7F, 0.85F, 1.0F, 1.0F};
+constexpr std::array<float, 8> buildStab{0.0F, 0.0F, 0.0F, 0.0F, 0.6F, 0.8F, 1.0F, 1.0F};
+
+// One bar of the build's drums. Bars 0-1: a bare kick. Bars 2-3: the kick pattern and hats.
+// Bars 4-7: the full megaboss kit (kick, snare on 2 and 4, shuffled hats). Bar 7 ends on a rising roll.
+// fourOnFloor swaps the kick pattern for one on every beat with sixteenth hats (Solar Forge).
+void buildDrumBar(std::vector<float>& out, int bar, bool fourOnFloor)
+{
+    if (fourOnFloor)
+    {
+        for (int beat = 0; beat < 4; beat++)
+        {
+            const auto bt = static_cast<float>(beat);
+            if (bar >= 2 || beat % 2 == 0)
+            {
+                addKick(out, at(bar, bt), 0.28F, 150, 45, 0.08F, 0.11F);
+            }
+            if (bar >= 2)
+            {
+                addNoise(out, at(bar, bt + 0.5F), 0.11F, 0.035F);
+            }
+            for (int s = 0; bar >= 4 && s < 4; s++)
+            {
+                addNoise(out, at(bar, bt + static_cast<float>(s) * 0.25F), 0.05F, 0.012F);
+            }
+        }
+    }
+    else
+    {
+        addKick(out, at(bar, 0), 0.30F, 150, 45, 0.08F, 0.12F);
+        if (bar >= 1)
+        {
+            addKick(out, at(bar, 2.0F + 1.0F / 3.0F), 0.24F, 150, 40, 0.06F, 0.09F);
+            addKick(out, at(bar, 2.5F), 0.28F, 150, 40, 0.06F, 0.09F);
+        }
+        for (int beat = 0; bar >= 2 && beat < 4; beat++)
+        {
+            const auto bt = static_cast<float>(beat);
+            const float hats = bar >= 4 ? 1.0F : 0.6F;
+            addNoise(out, at(bar, bt + 1.0F / 3.0F), 0.08F * hats, 0.02F);
+            addNoise(out, at(bar, bt + 0.5F), 0.11F * hats, 0.025F);
+            addNoise(out, at(bar, bt + 5.0F / 6.0F), 0.08F * hats, 0.02F);
+        }
+    }
+    if (bar >= 4)
+    {
+        addNoise(out, at(bar, 1), 0.34F, 0.07F);
+        addNoise(out, at(bar, 3), 0.34F, 0.07F);
+    }
+    if (bar == 7)
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            addNoise(out, at(bar, 2.0F + static_cast<float>(i) * 0.25F), 0.10F + 0.03F * static_cast<float>(i), 0.03F);
+        }
+    }
+}
+
+// The megaboss loop's tonal parts for half a bar on one chord: bass with its two pick-up notes,
+// the sixteenth-note arpeggio and the chord stabs, each at the level the build has reached by this
+// bar. A soft pad holds the chord while they are still coming in. Chords change every half bar,
+// like the loop itself.
+void bossEngineHalfBar(std::vector<float>& out, int bar, int slot, Chord c)
+{
+    const float bass = buildBass.at(static_cast<size_t>(bar));
+    const float arp = buildArp.at(static_cast<size_t>(bar));
+    const float stab = buildStab.at(static_cast<size_t>(bar));
+    const float r = midi(c.root + 12);
+    const float third = std::pow(2.0F, static_cast<float>(c.third) / 12.0F);
+    const float fifth = std::pow(2.0F, static_cast<float>(c.fifth) / 12.0F);
+    const float sb = static_cast<float>(slot) * 2.0F;
+    for (int beat = 0; beat < 2; beat++)
+    {
+        const float bt = sb + static_cast<float>(beat);
+        addSaw(out, at(bar, bt), r * 0.25F, 0.20F * bass, beatSeconds * 0.9F);
+        addSaw(out, at(bar, bt + 0.5F), r * 0.5F, 0.13F * bass, beatSeconds * 0.2F);
+        addSaw(out, at(bar, bt + 0.75F), r * 0.5F, 0.12F * bass, beatSeconds * 0.2F);
+    }
+    for (const float ratio : {0.5F, 1.0F, fifth}) // pad, fading as the stabs take over
+    {
+        addTone(out, at(bar, sb), r * ratio, 0.07F * (1.0F - stab), beatSeconds * 1.6F);
+    }
+    const std::array<float, 8> arch{1.0F, third, fifth, 2.0F, 2.0F * third, 2.0F, fifth, third};
+    for (size_t n = 0; n < arch.size(); n++)
+    {
+        const float t = at(bar, sb + static_cast<float>(n) * 0.25F);
+        addSquare(out, t, r * arch.at(n), 0.09F * arp, 0.14F);
+        addSquare(out, t, r * arch.at(n) * 2.0F, 0.04F * arp, 0.10F);
+    }
+    for (int beat = 0; beat < 2; beat++)
+    {
+        const float amp = (beat == 0 ? 1.0F : 0.85F) * stab;
+        const float decay = beat == 0 ? 0.26F : 0.22F;
+        const float t = at(bar, sb + static_cast<float>(beat));
+        addTone(out, t, r, 0.09F * amp, decay);
+        addTone(out, t, r * third, 0.07F * amp, decay);
+        addTone(out, t, r * fifth, 0.07F * amp, decay);
+    }
+}
+
+using BarChords = std::array<Chord, 2>; // one chord per half bar
+
+constexpr Chord Am{45, 3, 7};
+constexpr Chord Bb{46, 4, 7};
+constexpr Chord C{48, 4, 7};
+constexpr Chord Dm{38, 3, 7};
+constexpr Chord E{40, 4, 7};
+constexpr Chord Ebdim{39, 3, 6};
+constexpr Chord F{41, 4, 7};
+constexpr Chord G{43, 4, 7};
+constexpr Chord Gm{43, 3, 7};
+
+// A lead line in eighth notes; 0 is a rest. Square with a quiet sine an octave up.
+void leadBar(std::vector<float>& out, int bar, const std::array<int, 8>& notes, float amp, float decay,
+             int transpose = 0)
+{
+    for (size_t n = 0; n < notes.size(); n++)
+    {
+        if (notes.at(n) == 0)
+        {
+            continue;
+        }
+        const float t = at(bar, static_cast<float>(n) * 0.5F);
+        addSquare(out, t, midi(notes.at(n) + transpose), amp, decay);
+        addTone(out, t, midi(notes.at(n) + transpose + 12), amp * 0.4F, decay * 0.8F);
+    }
+}
+
+// A held line, one note per half bar: two sines slightly apart.
+void voiceBar(std::vector<float>& out, int bar, const std::array<int, 2>& notes, float amp)
+{
+    for (size_t half = 0; half < 2; half++)
+    {
+        const float t = at(bar, static_cast<float>(half) * 2.0F);
+        addTone(out, t, midi(notes.at(half)) * 1.004F, amp, beatSeconds * 1.6F);
+        addTone(out, t, midi(notes.at(half)) * 0.996F, amp, beatSeconds * 1.6F);
+    }
+}
+
+// Shattered Belt: rock. The Andalusian cadence (Am G F E), first a bar each, then twice as fast;
+// tom fills tumbling into every other bar; a leaping lead.
+void shatteredBeltSection(std::vector<float>& out)
+{
+    constexpr std::array<BarChords, 8> chords{{{Am, Am}, {G, G}, {F, F}, {E, E}, {Am, G}, {F, E}, {Am, G}, {F, E}}};
+    constexpr std::array<std::array<int, 8>, 8> lead{{{69, 0, 72, 69, 76, 0, 74, 72},
+                                                      {67, 0, 71, 67, 74, 0, 72, 71},
+                                                      {65, 0, 69, 65, 72, 0, 69, 72},
+                                                      {76, 0, 80, 76, 83, 0, 80, 76},
+                                                      {69, 0, 72, 76, 74, 0, 71, 67},
+                                                      {77, 0, 72, 69, 76, 0, 80, 83},
+                                                      {81, 0, 76, 72, 79, 0, 74, 71},
+                                                      {77, 76, 72, 69, 76, 80, 83, 88}}};
+    for (int bar = 0; bar < 8; bar++)
+    {
+        buildDrumBar(out, bar, false);
+        for (int slot = 0; slot < 2; slot++)
+        {
+            bossEngineHalfBar(out, bar, slot, chords.at(static_cast<size_t>(bar)).at(static_cast<size_t>(slot)));
+        }
+        if (bar == 3 || bar == 5) // bar 7 has the roll instead
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                const float f = 220.0F - static_cast<float>(i) * 30.0F;
+                addKick(out, at(bar, 3.0F + static_cast<float>(i) * 0.25F), 0.20F, f, f * 0.5F, 0.06F, 0.08F);
+            }
+        }
+        leadBar(out, bar, lead.at(static_cast<size_t>(bar)), 0.08F, 0.16F);
+    }
+}
+
+// Rustbloom: Phrygian, the flat second (Bb) leaning on the root. A detuned voice sways over the
+// engine, the bass creeps up from a semitone below, dry rattles in the gaps.
+void rustbloomSection(std::vector<float>& out)
+{
+    constexpr std::array<BarChords, 8> chords{
+        {{Am, Bb}, {Am, Gm}, {Am, Bb}, {Dm, E}, {Am, Bb}, {C, Bb}, {Am, Gm}, {Bb, E}}};
+    constexpr std::array<std::array<int, 2>, 8> voice{
+        {{76, 77}, {76, 74}, {72, 74}, {77, 80}, {81, 82}, {84, 82}, {81, 79}, {77, 76}}};
+    for (int bar = 0; bar < 8; bar++)
+    {
+        buildDrumBar(out, bar, false);
+        for (int slot = 0; slot < 2; slot++)
+        {
+            const Chord c = chords.at(static_cast<size_t>(bar)).at(static_cast<size_t>(slot));
+            bossEngineHalfBar(out, bar, slot, c);
+            // creeps in from a semitone below, just before the chord lands
+            addSaw(out, at(bar, static_cast<float>(slot) * 2.0F + 1.75F), midi(c.root - 1), 0.10F, beatSeconds * 0.2F);
+        }
+        for (const float beat : {0.75F, 1.25F, 2.75F, 3.25F}) // rattle
+        {
+            addNoise(out, at(bar, beat), 0.07F, 0.012F);
+        }
+        voiceBar(out, bar, voice.at(static_cast<size_t>(bar)), 0.08F);
+    }
+}
+
+// Solar Forge: harmonic minor (G#) and a kick on every beat. Sixteenth hats, anvil clangs on the
+// off-beats, a lead that keeps climbing.
+void solarForgeSection(std::vector<float>& out)
+{
+    constexpr std::array<BarChords, 8> chords{{{Am, F}, {Dm, E}, {Am, F}, {E, E}, {Am, F}, {Dm, E}, {F, G}, {E, E}}};
+    constexpr std::array<std::array<int, 8>, 8> lead{{{69, 0, 72, 76, 77, 0, 72, 69},
+                                                      {74, 0, 77, 74, 76, 0, 80, 83},
+                                                      {81, 0, 76, 72, 77, 0, 81, 84},
+                                                      {83, 80, 76, 80, 83, 0, 88, 0},
+                                                      {69, 72, 76, 81, 77, 0, 72, 69},
+                                                      {74, 77, 81, 86, 88, 0, 83, 80},
+                                                      {77, 0, 81, 84, 79, 0, 83, 86},
+                                                      {88, 86, 84, 83, 80, 83, 88, 0}}};
+    for (int bar = 0; bar < 8; bar++)
+    {
+        buildDrumBar(out, bar, true);
+        for (int slot = 0; slot < 2; slot++)
+        {
+            const Chord c = chords.at(static_cast<size_t>(bar)).at(static_cast<size_t>(slot));
+            bossEngineHalfBar(out, bar, slot, c);
+            const float f = midi(c.root + 36); // anvil: inharmonic partials, short ring
+            const float t = at(bar, static_cast<float>(slot) * 2.0F + 1.5F);
+            addTone(out, t, f, 0.07F, 0.09F);
+            addTone(out, t, f * 2.76F, 0.05F, 0.07F);
+            addTone(out, t, f * 5.4F, 0.03F, 0.05F);
+        }
+        leadBar(out, bar, lead.at(static_cast<size_t>(bar)), 0.08F, 0.18F, -12);
+    }
+}
+
+// Punctum: the tritone (Eb against A) keeps pulling the harmony off-centre. An extra heartbeat in
+// the kick, static, bells with a bent overtone, and a slow chromatic descent over the engine.
+void punctumSection(std::vector<float>& out)
+{
+    constexpr std::array<BarChords, 8> chords{
+        {{Am, Ebdim}, {Am, Ebdim}, {F, E}, {F, E}, {Am, Ebdim}, {Dm, Ebdim}, {F, E}, {E, E}}};
+    constexpr std::array<std::array<int, 2>, 8> descent{
+        {{81, 78}, {76, 75}, {77, 76}, {72, 71}, {81, 78}, {77, 75}, {72, 68}, {71, 76}}};
+    for (int bar = 0; bar < 8; bar++)
+    {
+        buildDrumBar(out, bar, false);
+        addKick(out, at(bar, 0.5F), 0.20F, 140, 45, 0.08F, 0.12F); // heartbeat
+        for (int s = 0; s < 16; s++) // static
+        {
+            addNoise(out, at(bar, static_cast<float>(s) * 0.25F), 0.025F, 0.008F);
+        }
+        for (int slot = 0; slot < 2; slot++)
+        {
+            const Chord c = chords.at(static_cast<size_t>(bar)).at(static_cast<size_t>(slot));
+            bossEngineHalfBar(out, bar, slot, c);
+            const std::array<int, 4> bell{0, c.fifth, c.third, 12};
+            for (size_t n = 0; n < bell.size(); n++)
+            {
+                const float t = at(bar, static_cast<float>(slot) * 2.0F + static_cast<float>(n) * 0.5F);
+                const float f = midi(c.root + 36 + bell.at(n));
+                addTone(out, t, f, 0.05F, 0.32F);
+                addTone(out, t, f * 3.01F, 0.010F, 0.2F); // bent overtone
+            }
+        }
+        voiceBar(out, bar, descent.at(static_cast<size_t>(bar)), 0.07F);
+    }
+}
+
+auto generateBossTrack(size_t loopSamples, size_t biome) -> std::vector<float>
+{
+    const std::vector<float> intro = generateMegaboss(loopSamples); // the loop the section builds up to
+    std::vector<float> section(loopSamples * 2, 0.0F);
+    switch (biome)
+    {
+    case 0:
+        shatteredBeltSection(section);
+        break;
+    case 1:
+        rustbloomSection(section);
+        break;
+    case 2:
+        solarForgeSection(section);
+        break;
+    default:
+        punctumSection(section);
+        break;
+    }
+    for (float& sample : section)
+    {
+        sample *= 0.87F; // the build's last bars carry the biome's voice on top of the loop's parts: level them with the loop
+    }
+    std::vector<float> out;
+    out.reserve(loopSamples * 4);
+    out.insert(out.end(), section.begin(), section.end());
+    out.insert(out.end(), intro.begin(), intro.end());
+    out.insert(out.end(), intro.begin(), intro.end());
+    return out;
+}
+
 auto generateSwarmBoss(size_t loopSamples) -> std::vector<float>
 {
     std::vector<float> out(loopSamples, 0.0F);
@@ -407,6 +727,7 @@ auto loadMusicFromSamples(std::vector<std::byte>& wavStorage,
 }
 
 constexpr float defaultSfxVolume = 0.35F;
+constexpr float sfxBusVolume = 0.7F; // every SFX sits under the BGM (base layer 0.6)
 
 auto loadSoundFromSamples(const std::vector<float>& samples,
                           float volume = defaultSfxVolume) -> Sound
@@ -416,7 +737,7 @@ auto loadSoundFromSamples(const std::vector<float>& samples,
     Wave wave = LoadWaveFromMemory(".wav", wavData, static_cast<int>(wavBytes.size()));
     Sound sound = LoadSoundFromWave(wave);
     UnloadWave(wave);
-    SetSoundVolume(sound, volume);
+    SetSoundVolume(sound, volume * sfxBusVolume);
     return sound;
 }
 
@@ -431,17 +752,17 @@ auto generateShootSfx() -> std::vector<float>
 auto generateHitSfx() -> std::vector<float>
 {
     std::vector<float> out(secondsToSamples(0.15F), 0.0F);
-    addNoise(out, 0.0F, 0.35F, 0.05F);
-    addTone(out, 0.0F, 180.0F, 0.2F, 0.08F);
+    addNoise(out, 0.0F, 0.4F, 0.05F, 0.5F);
+    addTone(out, 0.0F, 220.0F, 0.22F, 0.08F);
     return out;
 }
 
 auto generateExplosionSfx() -> std::vector<float>
 {
     std::vector<float> out(secondsToSamples(0.4F), 0.0F);
-    addKick(out, 0.0F, 0.35F, 140, 40, 0.12F, 0.20F);
-    addNoise(out, 0.0F, 0.4F, 0.15F);
-    addNoise(out, 0.02F, 0.2F, 0.10F);
+    addKick(out, 0.0F, 0.32F, 160, 60, 0.12F, 0.20F);
+    addNoise(out, 0.0F, 0.5F, 0.15F, 0.6F);
+    addNoise(out, 0.02F, 0.25F, 0.10F, 0.6F);
     return out;
 }
 
@@ -475,10 +796,47 @@ auto generateSquishHitSfx() -> std::vector<float>
 
 auto generateThunderSfx() -> std::vector<float>
 {
-    std::vector<float> out(secondsToSamples(1.4F), 0.0F);
-    addKick(out, 0.0F, 0.35F, 90, 24, 0.5F, 0.9F);
-    addNoise(out, 0.0F, 0.3F, 0.9F);
-    addTone(out, 0.05F, 42.0F, 0.18F, 0.8F);
+    // Soft on purpose: no sub-bass and dull noise, the old rumble crackled and strained speakers.
+    std::vector<float> out(secondsToSamples(1.0F), 0.0F);
+    addKick(out, 0.0F, 0.24F, 170, 75, 0.4F, 0.5F);
+    addNoise(out, 0.0F, 0.5F, 0.5F, 0.8F);
+    addTone(out, 0.05F, 110.0F, 0.1F, 0.4F);
+    return out;
+}
+
+// Pickup and debuff cues: short, mid/high pitched, no noise, so they stay clear of the mix.
+auto generatePickupSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.14F), 0.0F);
+    addTone(out, 0.0F, 988.0F, 0.16F, 0.04F);
+    addTone(out, 0.045F, 1319.0F, 0.16F, 0.05F);
+    return out;
+}
+
+auto generateHealSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.3F), 0.0F);
+    addTone(out, 0.0F, 659.25F, 0.13F, 0.08F);
+    addTone(out, 0.07F, 880.0F, 0.13F, 0.08F);
+    addTone(out, 0.14F, 1108.73F, 0.13F, 0.1F);
+    return out;
+}
+
+auto generatePowerUpSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.22F), 0.0F);
+    addSquare(out, 0.0F, 783.99F, 0.07F, 0.035F);
+    addSquare(out, 0.05F, 1046.5F, 0.07F, 0.035F);
+    addSquare(out, 0.10F, 1567.98F, 0.08F, 0.06F);
+    return out;
+}
+
+auto generateDebuffSfx() -> std::vector<float>
+{
+    std::vector<float> out(secondsToSamples(0.3F), 0.0F);
+    addSquare(out, 0.0F, 739.99F, 0.08F, 0.07F);
+    addSquare(out, 0.09F, 523.25F, 0.09F, 0.12F);
+    addSaw(out, 0.09F, 527.0F, 0.04F, 0.12F);
     return out;
 }
 
@@ -624,6 +982,10 @@ auto LoadSounds() -> Sounds
     sounds.squishHit = loadSoundFromSamples(generateSquishHitSfx());
     sounds.thunder = loadSoundFromSamples(generateThunderSfx());
     sounds.enemyDeath = loadSoundFromSamples(generateEnemyDeathSfx());
+    sounds.pickup = loadSoundFromSamples(generatePickupSfx());
+    sounds.heal = loadSoundFromSamples(generateHealSfx());
+    sounds.powerUp = loadSoundFromSamples(generatePowerUpSfx());
+    sounds.debuff = loadSoundFromSamples(generateDebuffSfx());
     return sounds;
 }
 
@@ -635,7 +997,10 @@ auto loadBGM() -> BgmLayers
     bgm.base = loadMusicFromSamples(bgm.baseWav, generateBase(loopSamples));
     bgm.intensity = loadMusicFromSamples(bgm.intensityWav, generateIntensity(loopSamples));
     bgm.miniboss = loadMusicFromSamples(bgm.minibossWav, generateMiniboss(loopSamples));
-    bgm.megaboss = loadMusicFromSamples(bgm.megabossWav, generateMegaboss(loopSamples));
+    for (size_t biome = 0; biome < bgm.megaboss.size(); biome++)
+    {
+        bgm.megaboss.at(biome) = loadMusicFromSamples(bgm.megabossWav.at(biome), generateBossTrack(loopSamples, biome));
+    }
     bgm.swarmBoss = loadMusicFromSamples(bgm.swarmBossWav, generateSwarmBoss(loopSamples));
     return bgm;
 }

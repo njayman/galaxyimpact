@@ -71,6 +71,7 @@ constexpr float dpsHealthScaleReference = 55.0F;
 constexpr float dpsHealthScaleCap = 3.0F;
 
 constexpr double sfxThrottleInterval = 0.045;
+constexpr int sfxMaxVoices = 5; // other SFX allowed to be sounding when a new one starts
 constexpr float regenRate = 0.4F;
 constexpr float overchargeDuration = 8.0F;
 constexpr float overdriveDuration = 8.0F;

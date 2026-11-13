@@ -186,10 +186,35 @@ void drawAscensionList(const Game& game)
     }
 }
 
+// A ring cut into equal arcs, the game's turning-ring motif. Flat, no outline.
+void brokenRing(Vector2 center, float radius, float thickness, int32_t pieces, float gapDeg, float rotationDeg,
+                Color color)
+{
+    const float span = 360.0F / static_cast<float>(pieces);
+    for (int32_t i = 0; i < pieces; i++)
+    {
+        const float start = rotationDeg + static_cast<float>(i) * span + gapDeg / 2;
+        DrawRing(center, radius - thickness / 2, radius + thickness / 2, start, start + span - gapDeg, 32, color);
+    }
+}
+
 void drawTitle(const Game& game)
 {
     applyGuiScale(game);
     const TitleLayout layout = titleLayout();
+    const float scale = guiUiScale(game);
+    const auto t = static_cast<float>(GetTime());
+
+    // Emblem behind the title: three slow counter-turning rings and one orbiting body.
+    const Vector2 emblem{.x = static_cast<float>(game.resources.windowWidth) / 2,
+                         .y = static_cast<float>(layout.titleY + 50) * scale};
+    brokenRing(emblem, 310 * scale, 22 * scale, 2, 70, t * 4, ColorLerp(Palette::Void, Palette::AccentDim, 0.28F));
+    brokenRing(emblem, 240 * scale, 4 * scale, 6, 14, t * -6, Palette::StructDark);
+    brokenRing(emblem, 180 * scale, 14 * scale, 3, 30, t * 9, ColorLerp(Palette::Void, Palette::StructDark, 0.9F));
+    const float orbit = t * 0.25F;
+    DrawCircleV(Vector2{.x = emblem.x + std::cos(orbit) * 240 * scale, .y = emblem.y + std::sin(orbit) * 240 * scale},
+                9 * scale, Palette::AccentDim);
+
     windowText(game, "GALAXY IMPACT", game.resources.windowWidth / 2, layout.titleY, 100,
               Palette::Accent);
 
@@ -201,10 +226,29 @@ void drawTitle(const Game& game)
 void drawShipSelect(const Game& game)
 {
     applyGuiScale(game);
+    const float scale = guiUiScale(game);
+    const auto t = static_cast<float>(GetTime());
+    const auto count = static_cast<int32_t>(ShipClass::Count);
     const auto shipClass = static_cast<ShipClass>(game.menuIndex);
     const ShipDef& highlighted = ships.at(static_cast<size_t>(game.menuIndex));
+    const bool unlocked = isShipUnlocked(game, shipClass);
+    const Color shipColor = unlocked ? highlighted.color : ColorLerp(Palette::StructDark, highlighted.color, 0.4F);
 
     const ShipSelectLayout layout = shipSelectLayout(game);
+
+    // The ships either side, small and dim, so the roster is visible at a glance.
+    for (const int32_t side : {-1, 1})
+    {
+        const auto index = static_cast<size_t>((game.menuIndex + side + count) % count);
+        const Vector2 pos{.x = layout.previewPos.x + static_cast<float>(side) * 290.0F * scale, .y = layout.previewPos.y};
+        drawShipHull(static_cast<ShipClass>(index), pos, layout.previewRadius * 0.4F, 0,
+                     ColorLerp(Palette::StructDark, ships.at(index).color, 0.4F));
+    }
+
+    brokenRing(layout.previewPos, layout.previewRadius * 1.8F, 3 * scale, 5, 16, t * -12, Palette::StructDark);
+    brokenRing(layout.previewPos, layout.previewRadius * 1.5F, 8 * scale, 3, 34, t * 20,
+               ColorLerp(Palette::Void, shipColor, 0.3F));
+
     beginPop(layout.previewPos, popScale(game, 0) * easeOutBack(game.menuIndexAge / 0.22F));
     windowText(game, std::string(highlighted.name).c_str(), game.resources.windowWidth / 2,
               layout.nameY, 40, Palette::Accent);
@@ -215,8 +259,7 @@ void drawShipSelect(const Game& game)
     {
         drawEngineFlame(layout.previewPos, layout.previewRadius, previewAngle);
     }
-    drawShipHull(shipClass, layout.previewPos, layout.previewRadius, previewAngle,
-                highlighted.color);
+    drawShipHull(shipClass, layout.previewPos, layout.previewRadius, previewAngle, shipColor);
     endPop();
 
     const Vector2 mouse = GetMousePosition();
@@ -236,19 +279,31 @@ void drawShipSelect(const Game& game)
     drawChevron(layout.leftArrow, true, layout.leftTapZone);
     drawChevron(layout.rightArrow, false, layout.rightTapZone);
 
-    windowText(game, std::string(highlighted.description).c_str(), game.resources.windowWidth / 2,
-              layout.descY, 18, Palette::StructLight);
-    if (!isShipUnlocked(game, shipClass))
+    // Starting weapon card: the ships share their numbers, the weapon is what sets them apart.
+    const Rectangle card = layout.weaponCard;
+    const auto px = [scale](float v) { return static_cast<int32_t>(v * scale); };
+    const SkillType weaponSkill = weaponGrantSkill.at(static_cast<size_t>(highlighted.defaultWeapon));
+    beginPop(Vector2{.x = card.x + card.width / 2, .y = card.y + card.height / 2}, popScale(game, 1));
+    DrawRectangleRec(card, ColorLerp(Palette::Void, Palette::StructDark, 0.6F));
+    DrawRectangleRec(Rectangle{.x = card.x, .y = card.y, .width = 4.0F * scale, .height = card.height}, shipColor);
+    drawSkillIcon(weaponSkill, Vector2{.x = card.x + 52.0F * scale, .y = card.y + card.height / 2}, 20.0F * scale,
+                  shipColor);
+    const auto textX = static_cast<int32_t>(card.x) + px(100);
+    const auto top = static_cast<int32_t>(card.y);
+    drawText(game, std::string(Skills.at(static_cast<size_t>(weaponSkill)).name).c_str(), textX, top + px(17), px(24),
+             Palette::Haze);
+    const char* tag = unlocked ? "STARTING WEAPON" : "LOCKED";
+    drawText(game, tag, static_cast<int32_t>(card.x + card.width) - px(20) - measureText(game, tag, px(13)),
+             top + px(22), px(13), unlocked ? Palette::StructLight : Palette::Accent);
+    const std::string desc = unlocked ? std::string(highlighted.description) : "Unlock this ship in the Skill Tree.";
+    const int32_t descRoom = static_cast<int32_t>(card.width) - px(120);
+    int32_t descSize = px(18);
+    if (const int32_t w = measureText(game, desc.c_str(), descSize); w > descRoom)
     {
-        windowText(game, "LOCKED - unlock it in the Skill Tree", game.resources.windowWidth / 2, layout.descY - 34, 20,
-                   Palette::Accent);
+        descSize = descSize * descRoom / w; // shrink to fit rather than run off the card
     }
-
-    const std::string stats = std::format(
-        "HP {:.0f}   Armor {:.0f}   Dmg {:+.0f}%   Shields {}", highlighted.maxHealth,
-        highlighted.armor, (highlighted.damageMult - 1.0F) * 100.0F, highlighted.maxShieldStacks);
-    windowText(game, stats.c_str(), game.resources.windowWidth / 2, layout.statsY, 18,
-              Palette::StructMid);
+    drawText(game, desc.c_str(), textX, top + px(53), descSize, Palette::StructLight);
+    endPop();
 
     const bool selectHovered = CheckCollisionPointRec(mouse, layout.selectRect);
     if (selectHovered)
@@ -379,7 +434,7 @@ auto overGameplay(const Game& game, GameState state) -> bool
     case GameState::ACHIEVEMENTS:
     case GameState::BESTIARY:
     case GameState::WEAPON_GALLERY:
-        return true;
+        return game.settingsReturnState != GameState::TITLE; // from the title there is no run behind the screen
     case GameState::SKILL_TREE:
         return game.settingsReturnState == GameState::PAUSED ||
                game.settingsReturnState == GameState::GAME_OVER ||

@@ -123,28 +123,27 @@ auto shipSelectLayout(const Game& game) -> ShipSelectLayout
     const auto w = static_cast<float>(game.resources.windowWidth);
 
     // Design-space (1080-tall reference) block, centered like titleLayout -
-    // name/preview/desc/stats/select treated as one invisible container.
-    constexpr int32_t previewRadiusBase = 70;
+    // name/preview/weapon card/select treated as one invisible container.
+    constexpr int32_t previewRadiusBase = 110;
     constexpr int32_t selectHeightBase = 54;
-    constexpr int32_t nameToPreviewGap = 110;
-    constexpr int32_t previewToDescGap = 30;
-    constexpr int32_t descToStatsGap = 30;
-    constexpr int32_t statsToSelectGap = 50;
+    constexpr int32_t nameToPreviewGap = 140;
+    constexpr int32_t previewToCardGap = 100; // clears the rings round the preview
+    constexpr int32_t cardHeightBase = 92;
+    constexpr int32_t cardWidthBase = 840; // fits the longest ship description at full size
+    constexpr int32_t cardToSelectGap = 40;
     constexpr int32_t totalHeight = 30 + nameToPreviewGap + previewRadiusBase * 2 +
-                                    previewToDescGap + 20 + descToStatsGap + 20 +
-                                    statsToSelectGap + selectHeightBase;
+                                    previewToCardGap + cardHeightBase + cardToSelectGap + selectHeightBase;
     constexpr int32_t referenceHeight = 1080;
     constexpr int32_t blockTop = (referenceHeight - totalHeight) / 2;
 
     constexpr int32_t nameY = blockTop + 30;
     constexpr int32_t previewCenterYBase = nameY + nameToPreviewGap + previewRadiusBase;
-    constexpr int32_t descY = previewCenterYBase + previewRadiusBase + previewToDescGap;
-    constexpr int32_t statsY = descY + descToStatsGap;
-    constexpr int32_t selectCenterYBase = statsY + statsToSelectGap + selectHeightBase / 2;
+    constexpr int32_t cardY = previewCenterYBase + previewRadiusBase + previewToCardGap;
+    constexpr int32_t selectCenterYBase = cardY + cardHeightBase + cardToSelectGap + selectHeightBase / 2;
 
     const Vector2 previewPos{.x = w / 2, .y = static_cast<float>(previewCenterYBase) * scale};
 
-    constexpr float arrowOffsetXBase = 260.0F; // more breathing room from the ship than before
+    constexpr float arrowOffsetXBase = 410.0F; // outside the neighbouring ships
     constexpr float arrowHitRadiusBase = 36.0F;
     constexpr float selectWidthBase = 200.0F;
     // Safe strip down the middle (ship preview, desc/stats text, Select
@@ -175,8 +174,10 @@ auto shipSelectLayout(const Game& game) -> ShipSelectLayout
                                   .y = 0,
                                   .width = w / 2 - deadZoneHalfWidth,
                                   .height = h},
-        .descY = descY,
-        .statsY = statsY,
+        .weaponCard = Rectangle{.x = w / 2 - static_cast<float>(cardWidthBase) * scale / 2,
+                                .y = static_cast<float>(cardY) * scale,
+                                .width = static_cast<float>(cardWidthBase) * scale,
+                                .height = static_cast<float>(cardHeightBase) * scale},
         .selectRect = selectRect,
     };
 }

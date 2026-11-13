@@ -167,12 +167,15 @@ auto InitGame() -> Game
     PlayMusicStream(game.resources.bgm.base);
     PlayMusicStream(game.resources.bgm.intensity);
     PlayMusicStream(game.resources.bgm.miniboss);
-    PlayMusicStream(game.resources.bgm.megaboss);
+    for (const Music& track : game.resources.bgm.megaboss)
+    {
+        PlayMusicStream(track);
+        SetMusicVolume(track, 0);
+    }
     PlayMusicStream(game.resources.bgm.swarmBoss);
     SetMusicVolume(game.resources.bgm.base, SoundConstants::baseVolume);
     SetMusicVolume(game.resources.bgm.intensity, 0);
     SetMusicVolume(game.resources.bgm.miniboss, 0);
-    SetMusicVolume(game.resources.bgm.megaboss, 0);
     SetMusicVolume(game.resources.bgm.swarmBoss, 0);
 
     game.resources.renderScale = computeRenderScale(game);

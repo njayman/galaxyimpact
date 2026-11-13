@@ -1,6 +1,7 @@
 #pragma once
 
 #include "raylib.h"
+#include <array>
 #include <cstddef>
 #include <vector>
 namespace SoundConstants
@@ -8,6 +9,7 @@ namespace SoundConstants
 constexpr int audioSampleRate = 22050;
 
 constexpr float baseVolume = 0.6F;
+constexpr size_t biomeCount = 4;
 }
 
 struct Sounds
@@ -32,6 +34,10 @@ struct Sounds
     Sound squishHit;
     Sound thunder;
     Sound enemyDeath;
+    Sound pickup;
+    Sound heal;
+    Sound powerUp;
+    Sound debuff;
 };
 
 auto LoadSounds() -> Sounds;
@@ -41,7 +47,7 @@ struct BgmLayers
     Music base{};
     Music intensity{};
     Music miniboss{};
-    Music megaboss{};
+    std::array<Music, SoundConstants::biomeCount> megaboss{}; // one full boss track per biome, in Biome order
     Music swarmBoss{};
     float intensityVolume = 0;
     float minibossVolume = 0;
@@ -53,7 +59,7 @@ struct BgmLayers
     std::vector<std::byte> baseWav;
     std::vector<std::byte> intensityWav;
     std::vector<std::byte> minibossWav;
-    std::vector<std::byte> megabossWav;
+    std::array<std::vector<std::byte>, SoundConstants::biomeCount> megabossWav;
     std::vector<std::byte> swarmBossWav;
 };
 

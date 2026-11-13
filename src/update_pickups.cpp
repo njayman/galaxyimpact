@@ -126,7 +126,7 @@ void applyPickupEffect(Game& game, PickupType type, ElementType element, Element
         {
             game.run.player.shieldStacks++;
         }
-        playSFX(game, game.resources.sounds.menuConfirm);
+        playSFX(game, game.resources.sounds.pickup);
         break;
     case PickupType::Elemental:
         collectElementalPickup(game, element, mechanism);
@@ -135,7 +135,7 @@ void applyPickupEffect(Game& game, PickupType type, ElementType element, Element
         game.run.player.regenTimer =
             pickupEffectDuration * pickupDurationScale(game.run.waveNumber);
         game.run.player.regenRate = regenRate;
-        playSFX(game, game.resources.sounds.menuConfirm);
+        playSFX(game, game.resources.sounds.heal);
         break;
     case PickupType::MagnetPulse:
         for (auto& other : game.run.pickups)
@@ -147,21 +147,21 @@ void applyPickupEffect(Game& game, PickupType type, ElementType element, Element
                 other.lifetime = std::max(other.lifetime, 4.0F);
             }
         }
-        playSFX(game, game.resources.sounds.menuConfirm);
+        playSFX(game, game.resources.sounds.pickup);
         break;
     case PickupType::Overcharge:
         game.run.player.overchargeTimer =
             overchargeDuration * pickupDurationScale(game.run.waveNumber);
-        playSFX(game, game.resources.sounds.menuConfirm);
+        playSFX(game, game.resources.sounds.powerUp);
         break;
     case PickupType::SecondWind:
         game.run.player.secondWindReady = true;
-        playSFX(game, game.resources.sounds.menuConfirm);
+        playSFX(game, game.resources.sounds.pickup);
         break;
     case PickupType::Overdrive:
         game.run.player.overdriveTimer =
             overdriveDuration * pickupDurationScale(game.run.waveNumber);
-        playSFX(game, game.resources.sounds.menuConfirm);
+        playSFX(game, game.resources.sounds.powerUp);
         break;
     case PickupType::Danger:
         if (GetRandomValue(0, 1) == 0)
@@ -176,7 +176,7 @@ void applyPickupEffect(Game& game, PickupType type, ElementType element, Element
         }
         game.run.achievementToastTimer = 3.0F;
         triggerShake(game, 6, 0.25F);
-        playSFX(game, game.resources.sounds.explosion);
+        playSFX(game, game.resources.sounds.debuff);
         break;
     case PickupType::Count:
         break;
@@ -213,7 +213,7 @@ void collectElementalPickup(Game& game, ElementType element, ElementMechanism me
         break;
     }
 
-    playSFX(game, game.resources.sounds.menuConfirm);
+    playSFX(game, game.resources.sounds.powerUp);
 }
 
 void startLevelUp(Game& game)

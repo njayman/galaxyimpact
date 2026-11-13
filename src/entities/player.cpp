@@ -1424,4 +1424,5 @@ void updateDashWedgesAndBlasts(Game& game, float deltaTime)
 void collectLifeOrb(Game& game)
 {
     game.run.player.health = std::min(game.run.player.health + 0.5F, game.run.player.maxHealth);
+    playSFX(game, game.resources.sounds.heal);
 }

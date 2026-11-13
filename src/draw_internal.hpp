@@ -65,7 +65,7 @@ void drawSkillIcon(SkillType id, Vector2 c, float s, Color color, bool evolved =
 void drawWeaponIcon(WeaponType kind, Vector2 c, float s, Color color, bool evolved = false);
 void drawPassiveIcon(SkillType id, Vector2 c, float s, Color color);
 auto evolutionHint(const Game& game, SkillType id) -> std::string;
-void drawAbilitySlots(const Game& game, int32_t x, int32_t y);
+void drawAbilitySlots(const Game& game, int32_t x, int32_t y, bool hover = true);
 void drawLevelUp(const Game& game);
 void drawMenu(const Game& game, const std::string& heading, const std::vector<std::string>& options,
               int32_t y);

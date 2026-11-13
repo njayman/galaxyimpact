@@ -1016,7 +1016,10 @@ auto UpdateGame(Game& game, float deltaTime) -> bool
     UpdateMusicStream(game.resources.bgm.base);
     UpdateMusicStream(game.resources.bgm.intensity);
     UpdateMusicStream(game.resources.bgm.miniboss);
-    UpdateMusicStream(game.resources.bgm.megaboss);
+    for (const Music& track : game.resources.bgm.megaboss)
+    {
+        UpdateMusicStream(track);
+    }
     UpdateMusicStream(game.resources.bgm.swarmBoss);
 
     if (game.run.shakeTimer > 0)
