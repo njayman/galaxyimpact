@@ -52,6 +52,17 @@ target_include_directories(GalaxyImpact PRIVATE include "${raygui_SOURCE_DIR}/sr
 
 target_link_libraries(GalaxyImpact PRIVATE raylib)
 
+# Save-parser fuzzer: clang + libFuzzer, off by default. See tools/fuzz/save_fuzz.cpp.
+option(GALAXYIMPACT_FUZZ "Build the save-parser fuzzer (needs clang)" OFF)
+if (GALAXYIMPACT_FUZZ)
+    list(REMOVE_ITEM GALAXYIMPACT_SOURCES src/main.cpp)
+    add_executable(fuzz_saves ${GALAXYIMPACT_SOURCES} tools/fuzz/save_fuzz.cpp)
+    target_include_directories(fuzz_saves PRIVATE include "${raygui_SOURCE_DIR}/src")
+    target_link_libraries(fuzz_saves PRIVATE raylib)
+    target_compile_options(fuzz_saves PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -g)
+    target_link_options(fuzz_saves PRIVATE -fsanitize=fuzzer,address,undefined)
+endif()
+
 target_compile_options(GalaxyImpact PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 
 if (EMSCRIPTEN)
