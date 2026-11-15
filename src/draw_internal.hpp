@@ -28,6 +28,7 @@
 #include "update.hpp"
 #include "update_constants.hpp"
 #include <algorithm>
+#include <span>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -93,9 +94,13 @@ void drawSporeProjectile(const BossProjectile& projectile);
 void drawKrakenHurledEnemy(const BossProjectile& projectile);
 void drawFluidBlob(Vector2 center, float radius, Color color, float seed, Vector2 trailDir);
 void drawLavaChunk(Vector2 center, float radius, float seed, Vector2 velocity);
-void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color color,
-                            Vector2 velocity, Vector2 facing, float mouthOpen);
-void drawKrakenShape(Vector2 center, float radius, float seed, Color color, Vector2 facing = Vector2{.x = 0, .y = 1});
+void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color color, Vector2 facing, float open);
+void drawKrakenShape(Vector2 center, float radius, float seed, Color color, Vector2 facing = Vector2{.x = 0, .y = 1},
+                     float life = 1.0F, Color signal = Palette::ElementFreeze);
+void drawChain(std::span<const Vector2> pts, float rootWidth, float tipWidth, Color a, Color b);
+void plateRing(Vector2 center, float inner, float outer, int32_t plates, float rotDeg, float gapDeg, Color color);
+void drawTearPortal(Vector2 center, float radius, float open);
+void flatTriangle(Vector2 a, Vector2 b, Vector2 c, Color color);
 void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bodyRadius,
                        float seed, float thicknessScale, float waveScale, bool calm, Color color,
                        Color tipColor);
@@ -105,9 +110,28 @@ void drawBossQteHud(const Game& game);
 void drawKrakenStaggeredTentacle(const Boss& boss, int32_t slot);
 void drawKrakenLimb(const Boss& boss, int32_t slot);
 void drawKrakenGrabbedEnemy(Vector2 pos, int32_t kindIndex, float scale, float facingAngle);
-void drawBanishedShape(Vector2 center, const Boss& boss);
-void drawBanishedTentacle(Vector2 center, const Boss& boss, int32_t slot);
-void drawBanishedEye(const Boss& boss);
+void drawBanishedShape(Vector2 center, const Boss& boss, Vector2 ship);
+void drawBanishedTentacle(const Boss& boss, int32_t slot);
+void drawBanishedRestingArms(Vector2 center, const Boss& boss);
+void drawBanishedToss(const Boss& boss, Vector2 ship);
+void drawBanishedHurled(const BossProjectile& projectile);
+// Shared beam look. Charge: energy gathers at `at` (progress 0..1; lock 0..1 as the aim freezes).
+// Beam: life 0..1 over its firing time opens it, holds it and pinches it shut; life < 0 holds it open.
+void drawBeamCharge(Vector2 at, float radius, float progress, float lock, Color color);
+void drawBeam(Vector2 from, Vector2 to, float width, float life, Color color);
+void drawBanishedEye(const Boss& boss, Vector2 lookAt);
+void drawBanishedBody(Vector2 center, float size, float seed, float reveal, uint32_t brokenSeals, float eyeGlow,
+                      float flash, float facing);
+void drawBanishedStub(Vector2 center, float size, float instanceSeed, int32_t slot, float reach, Color color);
+void drawBanishedRealm(const Game& game);
+void drawRealmTunnel(const Game& game);
+// Banished realm palette (docs/design/biomes.md)
+inline constexpr Color banishedVoid{.r = 14, .g = 10, .b = 20, .a = 255};
+inline constexpr Color banishedBone{.r = 207, .g = 200, .b = 184, .a = 255};
+inline constexpr Color banishedFlesh{.r = 40, .g = 31, .b = 56, .a = 255};
+inline constexpr Color banishedTendril{.r = 78, .g = 62, .b = 104, .a = 255};
+// Entry cutscene staging: the husk hangs at the realm's centre, the ship arrives below it.
+inline constexpr float krakenHuskRadius = 110.0F;
 void drawPanelShape(Vector2 center, float radius, int32_t sides, float rotationDeg, Color baseColor,
                     float seed);
 void drawPanelHex(Vector2 center, float radius, float rotationDeg, Color baseColor, float seed);
@@ -178,9 +202,7 @@ void drawNerveBall(Vector2 pos, float radius, bool evolved);
 void drawSpiralBlade(Vector2 pos, bool evolved);
 void drawElementalDebuffEffects(Vector2 pos, float radius, bool burning, bool shocked, bool frozen);
 void drawWreckwormGooBridge(Vector2 from, Vector2 to, float fromRadius, float toRadius, float seed);
-void drawSlimeDrip(Vector2 rim, Vector2 outward, float size, float phase, Color color);
 void drawWreckwormSegmentGun(Vector2 center, float radius, Vector2 aim, float ext, bool flash);
-void drawChitinClaw(Vector2 base, Vector2 tip, Vector2 bow, float width, Color color);
 void drawWreckwormSegmentShape(Vector2 center, float radius, float seed, Color baseColor, bool armor, float spinDeg, Vector2 spineDir);
 void drawKrakenPortal(Vector2 portal, float t, float open = 1.0F);
 void drawKrakenRope(const std::array<Vector2, Boss::krakenRopePoints>& pts, float rootWidth, float tipWidth, float alpha);

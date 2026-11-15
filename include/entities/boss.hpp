@@ -196,6 +196,7 @@ class Boss
     float wreckwormSpeedMult = 1.0F;
 
     std::vector<Vector2> wreckwormTrail;
+    float wreckwormStretch = 1.0F; // segment: its link length (fraction of the spacing); head: its recent speed
     bool wreckwormRepositioning = false;
     bool wreckwormDetached = false;
     Vector2 wreckwormPrevPosition{};
@@ -257,7 +258,6 @@ class Boss
     bool gripFromMouth = false;
     Vector2 gripRoot{};
     Vector2 krakenMouth{}; // updated every frame; the arms and feeding tentacles root here
-    int32_t snatchSlot = -1; // Banished: the tentacle holding the ship in Juggled
     // Arm attacks run as rope sims: ropes 0-3 for the slots (Arm Lash, Portal Lash), 4-5 for
     // the feeding tentacles. Spear Rake arms are straight and need no rope.
     static constexpr int32_t krakenRopeCount = 6;
@@ -310,6 +310,8 @@ class Boss
     float moleUnder = 0;        // 0 surfaced .. 1 burrowed (untouchable, body hidden)
     bool moleHidden = false;    // Slagmaw: down in the magma, moving to its next blob
     float moleHideTimer = 0;    // until it picks the next blob
+    float moleLeapTotal = 0;    // a pounce's flight time, for the leap arc
+    Vector2 moleLeapFrom{};     // where the pounce launched
     float moleRumble = 0;       // > 0: under the new blob, about to surface
     Vector2 eruptAt{};          // Erupt: where the jaws come up
     bool slagmawBloomed = false; // collar locked open below the bloom HP
@@ -329,22 +331,55 @@ class Boss
     std::array<int32_t, banishedTentacleCount> banishedPhase{};
     std::array<float, banishedTentacleCount> banishedTimer{};
     std::array<float, banishedTentacleCount> banishedCooldown{};
-    std::array<bool, banishedTentacleCount> banishedIsFar{};
+    std::array<bool, banishedTentacleCount> banishedIsFar{}; // attacking through a portal (else from the body)
     std::array<bool, banishedTentacleCount> banishedGrabbing{};
     std::array<Vector2, banishedTentacleCount> banishedAnchor{};
     std::array<Vector2, banishedTentacleCount> banishedTip{};
     std::array<float, banishedTentacleCount> banishedTentacleHitFlash{};
     std::array<int32_t, banishedTentacleCount> banishedAttackKind{};
-    std::array<float, banishedTentacleCount> banishedThrashStartAngle{};
-    std::array<float, banishedTentacleCount> banishedThrashEndAngle{};
+    std::array<float, banishedTentacleCount> banishedAimAngle{}; // where it is aiming; frozen for the last moment of the stance
+    std::array<float, banishedTentacleCount> banishedAimReach{}; // how far a pierce will thrust
+    float banishedAttackGate = 0; // seconds until the next tentacle may start an attack
+    int32_t banishedGazePhase = 0;   // tentacle stage: 0 eye shut, 1 open and charging, 2 firing
+    float banishedGazeTimer = 6.0F;  // seconds until the eye next opens, or left in this phase
+    std::array<int32_t, banishedTentacleCount> banishedHeldKind{}; // Hurl: the enemy kind it pulled through
 
-    int32_t banishedStage = 0;
-    bool banishedEyeCharging = false;
+    // Big attack: a grab that can be blocked but not dodged, then the toss and the bat (Juggled).
+    float banishedBigTimer = 14.0F;  // seconds of ordinary attacks until the next big grab
+    float banishedBigStill = 0;      // how long the ship has held still under its aim
+    Vector2 banishedBigShipPrev{};
+    int32_t banishedTossPhase = 0;   // 0 none, 1 leaning back, 2 ship in flight, 3 bat winding up, 4 bat swinging
+    float banishedTossTimer = 0;
+    int32_t banishedTossLeft = 0;    // throws still to come
+    float banishedTossAngle = 0;     // heading of the current throw
+    Vector2 banishedTossAnchor{};    // portal of the tentacle holding the ship (or of the bat)
+    Vector2 banishedTossNextAnchor{}; // portal of the one waiting to catch
+    Vector2 banishedTossFrom{};      // where this throw started
+    Vector2 banishedTossTo{};        // where it will be caught
+    std::array<int32_t, 3> banishedBatSlots{}; // the three tentacles twisted into the bat
+
+    // Finale (stage 1): every tentacle paralysed, the body dashes at the ship and fires Doom Gaze.
+    int32_t banishedFinaleLeft = 0;     // moves still to come
+    int32_t banishedFinaleMove = 0;     // 0 gap, 1 dash tell, 2 dashing, 3 beam charging, 4 beam firing
+    int32_t banishedFinaleDashes = 0;
+    bool banishedFinaleEyeDash = false; // this dash comes eye open: the one to shield-dash into
+    bool banishedFinaleHit = false;     // this dash has already hit, or was dodged by its QTE
+
+    int32_t banishedStage = 0; // 0 tentacles, 1 finale, 3 defeated
     float banishedEyeTimer = 0;
     bool banishedEyeChargeBurstUsed = false;
-    Vector2 banishedEyePos{};
 
     bool banishedDefeated = false;
+
+    // Tentacle stage: it has no body. Its eye looks out through one of the realm's background
+    // seal rings, taking that ring's size, and follows the ship from ring to ring. It only has
+    // its body at the very start (out of the husk) and in the finale.
+    static constexpr int32_t banishedSealCount = 5;
+    int32_t banishedSeal = 0;      // the background ring its eye is in
+    bool banishedInBody = true;    // out of the background, in its body
+    float banishedHop = 0;         // > 0: seconds into moving to another ring
+    float banishedAway = 0;        // seconds the ship has been away from its ring
+    float banishedReveal = 1.0F;   // 0 gone .. 1 fully there (the eye in its ring, or the body)
 
     bool usesDirector = false;
     BossPattern pattern = BossPattern::HoverShoot;
@@ -528,6 +563,7 @@ class BossProjectile
     uint32_t ricochetLastHit = 0; // Enemy::id bounced off last; never re-hit in a row
 
     int32_t visualEnemyKind = -1;
+    bool energized = false; // Banished Hurl: visualEnemyKind is a throwable (see drawBanishedThrowable), charged with energy
     bool isEmber = false; // Slagmaw Seeker Ember
     bool isPetal = false; // Slagmaw Petal Volley crystal: flies out, stalls, then darts at the player
     float petalTimer = 0;
@@ -553,4 +589,6 @@ class GasHazard
     bool isFire = false;
     bool anchored = false; // director Zone walls hold position instead of drifting at the player
     bool spores = false;   // Blight Gate spore cloud: slows the player instead of burning
+    bool breath = false;   // Wreckworm breath puff: flies out of the mouth, slows, then lingers
+    Vector2 target{};      // breath puffs only: the spot on the screen edge they settle at
 };

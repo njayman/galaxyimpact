@@ -121,7 +121,7 @@ void preparePunctumInfallSprites(const Game& game)
 void updatePunctumInfall(Game& game, float deltaTime)
 {
     PunctumInfall& infall = game.run.punctumInfall;
-    if (currentBiome(game.run.waveNumber) != Biome::Punctum || sprites.empty())
+    if (currentBiome(game.run.waveNumber) != Biome::Punctum || game.run.inBanishedRealm || sprites.empty())
     {
         infall.objects.clear();
         return;
@@ -227,7 +227,7 @@ void updatePunctumInfall(Game& game, float deltaTime)
 
 void drawPunctumInfall(const Game& game)
 {
-    if (currentBiome(game.run.waveNumber) != Biome::Punctum || sprites.empty())
+    if (currentBiome(game.run.waveNumber) != Biome::Punctum || game.run.inBanishedRealm || sprites.empty())
     {
         return;
     }

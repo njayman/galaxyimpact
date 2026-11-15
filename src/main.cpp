@@ -84,10 +84,7 @@ auto main(int argc, char* argv[]) -> int
     UnloadMusicStream(game.resources.bgm.base);
     UnloadMusicStream(game.resources.bgm.intensity);
     UnloadMusicStream(game.resources.bgm.miniboss);
-    for (const Music& track : game.resources.bgm.megaboss)
-    {
-        UnloadMusicStream(track);
-    }
+    UnloadAudioStream(game.resources.bgm.boss.stream);
     UnloadMusicStream(game.resources.bgm.swarmBoss);
     UnloadSound(game.resources.sounds.shoot);
     UnloadSound(game.resources.sounds.hit);

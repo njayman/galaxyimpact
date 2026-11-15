@@ -18,6 +18,31 @@ void drawSolarForgeCaveBackground(const Game& game)
     const float startX = std::floor((center.x - halfW) / cellSize) * cellSize;
     const float startY = std::floor((center.y - halfH) / cellSize) * cellSize;
 
+    // A surfaced Slagmaw shoves the blobs aside; after a pounce they close over where it left.
+    struct Shove
+    {
+        Vector2 at;
+        float radius;
+    };
+    std::vector<Shove> shoves;
+    for (const Boss& boss : game.run.bosses)
+    {
+        if (!boss.isSlagmaw || boss.health <= 0)
+        {
+            continue;
+        }
+        const float reach = boss.size.x * 0.62F;
+        if (boss.state == BossState::SHOOTING && boss.attack == BossAttack::ChargeDash && boss.moleLeapTotal > 0)
+        {
+            const float p = 1.0F - boss.stateTimer / boss.moleLeapTotal;
+            shoves.push_back({boss.moleLeapFrom, reach * std::max(0.0F, 1.0F - 3.0F * p)});
+        }
+        else
+        {
+            shoves.push_back({Vector2Add(boss.position, Vector2Scale(boss.size, 0.5F)), reach * (1.0F - boss.moleUnder)});
+        }
+    }
+
     for (float y = startY; y < center.y + halfH; y += cellSize)
     {
         for (float x = startX; x < center.x + halfW; x += cellSize)
@@ -49,6 +74,15 @@ void drawSolarForgeCaveBackground(const Game& game)
                 blobCenter = Vector2Add(blobCenter, Vector2Scale(away, 34.0F * f2 * game.run.solarForgeGelPocket));
                 const float jiggle = std::min(1.0F, Vector2Length(game.run.solarForgeGelWobbleVel) / 300.0F);
                 blobRadius *= 1.0F + 0.16F * std::sin(dist * 0.04F - t * 12.0F) * f2 * jiggle;
+            }
+
+            for (const Shove& shove : shoves)
+            {
+                const float d = Vector2Distance(blobCenter, shove.at);
+                if (const float push = shove.radius + blobRadius * 0.6F - d; push > 0 && shove.radius > 1.0F && d > 1.0F)
+                {
+                    blobCenter = Vector2Add(blobCenter, Vector2Scale(Vector2Subtract(blobCenter, shove.at), push / d));
+                }
             }
 
             DrawCircleV(blobCenter, blobRadius, Fade(rock, 0.62F));
@@ -1127,65 +1161,153 @@ void drawBlackHoleTwirl(Vector2 center, float radius,
     }
 }
 
+// Entry cutscene, in the realm. Phase 11: the Kraken's drained husk hangs still while the tear
+// shuts behind the ship. Phase 12: Banished breaks out of it; tendrils burst through, the husk
+// sheds as flat shards, and the seals close in round the new body. Ends on the fight's first frame.
 void drawKrakenRemains(const Game& game)
 {
+    const auto t = static_cast<float>(GetTime());
     const Vector2 center{};
-    constexpr float radius = 220.0F;
+    const Vector2 toShip = Vector2Subtract(game.run.player.position, center);
+    const Color huskColor = ColorLerp(Palette::StructMid, Palette::PunctumHaze, 0.15F);
 
     if (game.run.bossCutscenePhase == 11)
     {
-        const float blink = std::sin(static_cast<float>(GetTime()) * 30.0F) > 0 ? 1.0F : 0.0F;
-        const Color color = ColorLerp(Palette::StructDark, WHITE, blink * 0.5F);
-        drawKrakenShape(center, radius, 7.0F, color);
-
-        constexpr int32_t crackCount = 6;
-        for (int32_t i = 0; i < crackCount; i++)
-        {
-            const float seed = static_cast<float>(i) * 13.0F;
-            const float angle = hashNoise(seed) * 2.0F * std::numbers::pi_v<float>;
-            const Vector2 start =
-                Vector2Add(center, Vector2{.x = std::cos(angle) * radius * 0.15F,
-                                           .y = std::sin(angle) * radius * 0.15F});
-            const Vector2 end = Vector2Add(center, Vector2{.x = std::cos(angle) * radius * 0.95F,
-                                                           .y = std::sin(angle) * radius * 0.95F});
-            DrawLineEx(start, end, 2.5F, Fade(Palette::Void, 0.75F));
-        }
+        // it starts to shake just before it breaks
+        const float dread = std::clamp(1.0F - game.run.bossCutsceneTimer / 0.8F, 0.0F, 1.0F);
+        const Vector2 jitter{.x = std::sin(t * 61.0F) * 3.0F * dread, .y = std::cos(t * 47.0F) * 3.0F * dread};
+        drawKrakenShape(Vector2Add(center, jitter), krakenHuskRadius, 7.0F, huskColor, toShip, 0.15F,
+                        Palette::StructDark);
         return;
     }
 
     if (game.run.bossCutscenePhase == 12)
     {
-        const float progress =
-            std::clamp(1.0F - game.run.bossCutsceneTimer / banishedBreakApartDuration, 0.0F, 1.0F);
+        const float q = std::clamp(1.0F - game.run.bossCutsceneTimer / banishedBreakApartDuration, 0.0F, 1.0F);
+        const float shed = std::clamp(q / 0.6F, 0.0F, 1.0F);
+        const auto seed = static_cast<float>(game.run.bossSpawnCount + 1); // the Banished about to spawn
 
-        drawKrakenShape(center, radius * (1.0F - progress * 0.5F), 7.0F,
-                        Fade(Palette::StructDark, 1.0F - progress));
-
-        const auto crackCount = static_cast<int32_t>(4 + progress * 10.0F);
-        for (int32_t i = 0; i < crackCount; i++)
+        if (shed < 1.0F)
         {
-            const float seed = static_cast<float>(i) * 13.0F;
-            const float angle = hashNoise(seed) * 2.0F * std::numbers::pi_v<float>;
-            const Vector2 start =
-                Vector2Add(center, Vector2{.x = std::cos(angle) * radius * 0.15F,
-                                           .y = std::sin(angle) * radius * 0.15F});
-            const Vector2 end = Vector2Add(center, Vector2{.x = std::cos(angle) * radius * 0.95F,
-                                                           .y = std::sin(angle) * radius * 0.95F});
-            DrawLineEx(start, end, 2.5F, Fade(Palette::Void, 0.75F * (1.0F - progress)));
+            const Vector2 jitter{.x = std::sin(t * 61.0F) * 4.0F * (1.0F - shed), .y = std::cos(t * 47.0F) * 4.0F * (1.0F - shed)};
+            drawKrakenShape(Vector2Add(center, jitter), krakenHuskRadius * (1.0F + 0.3F * shed), 7.0F,
+                            Fade(huskColor, 1.0F - shed), toShip, 0.15F, Palette::StructDark);
+        }
+        for (int32_t i = 0; i < 12; i++)
+        {
+            const float s = static_cast<float>(i) * 19.0F;
+            const float angle = hashNoise(s) * 2.0F * std::numbers::pi_v<float>;
+            const float dist = krakenHuskRadius * (0.4F + (2.0F + 2.0F * hashNoise(s + 2.0F)) * q);
+            const Vector2 pos = Vector2Add(center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
+            const float rot = hashNoise(s + 1.0F) * 6.0F + q * (4.0F * hashNoise(s + 3.0F) - 2.0F);
+            const float size = krakenHuskRadius * (0.12F + 0.14F * hashNoise(s + 4.0F));
+            const auto corner = [&](float a) { return Vector2Add(pos, Vector2{.x = std::cos(rot + a) * size, .y = std::sin(rot + a) * size}); };
+            flatTriangle(corner(0), corner(2.3F), corner(4.4F), Fade(huskColor, 1.0F - q));
         }
 
-        constexpr int32_t fragmentCount = 8;
-        for (int32_t i = 0; i < fragmentCount; i++)
+        const float reach = easeOutBack(std::clamp(q / 0.7F, 0.0F, 1.0F));
+        for (int32_t slot = 0; slot < Boss::banishedTentacleCount; slot++)
         {
-            const float seed = static_cast<float>(i) * 19.0F;
-            const float angle = hashNoise(seed) * 2.0F * std::numbers::pi_v<float>;
-            const float dist = radius * 0.5F * progress;
-            const Vector2 pos = Vector2Add(
-                center, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist});
-            const float rot = hashNoise(seed + 1.0F) * 360.0F;
-            DrawPoly(pos, 5, radius * 0.16F * (1.0F - progress * 0.5F), rot,
-                     Fade(Palette::StructDark, 1.0F - progress));
+            drawBanishedStub(center, banishedSize, seed, slot, reach, banishedTendril);
         }
+        const float reveal = std::clamp((q - 0.25F) / 0.75F, 0.0F, 1.0F);
+        const Vector2 ship = game.run.player.position;
+        drawBanishedBody(center, banishedSize, seed, reveal * reveal * (3.0F - 2.0F * reveal), 0, 0, 0,
+                         std::atan2(ship.y - center.y, ship.x - center.x));
+    }
+}
+
+// The Banished realm: no stars. Mid,
+// huge broken seal rings and chain links in ash bone that light pale gold while the eye is open;
+// near, ash motes rising. Mid and near tile on the wraparound strip so the wrap shows no seam.
+void drawBanishedRealm(const Game& game)
+{
+    const auto t = static_cast<float>(GetTime());
+    const Vector2 ship = game.run.player.position;
+    const bool eyeOpen = std::ranges::any_of(game.run.bosses, [](const Boss& b)
+                                             { return b.isBanished && b.banishedStage == 1; });
+    const Color bone = eyeOpen ? ColorLerp(banishedBone, Palette::Crit, 0.6F) : banishedBone;
+    const float lift = eyeOpen ? 1.6F : 1.0F;
+
+    // A layer moving at `parallax` of the ship's speed repeats every strip length times parallax.
+    const auto tiled = [&](Vector2 local, float parallax, const auto& draw)
+    {
+        const Vector2 tile{.x = 2.0F * punctumTrapHalfWidth * parallax, .y = 2.0F * punctumTrapHalfHeight * parallax};
+        const float x = local.x - ship.x * parallax;
+        const float y = local.y - ship.y * parallax;
+        const Vector2 rel{.x = x - tile.x * std::floor(x / tile.x + 0.5F), .y = y - tile.y * std::floor(y / tile.y + 0.5F)};
+        for (int32_t ix = -1; ix <= 1; ix++)
+        {
+            for (int32_t iy = -1; iy <= 1; iy++)
+            {
+                draw(Vector2{.x = ship.x + rel.x + static_cast<float>(ix) * tile.x,
+                             .y = ship.y + rel.y + static_cast<float>(iy) * tile.y});
+            }
+        }
+    };
+
+    // far: on arrival the tear the ship came through shuts, fixed on screen
+    const Vector2 scar = Vector2Add(ship, Vector2{.x = 360.0F, .y = -190.0F});
+    if (game.run.bossCutscenePhase == 11)
+    {
+        drawTearPortal(scar, 46.0F, game.run.bossCutsceneTimer / banishedRemainsDuration);
+    }
+
+    // mid: seal rings and chains
+    for (const BanishedSeal& seal : banishedSeals)
+    {
+        const Vector2 local = seal.at;
+        tiled(local, banishedSealParallax, [&](Vector2 at)
+              {
+                  plateRing(at, seal.radius * 0.88F, seal.radius, seal.plates, t * seal.spin, seal.gap, Fade(bone, 0.085F * lift));
+                  plateRing(at, seal.radius * 0.66F, seal.radius * 0.72F, seal.plates + 1, t * -seal.spin * 1.6F, seal.gap,
+                            Fade(bone, 0.05F * lift));
+              });
+    }
+    for (int32_t chain = 0; chain < 3; chain++)
+    {
+        const float s = static_cast<float>(chain) * 31.0F;
+        const Vector2 origin{.x = (hashNoise(s) - 0.5F) * 1100.0F, .y = (hashNoise(s + 1.0F) - 0.5F) * 600.0F};
+        const float heading = hashNoise(s + 2.0F) * 6.28F;
+        for (int32_t link = 0; link < 7; link++)
+        {
+            const Vector2 local = Vector2Add(origin, Vector2Scale(Vector2{.x = std::cos(heading), .y = std::sin(heading)},
+                                                                  static_cast<float>(link) * 26.0F));
+            tiled(local, 0.5F, [&](Vector2 at)
+                  { DrawPoly(at, 4, link % 2 == 0 ? 11.0F : 7.0F, heading * RAD2DEG + (link % 2 == 0 ? 45.0F : 0.0F), Fade(bone, 0.1F * lift)); });
+        }
+    }
+
+    // near: ash motes rising
+    for (int32_t i = 0; i < 40; i++)
+    {
+        const float s = static_cast<float>(i) * 7.0F;
+        const Vector2 local{.x = hashNoise(s) * 2048.0F, .y = hashNoise(s + 1.0F) * 1152.0F - t * (8.0F + 14.0F * hashNoise(s + 2.0F))};
+        tiled(local, 0.8F, [&](Vector2 at) { DrawCircleV(at, 1.0F + 1.2F * hashNoise(s + 3.0F), Fade(bone, 0.3F)); });
+    }
+}
+
+// Falling down the tear (cutscene phase 13): broken rings rush out past the ship, slowing to a
+// stop as Punctum's lavender drains to the realm's ash bone.
+void drawRealmTunnel(const Game& game)
+{
+    const auto t = static_cast<float>(GetTime());
+    const Vector2 c = game.run.player.position;
+    const float q = std::clamp(1.0F - game.run.bossCutsceneTimer / banishedTunnelDuration, 0.0F, 1.0F);
+    const float depth = 2.4F * (1.0F - (1.0F - q) * (1.0F - q));
+    const float fade = std::min({1.0F, q * 5.0F, (1.0F - q) * 4.0F});
+    DrawRectangleV(Vector2{.x = c.x - 4000, .y = c.y - 4000}, Vector2{.x = 8000, .y = 8000},
+                   ColorLerp(BLACK, banishedVoid, q));
+    constexpr int32_t rings = 11;
+    for (int32_t i = 0; i < rings; i++)
+    {
+        const float raw = static_cast<float>(i) / static_cast<float>(rings) + depth;
+        const float u = raw - std::floor(raw);
+        const float r = 22.0F * std::pow(70.0F, u);
+        Color color = ColorLerp(Palette::PunctumHaze, banishedBone, q);
+        color = ColorLerp(color, BLACK, i % 2 == 0 ? 0.25F : 0.6F);
+        plateRing(c, r, r * 1.09F, 3 + i % 4, (i % 2 == 0 ? 1.0F : -1.0F) * (t * 40.0F + static_cast<float>(i) * 47.0F),
+                  16.0F + 8.0F * static_cast<float>(i % 3), Fade(color, fade * std::min(1.0F, u * 5.0F)));
     }
 }
 

@@ -240,7 +240,15 @@ constexpr float beltbreakerRubbleHealthFrac = 0.3F;  // of a plate's HP
 constexpr int32_t bossHpPerTier = 500;
 
 constexpr float wreckwormSegmentSpacing = 80.0F;
-constexpr float wreckwormChaseSpeedMult = 1.6F;
+// Body physics: link length as a fraction of the spacing above.
+constexpr float wreckwormPackedLink = 0.55F; // at rest: plates closed over the spine
+constexpr float wreckwormRunLink = 1.3F;     // at a run: stretched out, joints showing
+constexpr float wreckwormNeckLink = 0.85F;   // head to first segment, at least
+constexpr float wreckwormCruiseSpeed = 700.0F; // head speed (units a second) up to which it stays packed
+constexpr float wreckwormRunSpeed = 1400.0F;   // head speed at which it is fully stretched
+constexpr float wreckwormSurgeDecay = 1.5F;    // how fast a surge off the mark settles back, per second
+constexpr float wreckwormLinkRate = 8.0F;    // how fast a link takes up the tension of the one ahead
+constexpr float wreckwormChaseSpeedMult = 1.0F; // matches the player's base speed: no outrunning the head
 
 constexpr float wreckwormBurrowChargeDuration = 0.4F;
 constexpr float wreckwormCoilClampDuration = 1.6F;
@@ -353,7 +361,7 @@ constexpr float caveNoiseScaleCoarse = 380.0F;
 constexpr float caveNoiseScaleFine = 60.0F;
 constexpr float caveTunnelHalfWidth = 0.17F;
 // While a Slagmaw lives the magma blobs thicken (caves narrow to this share), easing back after.
-constexpr float slagmawCaveWidthScale = 0.55F;
+constexpr float slagmawCaveWidthScale = 0.7F; // was 0.55: less congested, still condensed
 constexpr float magmaDensityRate = 0.5F; // width-scale change per second
 // Lava mole: it lives in the magma blobs, peeks out of one to attack, then dives and moves on.
 constexpr float moleHideTime = 0.45F;  // under, before it picks the next blob
@@ -362,7 +370,7 @@ constexpr float moleSpotMin = 280.0F;  // next blob's distance from the ship
 constexpr float moleSpotMax = 520.0F;
 // Pounce Frenzy: peek, aim, launch through the ship into a blob past it, dive, repeat.
 constexpr int32_t slagmawPounceCount = 4;
-constexpr float pounceSpeed = 3200.0F;
+constexpr float pounceSpeed = 1600.0F; // slow enough for the leap to read
 constexpr float pounceChainTell = 0.4F;
 
 // Tilt of the Belt planets' debris rings.
@@ -714,37 +722,117 @@ constexpr auto ricochetStraferMax(int32_t wave) -> int32_t
 
 constexpr float banishedSize = 640.0F;
 
+// The realm's background seal rings (drawn at banishedSealParallax). The Banished looks out of one.
+struct BanishedSeal
+{
+    Vector2 at;
+    float radius;
+    int32_t plates;
+    float gap;
+    float spin;
+};
+constexpr std::array<BanishedSeal, Boss::banishedSealCount> banishedSeals{
+    BanishedSeal{.at = {.x = -420, .y = -160}, .radius = 250, .plates = 5, .gap = 26, .spin = 2.5F},
+    BanishedSeal{.at = {.x = 380, .y = 210}, .radius = 170, .plates = 3, .gap = 50, .spin = -4.0F},
+    BanishedSeal{.at = {.x = 120, .y = -250}, .radius = 90, .plates = 4, .gap = 30, .spin = 7.0F},
+    BanishedSeal{.at = {.x = -180, .y = 250}, .radius = 60, .plates = 2, .gap = 70, .spin = -9.0F},
+    BanishedSeal{.at = {.x = 540, .y = -60}, .radius = 120, .plates = 6, .gap = 22, .spin = 5.0F}};
+constexpr float banishedSealParallax = 0.5F;
+constexpr float banishedTickSpin = 6.0F;      // degrees a second the ring of ticks turns (the body and tentacles do not)
+constexpr float banishedFaceScale = 0.223F; // of its size: the body is a third smaller than its first build
+constexpr float banishedFaceRadius = banishedSize * banishedFaceScale; // out to the tick tips
+constexpr float banishedDiscRadius = banishedFaceRadius * 0.78F;
+constexpr int32_t banishedGrabChance = 20;    // percent of attacks, when the ship is free
+constexpr int32_t banishedHurlChance = 25;    // percent of attacks: pulls an enemy through and throws it
+// Tentacle `slot` leaves the body at a fixed angle: only the ticks turn.
+inline auto banishedArmAngle(int32_t slot) -> float
+{
+    return (static_cast<float>(slot) * 30.0F + 15.0F) * DEG2RAD;
+}
+constexpr float banishedHopDelay = 0.6F;       // the ship this long away from its ring, it moves to a nearer one
+constexpr float banishedHopAway = 440.0F;     // "away": farther than this from its ring
+constexpr float banishedHopLeave = 0.35F;      // fading out of its ring
+constexpr float banishedHopArrive = 0.9F;      // the dark, the eye opening in it, then its colour
+
 constexpr float banishedNearReach = 220.0F;
-constexpr float banishedFarPortalDist = 420.0F;
-constexpr float banishedTentacleWindup = 0.6F;
-constexpr float banishedTentacleStrike = 0.5F;
+constexpr float banishedTentacleWindup = 1.2F; // out of the portal, into its stance, aiming
+constexpr float banishedTentacleStrike = 0.5F; // a grab's lunge (it follows the ship)
+constexpr float banishedAimLock = 0.22F;       // a pierce's aim freezes this long before it goes
+constexpr float banishedPierceStrike = 0.2F;   // a pierce's thrust, straight down the frozen aim
+constexpr float banishedPierceReach = 1300.0F;
+constexpr float banishedPierceOvershoot = 380.0F; // a pierce runs this far past where the ship was: clean through it
+constexpr int32_t banishedMaxActive = 3;         // tentacles out at once
+constexpr float banishedAttackGapMin = 0.5F;     // seconds between one tentacle starting and the next
+constexpr float banishedAttackGapMax = 1.3F;
+constexpr float banishedPortalClearance = 170.0F; // a portal never opens nearer the ship than this
+constexpr float banishedHurlRelease = 190.0F;     // a hurled enemy leaves the tentacle this far out
+
+// Big attack
+constexpr float banishedBigGapMin = 25.0F; // seconds of ordinary attacks between big grabs
+constexpr float banishedBigGapMax = 35.0F;
+constexpr float banishedBigRetryGap = 12.0F; // after a blocked big grab
+constexpr float banishedBigPortalDist = 450.0F;
+constexpr float banishedBigAimMax = 4.0F;    // it aims this long at most
+constexpr float banishedBigTell = 0.45F;     // the flash before it lunges: the moment to block
+constexpr float banishedBigLunge = 0.3F;
+constexpr float banishedBigNear = 260.0F;    // ship this near its portal: it lunges
+constexpr float banishedBigStillTime = 0.5F; // ship this long still: it lunges
+constexpr float banishedBigStillSpeed = 60.0F;
+constexpr int32_t banishedTossThrows = 5;
+constexpr float banishedTossLean = 0.45F;    // leaning back with the ship before a throw
+constexpr float banishedTossFlight = 0.6F;
+constexpr float banishedTossDistMin = 1000.0F;
+constexpr float banishedTossDistMax = 1400.0F;
+constexpr float banishedBatDist = 700.0F;    // the bat's portal, ahead of where the last throw's flight ends
+constexpr float banishedBatMiss = 110.0F;    // the ship is still this far short of the portal when the bat lands
+constexpr float banishedBatLength = 300.0F;
+constexpr float banishedBatBreak = 0.35F;    // the shield dash through the bat
+constexpr float banishedBatThrough = 220.0F; // the ship comes out this far beyond the bat's portal
+constexpr float banishedBatWindup = 1.3F;
+constexpr float banishedBatPrompt = 0.7F;    // the shield+dash prompt shows for the end of the wind-up
+constexpr float banishedBatSwing = 0.25F;
+constexpr int32_t banishedBatDamage = 14;
+// Finale
+constexpr int32_t banishedFinaleMovesMin = 10;
+constexpr int32_t banishedFinaleMovesMax = 12;
+constexpr float banishedFinaleGap = 0.35F;
+constexpr int32_t banishedFinaleDashChance = 60; // percent of moves; the rest are beams
+constexpr int32_t banishedFinaleQteEvery = 3;    // every third dash carries a dodge prompt
+constexpr float banishedDashStart = 900.0F;      // it comes from this far off, from any side
+constexpr float banishedDashTell = 0.8F;
+constexpr float banishedDashSpeed = 1700.0F;
+constexpr float banishedDashTravel = 1900.0F;
+constexpr int32_t banishedDashDamage = 8;
+constexpr float banishedGazeDist = 420.0F;       // it stands this far off to fire
+constexpr float banishedGazeCharge = 0.9F;       // the eye tracks the ship
+constexpr float banishedGazeLock = 0.35F;        // then the line freezes
+constexpr float banishedGazeFire = 0.5F;
+constexpr float banishedGazeDps = 24.0F;
+constexpr float banishedGazeGapMin = 7.0F; // tentacle stage: seconds between the eye opening to fire
+constexpr float banishedGazeGapMax = 11.0F;
+constexpr int32_t banishedFinaleEyeDivisor = 2;  // the shield-dash into the open eye takes this share of its health
 constexpr float banishedTentacleRetreat = 0.4F;
 constexpr float banishedTentacleCooldownMin = 2.0F;
 constexpr float banishedTentacleCooldownMax = 4.5F;
 constexpr float banishedTentacleHitRadius = 24.0F;
 constexpr int32_t banishedTentacleDamage = 4;
 
-constexpr float banishedThrashArcDegrees = 110.0F;
 constexpr int32_t banishedThrashDamage = 7;
 
-constexpr float banishedGrabAttackChance = 0.15F;
 
-constexpr float banishedEyeChargeDuration = 5.0F;
-constexpr float banishedEyeCooldownAfterFire = 3.0F;
 // Three dash-in or Nerve bursts win; a Doom Gaze shield-dash burst is worth half of one.
 constexpr int32_t banishedHealth = 6;
 constexpr int32_t banishedEyeBurstDamageDivisor = 3;
-constexpr int32_t banishedEyeShieldDashDamageDivisor = 6;
 
 constexpr float banishedFleeSpeed = 2.4F;
-constexpr float banishedEyeFireDuration = 1.0F;
 
 constexpr float banishedOffscreenAggressionMult = 3.0F;
 
 constexpr float banishedEntryTwirlDuration = 1.6F;
-constexpr float banishedRemainsDuration = 2.0F;
-constexpr float banishedBreakApartDuration = 1.6F;
-constexpr float banishedBeamDps = 6.0F;
+constexpr float banishedRemainsDuration = 2.6F;
+constexpr float banishedTunnelDuration = 2.4F;   // the fall down the tear
+constexpr float banishedArrivalOffset = 280.0F;   // the ship arrives this far below the husk
+constexpr float banishedBreakApartDuration = 2.2F;
 
 constexpr float krakenRetreatSpeed = 900.0F;
 constexpr float krakenRetreatDespawnDistance = 1400.0F;
@@ -802,11 +890,9 @@ constexpr auto wreckwormDashRushCount(int32_t wave) -> int32_t
 
 constexpr float wreckwormTrailSampleDist = 4.0F;
 
-constexpr int32_t wreckwormCloudBreathCount = 5;
-constexpr float wreckwormCloudRadiusMin = 55.0F;
-constexpr float wreckwormCloudRadiusMax = 90.0F;
-constexpr float wreckwormCloudSpawnSpread = 140.0F;
-constexpr float wreckwormCloudDriftSpeed = 90.0F;
-constexpr float wreckwormCloudLifespan = 14.0F;
+constexpr float wreckwormWallSpacing = 60.0F; // breath puffs along the screen edge, apart
+constexpr float wreckwormWallRadius = 55.0F;  // overlapping, so the edge reads as one wall
+constexpr float wreckwormBreathEase = 4.0F;   // per second: how fast a puff eases out to its spot
+constexpr float wreckwormCloudLifespan = 5.0F;
 constexpr float wreckwormCloudBurnDps = 8.0F;
 constexpr float wreckwormCloudBurnRefreshDuration = 1.0F;

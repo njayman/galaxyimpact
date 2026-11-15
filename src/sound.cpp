@@ -283,11 +283,12 @@ auto generateMegaboss(size_t loopSamples) -> std::vector<float>
 }
 
 // --- Boss tracks per biome ---------------------------------------------------------------
-// A full boss track is eight bars written for the biome (B), then the megaboss loop twice (A A):
-// 16 bars, so it still lines up with the 4-bar base loop. B is a build-up. It opens sparse, on the
-// biome's own voice over a pad, and brings the loop's parts in bar by bar (bass, hats, arpeggio,
-// snare, stabs, a roll) until it lands on the full loop. Same tempo and key centre (A) throughout;
-// each biome changes the scale, the harmony and the lead voice.
+// Signature-boss music, per biome, is two eight-bar pieces from the same writing:
+//  - the build-up, played once when the boss arrives. It opens sparse, on the biome's own voice over
+//    a pad, and brings the parts in bar by bar (bass, hats, arpeggio, snare, stabs, a roll);
+//  - the action loop, the same bars with every part at full strength, which then repeats.
+// The old megaboss loop is kept for the boss's desperate phase; the music fades out when the boss dies.
+// Same tempo and key centre (A) throughout; each biome changes the scale, the harmony and the lead.
 
 auto midi(int note) -> float
 {
@@ -314,22 +315,23 @@ constexpr std::array<float, 8> buildStab{0.0F, 0.0F, 0.0F, 0.0F, 0.6F, 0.8F, 1.0
 // One bar of the build's drums. Bars 0-1: a bare kick. Bars 2-3: the kick pattern and hats.
 // Bars 4-7: the full megaboss kit (kick, snare on 2 and 4, shuffled hats). Bar 7 ends on a rising roll.
 // fourOnFloor swaps the kick pattern for one on every beat with sixteenth hats (Solar Forge).
-void buildDrumBar(std::vector<float>& out, int bar, bool fourOnFloor)
+void buildDrumBar(std::vector<float>& out, int bar, bool fourOnFloor, bool build)
 {
+    const int stage = build ? bar : 4; // the action loop plays the full kit throughout, with no roll
     if (fourOnFloor)
     {
         for (int beat = 0; beat < 4; beat++)
         {
             const auto bt = static_cast<float>(beat);
-            if (bar >= 2 || beat % 2 == 0)
+            if (stage >= 2 || beat % 2 == 0)
             {
                 addKick(out, at(bar, bt), 0.28F, 150, 45, 0.08F, 0.11F);
             }
-            if (bar >= 2)
+            if (stage >= 2)
             {
                 addNoise(out, at(bar, bt + 0.5F), 0.11F, 0.035F);
             }
-            for (int s = 0; bar >= 4 && s < 4; s++)
+            for (int s = 0; stage >= 4 && s < 4; s++)
             {
                 addNoise(out, at(bar, bt + static_cast<float>(s) * 0.25F), 0.05F, 0.012F);
             }
@@ -338,26 +340,26 @@ void buildDrumBar(std::vector<float>& out, int bar, bool fourOnFloor)
     else
     {
         addKick(out, at(bar, 0), 0.30F, 150, 45, 0.08F, 0.12F);
-        if (bar >= 1)
+        if (stage >= 1)
         {
             addKick(out, at(bar, 2.0F + 1.0F / 3.0F), 0.24F, 150, 40, 0.06F, 0.09F);
             addKick(out, at(bar, 2.5F), 0.28F, 150, 40, 0.06F, 0.09F);
         }
-        for (int beat = 0; bar >= 2 && beat < 4; beat++)
+        for (int beat = 0; stage >= 2 && beat < 4; beat++)
         {
             const auto bt = static_cast<float>(beat);
-            const float hats = bar >= 4 ? 1.0F : 0.6F;
+            const float hats = stage >= 4 ? 1.0F : 0.6F;
             addNoise(out, at(bar, bt + 1.0F / 3.0F), 0.08F * hats, 0.02F);
             addNoise(out, at(bar, bt + 0.5F), 0.11F * hats, 0.025F);
             addNoise(out, at(bar, bt + 5.0F / 6.0F), 0.08F * hats, 0.02F);
         }
     }
-    if (bar >= 4)
+    if (stage >= 4)
     {
         addNoise(out, at(bar, 1), 0.34F, 0.07F);
         addNoise(out, at(bar, 3), 0.34F, 0.07F);
     }
-    if (bar == 7)
+    if (build && bar == 7)
     {
         for (int i = 0; i < 8; i++)
         {
@@ -370,11 +372,11 @@ void buildDrumBar(std::vector<float>& out, int bar, bool fourOnFloor)
 // the sixteenth-note arpeggio and the chord stabs, each at the level the build has reached by this
 // bar. A soft pad holds the chord while they are still coming in. Chords change every half bar,
 // like the loop itself.
-void bossEngineHalfBar(std::vector<float>& out, int bar, int slot, Chord c)
+void bossEngineHalfBar(std::vector<float>& out, int bar, int slot, Chord c, bool build)
 {
-    const float bass = buildBass.at(static_cast<size_t>(bar));
-    const float arp = buildArp.at(static_cast<size_t>(bar));
-    const float stab = buildStab.at(static_cast<size_t>(bar));
+    const float bass = build ? buildBass.at(static_cast<size_t>(bar)) : 1.0F;
+    const float arp = build ? buildArp.at(static_cast<size_t>(bar)) : 1.0F;
+    const float stab = build ? buildStab.at(static_cast<size_t>(bar)) : 1.0F;
     const float r = midi(c.root + 12);
     const float third = std::pow(2.0F, static_cast<float>(c.third) / 12.0F);
     const float fifth = std::pow(2.0F, static_cast<float>(c.fifth) / 12.0F);
@@ -449,7 +451,7 @@ void voiceBar(std::vector<float>& out, int bar, const std::array<int, 2>& notes,
 
 // Shattered Belt: rock. The Andalusian cadence (Am G F E), first a bar each, then twice as fast;
 // tom fills tumbling into every other bar; a leaping lead.
-void shatteredBeltSection(std::vector<float>& out)
+void shatteredBeltSection(std::vector<float>& out, bool build)
 {
     constexpr std::array<BarChords, 8> chords{{{Am, Am}, {G, G}, {F, F}, {E, E}, {Am, G}, {F, E}, {Am, G}, {F, E}}};
     constexpr std::array<std::array<int, 8>, 8> lead{{{69, 0, 72, 69, 76, 0, 74, 72},
@@ -462,12 +464,12 @@ void shatteredBeltSection(std::vector<float>& out)
                                                       {77, 76, 72, 69, 76, 80, 83, 88}}};
     for (int bar = 0; bar < 8; bar++)
     {
-        buildDrumBar(out, bar, false);
+        buildDrumBar(out, bar, false, build);
         for (int slot = 0; slot < 2; slot++)
         {
-            bossEngineHalfBar(out, bar, slot, chords.at(static_cast<size_t>(bar)).at(static_cast<size_t>(slot)));
+            bossEngineHalfBar(out, bar, slot, chords.at(static_cast<size_t>(bar)).at(static_cast<size_t>(slot)), build);
         }
-        if (bar == 3 || bar == 5) // bar 7 has the roll instead
+        if (build ? (bar == 3 || bar == 5) : bar % 2 == 1) // tom fill; the build ends on the roll instead
         {
             for (int i = 0; i < 4; i++)
             {
@@ -481,7 +483,7 @@ void shatteredBeltSection(std::vector<float>& out)
 
 // Rustbloom: Phrygian, the flat second (Bb) leaning on the root. A detuned voice sways over the
 // engine, the bass creeps up from a semitone below, dry rattles in the gaps.
-void rustbloomSection(std::vector<float>& out)
+void rustbloomSection(std::vector<float>& out, bool build)
 {
     constexpr std::array<BarChords, 8> chords{
         {{Am, Bb}, {Am, Gm}, {Am, Bb}, {Dm, E}, {Am, Bb}, {C, Bb}, {Am, Gm}, {Bb, E}}};
@@ -489,11 +491,11 @@ void rustbloomSection(std::vector<float>& out)
         {{76, 77}, {76, 74}, {72, 74}, {77, 80}, {81, 82}, {84, 82}, {81, 79}, {77, 76}}};
     for (int bar = 0; bar < 8; bar++)
     {
-        buildDrumBar(out, bar, false);
+        buildDrumBar(out, bar, false, build);
         for (int slot = 0; slot < 2; slot++)
         {
             const Chord c = chords.at(static_cast<size_t>(bar)).at(static_cast<size_t>(slot));
-            bossEngineHalfBar(out, bar, slot, c);
+            bossEngineHalfBar(out, bar, slot, c, build);
             // creeps in from a semitone below, just before the chord lands
             addSaw(out, at(bar, static_cast<float>(slot) * 2.0F + 1.75F), midi(c.root - 1), 0.10F, beatSeconds * 0.2F);
         }
@@ -507,7 +509,7 @@ void rustbloomSection(std::vector<float>& out)
 
 // Solar Forge: harmonic minor (G#) and a kick on every beat. Sixteenth hats, anvil clangs on the
 // off-beats, a lead that keeps climbing.
-void solarForgeSection(std::vector<float>& out)
+void solarForgeSection(std::vector<float>& out, bool build)
 {
     constexpr std::array<BarChords, 8> chords{{{Am, F}, {Dm, E}, {Am, F}, {E, E}, {Am, F}, {Dm, E}, {F, G}, {E, E}}};
     constexpr std::array<std::array<int, 8>, 8> lead{{{69, 0, 72, 76, 77, 0, 72, 69},
@@ -520,11 +522,11 @@ void solarForgeSection(std::vector<float>& out)
                                                       {88, 86, 84, 83, 80, 83, 88, 0}}};
     for (int bar = 0; bar < 8; bar++)
     {
-        buildDrumBar(out, bar, true);
+        buildDrumBar(out, bar, true, build);
         for (int slot = 0; slot < 2; slot++)
         {
             const Chord c = chords.at(static_cast<size_t>(bar)).at(static_cast<size_t>(slot));
-            bossEngineHalfBar(out, bar, slot, c);
+            bossEngineHalfBar(out, bar, slot, c, build);
             const float f = midi(c.root + 36); // anvil: inharmonic partials, short ring
             const float t = at(bar, static_cast<float>(slot) * 2.0F + 1.5F);
             addTone(out, t, f, 0.07F, 0.09F);
@@ -537,7 +539,7 @@ void solarForgeSection(std::vector<float>& out)
 
 // Punctum: the tritone (Eb against A) keeps pulling the harmony off-centre. An extra heartbeat in
 // the kick, static, bells with a bent overtone, and a slow chromatic descent over the engine.
-void punctumSection(std::vector<float>& out)
+void punctumSection(std::vector<float>& out, bool build)
 {
     constexpr std::array<BarChords, 8> chords{
         {{Am, Ebdim}, {Am, Ebdim}, {F, E}, {F, E}, {Am, Ebdim}, {Dm, Ebdim}, {F, E}, {E, E}}};
@@ -545,7 +547,7 @@ void punctumSection(std::vector<float>& out)
         {{81, 78}, {76, 75}, {77, 76}, {72, 71}, {81, 78}, {77, 75}, {72, 68}, {71, 76}}};
     for (int bar = 0; bar < 8; bar++)
     {
-        buildDrumBar(out, bar, false);
+        buildDrumBar(out, bar, false, build);
         addKick(out, at(bar, 0.5F), 0.20F, 140, 45, 0.08F, 0.12F); // heartbeat
         for (int s = 0; s < 16; s++) // static
         {
@@ -554,7 +556,7 @@ void punctumSection(std::vector<float>& out)
         for (int slot = 0; slot < 2; slot++)
         {
             const Chord c = chords.at(static_cast<size_t>(bar)).at(static_cast<size_t>(slot));
-            bossEngineHalfBar(out, bar, slot, c);
+            bossEngineHalfBar(out, bar, slot, c, build);
             const std::array<int, 4> bell{0, c.fifth, c.third, 12};
             for (size_t n = 0; n < bell.size(); n++)
             {
@@ -568,35 +570,39 @@ void punctumSection(std::vector<float>& out)
     }
 }
 
-auto generateBossTrack(size_t loopSamples, size_t biome) -> std::vector<float>
+// Eight bars for one biome: the build-up, or the action loop when build is false.
+auto generateBossSection(size_t loopSamples, size_t biome, bool build) -> std::vector<float>
 {
-    const std::vector<float> intro = generateMegaboss(loopSamples); // the loop the section builds up to
-    std::vector<float> section(loopSamples * 2, 0.0F);
+    const size_t length = loopSamples * 2;
+    std::vector<float> section(length + loopSamples / 4, 0.0F); // one bar of room for notes still ringing
     switch (biome)
     {
     case 0:
-        shatteredBeltSection(section);
+        shatteredBeltSection(section, build);
         break;
     case 1:
-        rustbloomSection(section);
+        rustbloomSection(section, build);
         break;
     case 2:
-        solarForgeSection(section);
+        solarForgeSection(section, build);
         break;
     default:
-        punctumSection(section);
+        punctumSection(section, build);
         break;
     }
+    if (!build) // the loop repeats: what rings past its end belongs at its start
+    {
+        for (size_t i = length; i < section.size(); i++)
+        {
+            section.at(i - length) += section.at(i);
+        }
+    }
+    section.resize(length);
     for (float& sample : section)
     {
-        sample *= 0.87F; // the build's last bars carry the biome's voice on top of the loop's parts: level them with the loop
+        sample *= 0.87F; // the biome's voice sits on top of the loop's parts: level it with the old loop
     }
-    std::vector<float> out;
-    out.reserve(loopSamples * 4);
-    out.insert(out.end(), section.begin(), section.end());
-    out.insert(out.end(), intro.begin(), intro.end());
-    out.insert(out.end(), intro.begin(), intro.end());
-    return out;
+    return section;
 }
 
 auto generateSwarmBoss(size_t loopSamples) -> std::vector<float>
@@ -989,6 +995,108 @@ auto LoadSounds() -> Sounds
     return sounds;
 }
 
+// --- Signature-boss music player ---------------------------------------------------------
+// The segments are played back to back from memory through one raw stream, fed a block at a time,
+// so every join lands on the exact sample: a streamed file per segment would leave a gap.
+
+namespace
+{
+constexpr int bossStreamFrames = 2048; // about 93 ms a block; two blocks are buffered ahead
+}
+
+auto loadBossMusic() -> BossMusic
+{
+    const size_t loopSamples = secondsToSamples(loopSeconds);
+    BossMusic music{};
+    for (size_t biome = 0; biome < music.build.size(); biome++)
+    {
+        music.build.at(biome) = toPcm16(generateBossSection(loopSamples, biome, true));
+        music.action.at(biome) = toPcm16(generateBossSection(loopSamples, biome, false));
+    }
+    music.desperate = toPcm16(generateMegaboss(loopSamples));
+    SetAudioStreamBufferSizeDefault(bossStreamFrames);
+    music.stream = LoadAudioStream(sampleRate, 16, 1);
+    SetAudioStreamBufferSizeDefault(0);
+    PlayAudioStream(music.stream);
+    return music;
+}
+
+void startBossMusic(BossMusic& music, size_t biome)
+{
+    music.biome = std::min(biome, music.build.size() - 1);
+    // Shattered Belt (biome 0) skips the sparse build-up and opens on the action loop.
+    music.segment = music.biome == 0 ? BossMusicSegment::Action : BossMusicSegment::Build;
+    music.pending = BossMusicSegment::None;
+    music.fade = 1.0F;
+    music.pos = 0;
+}
+
+void requestBossMusic(BossMusic& music, BossMusicSegment next)
+{
+    music.pending = next;
+}
+
+void stopBossMusic(BossMusic& music)
+{
+    music.segment = BossMusicSegment::None;
+    music.pending = BossMusicSegment::None;
+    music.fade = 1.0F;
+    music.pos = 0;
+}
+
+void pumpBossMusic(BossMusic& music)
+{
+    const size_t beat = secondsToSamples(beatSeconds);
+    const auto data = [&music]() -> const std::vector<int16_t>*
+    {
+        switch (music.segment)
+        {
+        case BossMusicSegment::Build:
+            return &music.build.at(music.biome);
+        case BossMusicSegment::Action:
+            return &music.action.at(music.biome);
+        case BossMusicSegment::Desperate:
+            return &music.desperate;
+        default:
+            return nullptr;
+        }
+    };
+
+    std::array<int16_t, bossStreamFrames> block{};
+    for (int pass = 0; pass < 2 && IsAudioStreamProcessed(music.stream); pass++)
+    {
+        for (int16_t& sample : block)
+        {
+            sample = 0;
+            if (music.pending != BossMusicSegment::None)
+            {
+                // The desperate loop comes in on the next bar line.
+                const size_t boundary = beat * 4;
+                if (music.segment == BossMusicSegment::None || music.pos % boundary == 0)
+                {
+                    music.segment = music.pending;
+                    music.pending = BossMusicSegment::None;
+                    music.pos = 0;
+                }
+            }
+            const std::vector<int16_t>* pcm = data();
+            if (pcm != nullptr && music.pos >= pcm->size())
+            {
+                // Build-up runs into the action loop, the loops repeat.
+                music.segment = music.segment == BossMusicSegment::Build ? BossMusicSegment::Action
+                                                                         : music.segment;
+                music.pos = 0;
+                pcm = data();
+            }
+            if (pcm != nullptr)
+            {
+                sample = pcm->at(music.pos++);
+            }
+        }
+        UpdateAudioStream(music.stream, block.data(), bossStreamFrames);
+    }
+}
+
 auto loadBGM() -> BgmLayers
 {
     const size_t loopSamples = secondsToSamples(loopSeconds);
@@ -997,10 +1105,7 @@ auto loadBGM() -> BgmLayers
     bgm.base = loadMusicFromSamples(bgm.baseWav, generateBase(loopSamples));
     bgm.intensity = loadMusicFromSamples(bgm.intensityWav, generateIntensity(loopSamples));
     bgm.miniboss = loadMusicFromSamples(bgm.minibossWav, generateMiniboss(loopSamples));
-    for (size_t biome = 0; biome < bgm.megaboss.size(); biome++)
-    {
-        bgm.megaboss.at(biome) = loadMusicFromSamples(bgm.megabossWav.at(biome), generateBossTrack(loopSamples, biome));
-    }
+    bgm.boss = loadBossMusic();
     bgm.swarmBoss = loadMusicFromSamples(bgm.swarmBossWav, generateSwarmBoss(loopSamples));
     return bgm;
 }

@@ -674,15 +674,15 @@ auto main() -> int
 
     // The game's real BGM streams (from src/sound.cpp), auditioned from the right panel.
     BgmLayers gameBgm = loadBGM();
-    struct BgmRow { const char* name; Music* music; };
-    BgmRow bgmRows[] = {{"Base", &gameBgm.base},
-                        {"Intensity", &gameBgm.intensity},
-                        {"Miniboss", &gameBgm.miniboss},
-                        {"Boss: Shattered Belt", &gameBgm.megaboss[0]},
-                        {"Boss: Rustbloom", &gameBgm.megaboss[1]},
-                        {"Boss: Solar Forge", &gameBgm.megaboss[2]},
-                        {"Boss: Punctum", &gameBgm.megaboss[3]}};
-    int bgmPlaying = -1;
+    // Rows 0-2 are looping layers. Rows 3-6 start a signature-boss fight's music for one biome
+    // (build-up, then its action loop); the last two send it on, as the game does.
+    const char* bgmRows[] = {"Base", "Intensity", "Miniboss",
+                             "Boss fight: Shattered Belt", "Boss fight: Rustbloom",
+                             "Boss fight: Solar Forge", "Boss fight: Punctum",
+                             "  > boss desperate"};
+    Music* bgmLayers[] = {&gameBgm.base, &gameBgm.intensity, &gameBgm.miniboss};
+    SetAudioStreamVolume(gameBgm.boss.stream, 0.8F);
+    int bgmPlaying = -1; // a looping layer, or -1
     SetTargetFPS(60);
     SetMasterVolume(0.5F);
 
@@ -1230,7 +1230,8 @@ auto main() -> int
         }
 
         // ── draw ────────────────────────────────────────────────
-        if (bgmPlaying >= 0) UpdateMusicStream(*bgmRows[bgmPlaying].music);
+        if (bgmPlaying >= 0) UpdateMusicStream(*bgmLayers[bgmPlaying]);
+        pumpBossMusic(gameBgm.boss);
 
         BeginDrawing();
         ClearBackground({8, 8, 12, 255});
@@ -1445,7 +1446,7 @@ auto main() -> int
             // No chooser open: the game's SFX list, click a row to hear it.
             DrawText("GAME SFX (click = play)", rightX + 4, topH + 6, 10, DARKGRAY);
             int sy = topH + 24;
-            for (int i = 5; i < static_cast<int>(sounds.size()); i++, sy += 20)
+            for (int i = 5; i < static_cast<int>(sounds.size()); i++, sy += 18)
             {
                 const bool hover = st.mouse.x >= rightX + 2 && st.mouse.x < rightX + rightW - 2 &&
                                    st.mouse.y >= sy && st.mouse.y < sy + 20;
@@ -1461,24 +1462,35 @@ auto main() -> int
             sy += 6;
             DrawText("GAME BGM (click = play / stop)", rightX + 4, sy, 10, DARKGRAY);
             sy += 16;
-            for (int i = 0; i < 7; i++, sy += 18)
+            const BossMusicSegment seg = gameBgm.boss.segment;
+            for (int i = 0; i < 8; i++, sy += 18)
             {
                 const bool hover = st.mouse.x >= rightX + 2 && st.mouse.x < rightX + rightW - 2 &&
                                    st.mouse.y >= sy && st.mouse.y < sy + 18;
-                const bool on = bgmPlaying == i;
+                const bool fight = seg != BossMusicSegment::None;
+                const bool on = i < 3 ? bgmPlaying == i
+                                : i < 7 ? fight && static_cast<int>(gameBgm.boss.biome) == i - 3
+                                : seg == BossMusicSegment::Desperate;
                 if (hover || on) DrawRectangle(rightX + 2, sy, rightW - 4, 18, on ? (Color){40, 60, 50, 255} : (Color){30, 30, 40, 255});
                 if (hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
                 {
-                    if (bgmPlaying >= 0) StopMusicStream(*bgmRows[bgmPlaying].music);
-                    bgmPlaying = on ? -1 : i;
-                    if (bgmPlaying >= 0)
+                    if (i < 7) // a new layer or fight replaces whatever was playing
                     {
-                        SetMusicVolume(*bgmRows[i].music, 0.6F);
-                        PlayMusicStream(*bgmRows[i].music);
+                        if (bgmPlaying >= 0) StopMusicStream(*bgmLayers[bgmPlaying]);
+                        bgmPlaying = -1;
+                        stopBossMusic(gameBgm.boss);
                     }
+                    if (i < 3 && !on)
+                    {
+                        bgmPlaying = i;
+                        SetMusicVolume(*bgmLayers[i], 0.6F);
+                        PlayMusicStream(*bgmLayers[i]);
+                    }
+                    else if (i >= 3 && i < 7 && !on) startBossMusic(gameBgm.boss, static_cast<size_t>(i - 3));
+                    else if (i == 7 && fight) requestBossMusic(gameBgm.boss, BossMusicSegment::Desperate);
                 }
                 DrawRectangle(rightX + 4, sy + 5, 8, 8, {120, 160, 220, 255});
-                DrawText(bgmRows[i].name, rightX + 16, sy + 3, 12, (hover || on) ? WHITE : LIGHTGRAY);
+                DrawText(bgmRows[i], rightX + 16, sy + 3, 10, (hover || on) ? WHITE : LIGHTGRAY);
             }
         }
 

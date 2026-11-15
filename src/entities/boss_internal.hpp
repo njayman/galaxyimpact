@@ -64,7 +64,5 @@ void beginKrakenDraggedUnder(Game& game, Boss& kraken);
 auto krakenFeedRest(const Boss& kraken, float sign) -> Vector2;
 void beginBanishedCoil(Boss& boss, Player& player, int32_t idx, Vector2 contactPoint);
 void resolveBanishedCoil(Game& game, Boss& boss, int32_t idx);
-void gripBanishedTentacle(Boss& boss, int32_t slot, Vector2 tip);
-void releaseBanishedTentacle(Boss& boss);
 void beginBanishedJuggled(Game& game, Boss& boss, int32_t slot);
 void endBanishedJuggled(Game& game, Boss& boss, bool clean);

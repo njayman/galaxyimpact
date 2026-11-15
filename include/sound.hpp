@@ -3,6 +3,7 @@
 #include "raylib.h"
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 namespace SoundConstants
 {
@@ -42,16 +43,45 @@ struct Sounds
 
 auto LoadSounds() -> Sounds;
 
+// Signature-boss music: build-up once, then the biome's action loop; the old boss loop for the
+// boss's desperate phase; fades out when it dies. See the player in src/sound.cpp.
+enum class BossMusicSegment : std::uint8_t
+{
+    None,
+    Build,
+    Action,
+    Desperate,
+};
+
+struct BossMusic
+{
+    AudioStream stream{};
+    std::array<std::vector<int16_t>, SoundConstants::biomeCount> build;  // in Biome order
+    std::array<std::vector<int16_t>, SoundConstants::biomeCount> action; // in Biome order
+    std::vector<int16_t> desperate;
+    BossMusicSegment segment = BossMusicSegment::None;
+    BossMusicSegment pending = BossMusicSegment::None; // takes over at the next beat or bar line
+    float fade = 1.0F; // 1 while the fight lasts; ramps to 0 once the boss is gone
+    size_t biome = 0;
+    size_t pos = 0;
+};
+
+auto loadBossMusic() -> BossMusic;
+void startBossMusic(BossMusic& music, size_t biome);                  // from the build-up
+void requestBossMusic(BossMusic& music, BossMusicSegment next);        // Desperate, in time
+void stopBossMusic(BossMusic& music);                                 // at once
+void pumpBossMusic(BossMusic& music);                                 // call every frame
+
 struct BgmLayers
 {
     Music base{};
     Music intensity{};
     Music miniboss{};
-    std::array<Music, SoundConstants::biomeCount> megaboss{}; // one full boss track per biome, in Biome order
+    BossMusic boss;
     Music swarmBoss{};
     float intensityVolume = 0;
     float minibossVolume = 0;
-    float megabossVolume = 0;
+    float bossMix = 0; // 0..1: how far the boss music has taken over from the base layers
     float swarmBossVolume = 0;
     float calmTimer = 0;
     float duckTimer = 0;
@@ -59,7 +89,6 @@ struct BgmLayers
     std::vector<std::byte> baseWav;
     std::vector<std::byte> intensityWav;
     std::vector<std::byte> minibossWav;
-    std::array<std::vector<std::byte>, SoundConstants::biomeCount> megabossWav;
     std::vector<std::byte> swarmBossWav;
 };
 

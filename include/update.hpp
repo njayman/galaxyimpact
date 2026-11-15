@@ -113,15 +113,7 @@ constexpr int32_t krakenDragPromptsPerPortal = 4; // the ship is hauled through 
 constexpr float krakenDragPromptWindow = 0.6F;
 constexpr float krakenDragBeat = 0.3F;
 constexpr int32_t krakenDragParryChance = 30;
-// Banished Juggled: Bind's catch, three throws between tentacles
-constexpr float banishedJuggleMashDuration = 2.4F;
-constexpr int32_t banishedJuggleMashPresses = 9;
-constexpr float banishedJuggleMashBeat = 0.5F;
-constexpr int32_t banishedJugglePrompts = 13;
-constexpr int32_t banishedJugglePromptsPerThrow = 4; // throws start at 13, 9 and 5 left (4, 4, 5)
-constexpr float banishedJugglePromptWindow = 0.5F;
-constexpr float banishedJuggleBeat = 0.25F;
-constexpr int32_t banishedJuggleParryChance = 35;
+// Banished: an ordinary grab's short hold
 constexpr float banishedPlainGrabHold = 0.8F;
 // Rush QTE: a dodge chain as a charging boss passes (Wreckworm Burrow Charge and Dash Rush, any
 // other boss's ChargeDash while enraged)

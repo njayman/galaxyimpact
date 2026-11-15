@@ -600,7 +600,7 @@ void sandboxForceBossQte(Game& game, Boss& boss, BossAttack attack)
     }
     else if (boss.isBanished)
     {
-        beginBanishedJuggled(game, boss, 0);
+        boss.banishedBigTimer = 0; // the big grab, whose catch starts Juggled
     }
     else if (boss.isWreckwormHead && !boss.krakenSnakeVariant && attack == BossAttack::CoilClamp)
     {
@@ -686,10 +686,6 @@ void damageBoss(Game& game, Boss& boss, int32_t amount, bool applyShake, bool pi
         // ponytail: the eye only takes damage from the dedicated shield-dash/nerve burst
         // (damageBanishedEyeBurst) so it can only be hit once per exposure; incidental
         // weapon fire just flashes without draining health.
-        if (boss.banishedStage == 1)
-        {
-            boss.hitFlashTimer = UpdateConstants::hitFlashDuration;
-        }
         return;
     }
 
@@ -1139,7 +1135,6 @@ static void bossShootChargeDash(Game& game, float deltaTime, Boss& boss, Vector2
                                       deltaTime * (boss.shockwaveSlowTimer > 0 ? boss.shockwaveSlowMult : 1.0F));
     boss.position = Vector2Add(boss.position, step);
     tryBeginRushQte(game, boss, bossCenter);
-    dropMagmaTrail(game, boss, bossCenter, step);
 }
 
 // DashRush: the firing phase, one step.
@@ -1613,6 +1608,15 @@ static void updateBossShooting(Game& game, float deltaTime, Boss& boss, Vector2 
         boss.stateTimer = beltbreakerRampageChainTell;
         return;
     }
+    if (boss.stateTimer <= 0 && boss.isWreckwormHead && boss.attack == BossAttack::CloudBreath)
+    {
+        // The breath hangs in the air while the Wreckworm readies its rush.
+        boss.attack = BossAttack::DashRush;
+        boss.state = BossState::WINDING_UP;
+        boss.stateTimer = bossWindupDuration(boss.attack) * rateMult;
+        boss.windupTotal = 0;
+        return;
+    }
     if (boss.stateTimer <= 0)
     {
         if (boss.isWreckwormHead &&
@@ -1915,6 +1919,30 @@ void forceBossAttack(Game& game, Boss& boss, BossAttack attack)
     playSFX(game, game.resources.sounds.bossWindUp);
 }
 
+// Point s along the rectangle of half extents hx, hy round `view`: top edge left to right, then down,
+// bottom edge right to left, then up.
+static auto breathWallPoint(Vector2 view, float hx, float hy, float s) -> Vector2
+{
+    const float w = 2 * hx;
+    const float h = 2 * hy;
+    if (s < w)
+    {
+        return Vector2{.x = view.x - hx + s, .y = view.y - hy};
+    }
+    s -= w;
+    if (s < h)
+    {
+        return Vector2{.x = view.x + hx, .y = view.y - hy + s};
+    }
+    s -= h;
+    if (s < w)
+    {
+        return Vector2{.x = view.x + hx - s, .y = view.y + hy};
+    }
+    s -= w;
+    return Vector2{.x = view.x - hx, .y = view.y + hy - s};
+}
+
 void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
 {
     const Vector2 direction = Vector2Subtract(boss.targetPosition, bossCenter);
@@ -1972,6 +2000,8 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
                 }
             }
             boss.stateTimer = travel / pounceSpeed;
+            boss.moleLeapTotal = boss.stateTimer;
+            boss.moleLeapFrom = bossCenter;
             boss.chargeVelocity = Vector2Scale(aimDirection, pounceSpeed);
             boss.dashHitPlayer = false;
             boss.magmaTrailDist = 0;
@@ -2123,21 +2153,23 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         boss.stateTimer = 1.0F;
         const Vector2 bossCenter{.x = boss.position.x + boss.size.x / 2,
                                  .y = boss.position.y + boss.size.y / 2};
-        for (int32_t i = 0; i < wreckwormCloudBreathCount; i++)
+        // Out of the mouth, and each puff eases out to its spot on a rectangle round the visible screen.
+        const Vector2 facing = Vector2Normalize(Vector2Subtract(game.run.player.position, bossCenter));
+        const Vector2 mouth = Vector2Add(bossCenter, Vector2Scale(facing, boss.size.x / 2 * 0.95F));
+        const Vector2 view = game.run.player.position;
+        const float hx = static_cast<float>(game.resources.screenWidth) / 2;
+        const float hy = static_cast<float>(game.resources.screenHeight) / 2;
+        const float perimeter = 4 * (hx + hy);
+        for (float s = 0; s < perimeter; s += wreckwormWallSpacing)
         {
-            const float angle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-            const auto dist = static_cast<float>(GetRandomValue(
-                0, static_cast<int32_t>(wreckwormCloudSpawnSpread)));
-            const auto radius = static_cast<float>(GetRandomValue(
-                static_cast<int32_t>(wreckwormCloudRadiusMin),
-                static_cast<int32_t>(wreckwormCloudRadiusMax)));
             game.run.gasHazards.push_back(GasHazard{
-                .position = Vector2Add(
-                    bossCenter, Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist}),
-                .radius = radius,
+                .position = mouth,
+                .radius = wreckwormWallRadius,
                 .seed = static_cast<float>(GetRandomValue(0, 10000)),
                 .life = wreckwormCloudLifespan,
-                .isFire = boss.krakenSnakeVariant});
+                .isFire = boss.krakenSnakeVariant,
+                .breath = true,
+                .target = breathWallPoint(view, hx, hy, s)});
         }
         playSFX(game, game.resources.sounds.spreadBurst);
         break;

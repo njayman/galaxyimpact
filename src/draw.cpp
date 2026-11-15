@@ -100,6 +100,10 @@ auto tiledWorldPos(Vector2 relativeTo, Vector2 offset, float tileW, float tileH)
 
 auto biomeVoidColor(const Game& game) -> Color
 {
+    if (game.run.inBanishedRealm)
+    {
+        return banishedVoid;
+    }
     switch (currentBiome(game.run.waveNumber))
     {
     case Biome::ShatteredBelt:

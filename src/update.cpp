@@ -141,7 +141,18 @@ auto updateBanishedEntryCutscene(Game& game, float deltaTime) -> bool
             game.run.mines.clear();
             game.run.bgParticles.clear();
             game.run.stars.clear();
-            game.run.player.position = Vector2{};
+            game.run.deathParticles.clear();
+            game.run.player.position = Vector2{.x = 0, .y = banishedArrivalOffset};
+            game.run.bossCutscenePhase = 13;
+            game.run.bossCutsceneTimer = banishedTunnelDuration;
+        }
+        return true;
+    }
+
+    if (game.run.bossCutscenePhase == 13) // the fall down the tear
+    {
+        if (game.run.bossCutsceneTimer <= 0)
+        {
             game.run.achievementToast = "I am the banished one. I am your doom.";
             game.run.achievementToastTimer = banishedRemainsDuration + banishedBreakApartDuration;
             game.run.bossCutscenePhase = 11;
@@ -150,22 +161,24 @@ auto updateBanishedEntryCutscene(Game& game, float deltaTime) -> bool
         return true;
     }
 
-    if (game.run.bossCutscenePhase == 11)
+    if (game.run.bossCutscenePhase == 11) // the husk hangs still
     {
         if (game.run.bossCutsceneTimer <= 0)
         {
             game.run.bossCutscenePhase = 12;
             game.run.bossCutsceneTimer = banishedBreakApartDuration;
+            triggerShake(game, 10, 0.6F);
         }
         return true;
     }
 
-    if (game.run.bossCutscenePhase == 12)
+    if (game.run.bossCutscenePhase == 12) // Banished breaks out of it
     {
         if (game.run.bossCutsceneTimer <= 0)
         {
             game.run.bossCutscenePhase = 0;
             spawnBanished(game);
+            triggerShake(game, 8, 0.4F);
         }
         return true;
     }
@@ -265,6 +278,7 @@ auto updateBossCutscene(Game& game, float deltaTime) -> bool
                 dust.color = spawnBlackHoleDustParticle(game).color;
             }
             game.run.punctumTrapActive = true;
+            triggerShake(game, 8, 0.5F);
             game.run.achievementToast = "Follow me, if you dare.";
             game.run.achievementToastTimer = krakenOutroHoldDuration;
             game.run.enemies.clear();
@@ -1016,10 +1030,7 @@ auto UpdateGame(Game& game, float deltaTime) -> bool
     UpdateMusicStream(game.resources.bgm.base);
     UpdateMusicStream(game.resources.bgm.intensity);
     UpdateMusicStream(game.resources.bgm.miniboss);
-    for (const Music& track : game.resources.bgm.megaboss)
-    {
-        UpdateMusicStream(track);
-    }
+    pumpBossMusic(game.resources.bgm.boss);
     UpdateMusicStream(game.resources.bgm.swarmBoss);
 
     if (game.run.shakeTimer > 0)

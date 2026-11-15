@@ -41,6 +41,23 @@ void sandboxSpawnSelectedEnemy(Game& game)
     spawnEnemyAt(game, game.sandboxKindIndex, pos);
 }
 
+// The Banished in its realm, spawned if it is not there yet.
+static auto sandboxBanished(Game& game) -> Boss&
+{
+    for (auto& boss : game.run.bosses)
+    {
+        if (boss.isBanished)
+        {
+            return boss;
+        }
+    }
+    game.run.waveNumber = 100;
+    game.run.inBanishedRealm = true;
+    spawnBanished(game);
+    game.run.player.position = Vector2{.x = 0, .y = 400};
+    return game.run.bosses.back();
+}
+
 void sandboxSpawnSignatureBoss(Game& game)
 {
     if (currentBiome(game.run.waveNumber) == Biome::ShatteredBelt)
@@ -300,6 +317,19 @@ auto sandboxMenuButtons() -> const std::vector<SandboxMenuButton>&
         {[](const Game&) { return std::string("Spawn Swarm Boss"); }, spawnSwarmBoss},
         {[](const Game&) { return std::string("Spawn Signature Boss"); },
          sandboxSpawnSignatureBoss},
+        {[](const Game&) { return std::string("Play Kraken Outro"); },
+         [](Game& game)
+         {
+             // the wave 100 Kraken at 0 HP: its outro, the tear, then the Banished realm
+             sandboxClearBoard(game);
+             game.run.waveNumber = 100;
+             spawnKraken(game, 100);
+             game.run.bosses.back().health = 0;
+         }},
+        {[](const Game&) { return std::string("Banished: Big Grab"); },
+         [](Game& game) { sandboxBanished(game).banishedBigTimer = 0; }},
+        {[](const Game&) { return std::string("Banished: Finale"); },
+         [](Game& game) { sandboxBanished(game).banishedStaggered.fill(true); }},
         {[](const Game&) { return std::string("Force Boss Attack"); },
          sandboxForceAttackNearestBoss},
         {[](const Game&) { return std::string("Force Boss Pattern"); },

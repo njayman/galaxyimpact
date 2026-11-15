@@ -90,7 +90,8 @@ void updatePunctumThunder(Game& game, float deltaTime)
         game.run.punctumThunderFlashTimer -= deltaTime;
     }
 
-    if (currentBiome(game.run.waveNumber) != Biome::Punctum)
+    // no Thunder Strike during the Kraken's outro or in the Banished realm
+    if (currentBiome(game.run.waveNumber) != Biome::Punctum || game.run.inBanishedRealm || game.run.bossCutscenePhase != 0)
     {
         return;
     }
@@ -569,12 +570,10 @@ void updateGasHazards(Game& game, float deltaTime)
             continue;
         }
 
-        const Vector2 toPlayer = Vector2Subtract(game.run.player.position, cloud.position);
-        if (!cloud.anchored && Vector2Length(toPlayer) > 1)
+        if (cloud.breath)
         {
-            cloud.position = Vector2Add(
-                cloud.position,
-                Vector2Scale(Vector2Normalize(toPlayer), wreckwormCloudDriftSpeed * deltaTime));
+            const Vector2 toTarget = Vector2Subtract(cloud.target, cloud.position);
+            cloud.position = Vector2Add(cloud.position, Vector2Scale(toTarget, 1 - std::exp(-wreckwormBreathEase * deltaTime)));
         }
 
         const float contactDist = cloud.radius + game.run.player.radius;

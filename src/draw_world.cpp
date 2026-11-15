@@ -141,8 +141,46 @@ void drawSpiralBlade(Vector2 pos, bool evolved)
     DrawCircleV(pos, 6.0F, WHITE);
 }
 
+// A Wreckworm breath puff: flat matte discs in three tones, satellites turning round the core, and a
+// ring of motes. No outline. Pops in as it leaves the mouth and thins out over its last seconds.
+static void drawBreathPuff(const GasHazard& cloud)
+{
+    const auto t = static_cast<float>(GetTime());
+    const float fade = std::min(1.0F, cloud.life / 1.5F);
+    const float popIn = std::min(1.0F, (wreckwormCloudLifespan - cloud.life) / 0.25F);
+    const float r = cloud.radius * popIn;
+    const Color outer = ColorLerp(Palette::RustbloomAccent, Palette::RustbloomVoid, 0.35F);
+    const Color mid = ColorLerp(Palette::RustbloomAccent, Palette::RustbloomHaze, 0.4F);
+    const Color core = ColorLerp(Palette::RustbloomAccent, Palette::RustbloomHaze, 0.85F);
+
+    DrawCircleV(cloud.position, r, Fade(outer, 0.35F * fade));
+    for (int32_t k = 0; k < 3; k++)
+    {
+        const float a = cloud.seed * 0.001F + t * 0.25F + static_cast<float>(k) * 2.0944F;
+        const Vector2 p = Vector2Add(cloud.position, Vector2{.x = std::cos(a) * r * 0.5F, .y = std::sin(a) * r * 0.5F});
+        DrawCircleV(p, r * 0.55F, Fade(mid, 0.4F * fade));
+    }
+    DrawCircleV(cloud.position, r * 0.45F, Fade(core, 0.5F * fade));
+    for (int32_t k = 0; k < 6; k++)
+    {
+        const float a = t * 0.8F + static_cast<float>(k) * 1.0472F;
+        const Vector2 p = Vector2Add(cloud.position, Vector2{.x = std::cos(a) * r * 1.05F, .y = std::sin(a) * r * 1.05F});
+        DrawCircleV(p, 2.5F, Fade(core, 0.5F * fade));
+    }
+}
+
 void drawGameplayWorld(const Game& game)
 {
+    if (game.run.bossCutscenePhase == 13)
+    {
+        drawRealmTunnel(game); // nothing else exists while the ship falls down the tear
+        drawShip(game);
+        return;
+    }
+    if (game.run.inBanishedRealm)
+    {
+        drawBanishedRealm(game);
+    }
     drawBackgroundStars(game, game.run.player.position);
     drawPunctumLightning(game);
     drawPunctumInfall(game); // other Biomes' wreckage falling to the map centre, over the stars
@@ -180,25 +218,19 @@ void drawGameplayWorld(const Game& game)
                            game.run.blackHoleDust);
         if (game.run.blackhole.isKrakenPortal)
         {
-            // The way to the Banished realm: lit rim and swirling arcs so it reads on Punctum black.
+            // The way to the Banished realm. It tears open with a ring thrown outward.
+            const float open = game.run.bossCutscenePhase == 3
+                                   ? std::clamp((krakenOutroHoldDuration - game.run.bossCutsceneTimer) / 0.7F, 0.0F, 1.0F)
+                                   : 1.0F;
             const Vector2 c = game.run.blackhole.position;
             const float r = game.run.blackhole.radius;
-            const auto t = static_cast<float>(GetTime());
-            const float pulse = 0.5F + 0.5F * std::sin(t * 3.0F);
-            for (int32_t g = 6; g >= 1; g--)
+            if (open < 1.0F)
             {
-                DrawCircleV(c, r * (1.0F + 0.25F * static_cast<float>(g)),
-                            Fade(Palette::PunctumHaze, 0.05F + 0.02F * pulse));
+                plateRing(c, r * (1.0F + 4.0F * open), r * (1.12F + 4.0F * open), 6,
+                          static_cast<float>(GetTime()) * 50.0F, 20.0F, Fade(Palette::PunctumHaze, 0.7F * (1.0F - open)));
             }
-            DrawCircleV(c, r, BLACK);
-            for (int32_t a = 0; a < 6; a++)
-            {
-                const float base = t * 90.0F + static_cast<float>(a) * 60.0F;
-                const float ar = r * (1.15F + 0.12F * static_cast<float>(a % 3));
-                DrawRing(c, ar, ar + 3.0F, base, base + 70.0F, 24,
-                         Fade(a % 2 == 0 ? Palette::PunctumHaze : Palette::Shield, 0.8F));
-            }
-            DrawRing(c, r - 2.0F, r + 2.0F + 2.0F * pulse, 0, 360, 64, Palette::PunctumAccent);
+            DrawCircleV(c, r * 2.1F * open, Fade(Palette::PunctumHaze, 0.06F));
+            drawTearPortal(c, r, easeOutBack(open));
         }
     }
 
@@ -221,6 +253,11 @@ void drawGameplayWorld(const Game& game)
 
     for (const auto& cloud : game.run.gasHazards)
     {
+        if (cloud.breath)
+        {
+            drawBreathPuff(cloud);
+            continue;
+        }
         const float pulse =
             0.85F + 0.15F * std::sin(static_cast<float>(GetTime()) * 2.2F + cloud.seed);
         const float fadeAlpha = std::min(1.0F, cloud.life / 1.5F);
@@ -444,6 +481,10 @@ void drawGameplayWorld(const Game& game)
         {
             drawFluidBlob(p.position, p.radius * 1.4F, p.fluidColor,
                           p.position.x * 0.05F + p.position.y * 0.03F, p.velocity);
+        }
+        else if (p.energized)
+        {
+            drawBanishedHurled(p);
         }
         else if (p.visualEnemyKind >= 0)
         {
@@ -829,11 +870,14 @@ void drawShip(const Game& game)
 {
     const Vector2 p = game.run.player.position;
 
-    const bool twirlingIn = game.run.bossCutscenePhase == 10;
+    // Phase 10 spins the ship down into the tear; phase 13 (the fall) brings it back out.
+    const bool twirlingIn = game.run.bossCutscenePhase == 10 || game.run.bossCutscenePhase == 13;
     const float twirlProgress =
-        twirlingIn
+        game.run.bossCutscenePhase == 10
             ? std::clamp(1.0F - game.run.bossCutsceneTimer / banishedEntryTwirlDuration, 0.0F, 1.0F)
-            : 0.0F;
+            : game.run.bossCutscenePhase == 13
+                  ? std::clamp(game.run.bossCutsceneTimer / banishedTunnelDuration, 0.0F, 1.0F)
+                  : 0.0F;
     const float r =
         game.run.player.radius * (twirlingIn ? std::max(0.05F, 1.0F - twirlProgress) : 1.0F);
 
@@ -844,7 +888,8 @@ void drawShip(const Game& game)
     if (twirlingIn)
     {
         const auto shipClass = static_cast<ShipClass>(game.resources.settings.shipIndex);
-        const Color shipColor = ColorLerp(game.run.player.color, BLACK, twirlProgress);
+        const Color shipColor =
+            ColorLerp(game.run.player.color, BLACK, game.run.bossCutscenePhase == 10 ? twirlProgress : 0.0F);
         drawShipHull(shipClass, p, r, angle, shipColor);
         return;
     }

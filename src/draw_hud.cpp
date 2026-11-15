@@ -215,6 +215,18 @@ void drawHUD(const Game& game)
     const auto height = static_cast<int32_t>(static_cast<float>(game.resources.screenHeight) / hudScale(game));
     constexpr int32_t margin = 22;
 
+    // The Kraken's outro and the fall into the Banished realm: no HUD, only the spoken line.
+    if (game.run.bossCutscenePhase != 0)
+    {
+        if (game.run.achievementToastTimer > 0)
+        {
+            const float alpha = std::min(1.0F, game.run.achievementToastTimer / 0.6F);
+            const char* text = game.run.achievementToast.c_str();
+            drawText(game, text, (width - measureText(game, text, 22)) / 2, height * 3 / 4, 22, Fade(Palette::Crit, alpha));
+        }
+        return;
+    }
+
     // XP: a hairline along the very top edge.
     const float xpFrac = std::min(static_cast<float>(game.run.xp) / static_cast<float>(game.run.xpToNext), 1.0F);
     DrawRectangle(0, 0, width, 4, Fade(Palette::StructMid, 0.6F));

@@ -393,8 +393,6 @@ void updateWreckwormChain(Game& game, Boss& head, float deltaTime)
     {
         return;
     }
-    (void)deltaTime;
-
     const Vector2 headCenter{.x = head.position.x + head.size.x / 2,
                              .y = head.position.y + head.size.y / 2};
 
@@ -405,7 +403,7 @@ void updateWreckwormChain(Game& game, Boss& head, float deltaTime)
     }
 
     const float maxTrailLength =
-        static_cast<float>(head.segmentCount + 2) * wreckwormSegmentSpacing + 200.0F;
+        static_cast<float>(head.segmentCount + 2) * wreckwormSegmentSpacing * 1.5F + 200.0F;
     float accum = 0;
     size_t keep = head.wreckwormTrail.size();
     for (size_t i = 1; i < head.wreckwormTrail.size(); i++)
@@ -422,14 +420,33 @@ void updateWreckwormChain(Game& game, Boss& head, float deltaTime)
         head.wreckwormTrail.resize(keep);
     }
 
+    // Body physics. At its cruising speed and at rest the links are closed up, the hull plates
+    // covering the spine. Two things pull the first link long: running faster than a cruise
+    // (dashes), and surging forward (the head's speed outrunning its own recent average, as when
+    // it sets off from a stop). Each link then eases toward the tension of the one ahead, so the
+    // stretch starts at the head and runs down to the tail.
+    const float speed = Vector2Length(head.wreckwormVelocity);
+    const float runPull = (speed - wreckwormCruiseSpeed) / (wreckwormRunSpeed - wreckwormCruiseSpeed);
+    const float cruiseFrac = std::min(speed / wreckwormCruiseSpeed, 1.5F);
+    head.wreckwormStretch += (cruiseFrac - head.wreckwormStretch) * std::min(1.0F, deltaTime * wreckwormSurgeDecay);
+    const float surgePull = cruiseFrac - head.wreckwormStretch;
+    const float pull = std::clamp(std::max(runPull, surgePull), 0.0F, 1.0F);
+    float tension = wreckwormPackedLink + (wreckwormRunLink - wreckwormPackedLink) * pull;
+    float targetDist = 0;
     for (int32_t i = 0; i < head.segmentCount; i++)
     {
         Boss* seg = findWreckwormSegment(game, head.instanceId, i);
+        if (seg != nullptr)
+        {
+            seg->wreckwormStretch += (tension - seg->wreckwormStretch) * std::min(1.0F, deltaTime * wreckwormLinkRate);
+            tension = seg->wreckwormStretch;
+        }
+        // The head is longer than a segment, so the first link never closes as far.
+        targetDist += wreckwormSegmentSpacing * (i == 0 ? std::max(tension, wreckwormNeckLink) : tension);
         if (seg == nullptr)
         {
             continue;
         }
-        const float targetDist = static_cast<float>(i + 1) * wreckwormSegmentSpacing;
         const Vector2 point = pointAlongWreckwormTrail(headCenter, head.wreckwormTrail, targetDist);
         seg->position =
             Vector2Subtract(point, Vector2{.x = seg->size.x / 2, .y = seg->size.y / 2});

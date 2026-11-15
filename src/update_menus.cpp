@@ -607,10 +607,7 @@ void applyBGMState(Game& game)
         ResumeMusicStream(game.resources.bgm.base);
         ResumeMusicStream(game.resources.bgm.intensity);
         ResumeMusicStream(game.resources.bgm.miniboss);
-        for (const Music& track : game.resources.bgm.megaboss)
-        {
-            ResumeMusicStream(track);
-        }
+        ResumeAudioStream(game.resources.bgm.boss.stream);
         ResumeMusicStream(game.resources.bgm.swarmBoss);
     }
     else
@@ -618,10 +615,7 @@ void applyBGMState(Game& game)
         PauseMusicStream(game.resources.bgm.base);
         PauseMusicStream(game.resources.bgm.intensity);
         PauseMusicStream(game.resources.bgm.miniboss);
-        for (const Music& track : game.resources.bgm.megaboss)
-        {
-            PauseMusicStream(track);
-        }
+        PauseAudioStream(game.resources.bgm.boss.stream);
         PauseMusicStream(game.resources.bgm.swarmBoss);
     }
 }
@@ -653,11 +647,13 @@ void updateBgmLayers(Game& game, float deltaTime)
     }
 
     constexpr float minibossFullVolume = 0.6F;
-    constexpr float megabossFullVolume = 0.8F;
+    constexpr float bossMusicVolume = 0.8F;
+    constexpr float bossMusicFadeSeconds = 3.0F; // how long the boss music takes to die down
     constexpr float swarmBossFullVolume = 1.0F;
 
     bool minibossActive = false;
-    bool megabossActive = false;
+    bool signatureAlive = false; // a biome's own boss: gets the sequenced boss music
+    bool signatureDesperate = false;
     bool swarmBossActive = false;
     for (const auto& boss : game.run.bosses)
     {
@@ -665,9 +661,14 @@ void updateBgmLayers(Game& game, float deltaTime)
         {
             swarmBossActive = true;
         }
-        else if (boss.isMega)
+        else if (boss.isBeltbreaker || boss.isBeltbreakerPlate || boss.isWreckwormHead || boss.isWreckwormSegment ||
+                 boss.isSlagmaw || boss.isKraken || boss.isBanished)
         {
-            megabossActive = true;
+            signatureAlive = true;
+            const bool part = boss.isBeltbreakerPlate || boss.isWreckwormSegment;
+            signatureDesperate = signatureDesperate ||
+                                 (!part && static_cast<float>(boss.health) <=
+                                               static_cast<float>(boss.maxHealth) * enrageHealthFrac);
         }
         else
         {
@@ -675,17 +676,51 @@ void updateBgmLayers(Game& game, float deltaTime)
         }
     }
     const float swarmBossTarget = swarmBossActive ? swarmBossFullVolume : 0.0F;
-    const float megabossTarget = (megabossActive && !swarmBossActive) ? megabossFullVolume : 0.0F;
+
+    // Signature-boss music: build-up into the biome's loop, the old loop once the boss is desperate,
+    // a fade out once the boss is gone. Every other boss, mega or not, gets the miniboss layer.
+    BossMusic& bossMusic = game.resources.bgm.boss;
+    const bool playing = bossMusic.segment != BossMusicSegment::None;
+    const bool fading = bossMusic.fade < 1.0F;
+    if (signatureAlive && game.run.player.health > 0)
+    {
+        if (!playing || fading)
+        {
+            startBossMusic(bossMusic, static_cast<size_t>(currentBiome(game.run.waveNumber)));
+        }
+        else if (signatureDesperate && bossMusic.segment != BossMusicSegment::Desperate)
+        {
+            requestBossMusic(bossMusic, BossMusicSegment::Desperate);
+        }
+    }
+    else if (playing)
+    {
+        if (game.run.player.health > 0)
+        {
+            bossMusic.fade = std::max(0.0F, bossMusic.fade - deltaTime / bossMusicFadeSeconds);
+            if (bossMusic.fade <= 0)
+            {
+                stopBossMusic(bossMusic);
+            }
+        }
+        else
+        {
+            stopBossMusic(bossMusic);
+        }
+    }
+    // The base layers step aside for the boss music and come back in as it fades.
+    const bool bossMusicLeads = bossMusic.segment != BossMusicSegment::None && !fading;
+    const float bossMixRate = 1 - std::exp(-(bossMusicLeads ? 5.0F : 0.7F) * deltaTime);
+    game.resources.bgm.bossMix += ((bossMusicLeads ? 1.0F : 0.0F) - game.resources.bgm.bossMix) * bossMixRate;
+    const float underBoss = 1.0F - game.resources.bgm.bossMix;
     const float minibossTarget =
-        (minibossActive && !swarmBossActive && !megabossActive) ? minibossFullVolume : 0.0F;
+        (minibossActive && !swarmBossActive && !signatureAlive) ? minibossFullVolume : 0.0F;
 
     const float rate = 1 - std::exp(-volumeSmoothing * deltaTime);
     game.resources.bgm.intensityVolume +=
         (intensityTarget - game.resources.bgm.intensityVolume) * rate;
     game.resources.bgm.minibossVolume +=
         (minibossTarget - game.resources.bgm.minibossVolume) * rate;
-    game.resources.bgm.megabossVolume +=
-        (megabossTarget - game.resources.bgm.megabossVolume) * rate;
     game.resources.bgm.swarmBossVolume +=
         (swarmBossTarget - game.resources.bgm.swarmBossVolume) * rate;
 
@@ -697,15 +732,9 @@ void updateBgmLayers(Game& game, float deltaTime)
         duckFactor = 1.0F - bgmDuckStrength * t;
     }
 
-    SetMusicVolume(game.resources.bgm.base, SoundConstants::baseVolume * duckFactor);
-    SetMusicVolume(game.resources.bgm.intensity, game.resources.bgm.intensityVolume * duckFactor);
+    SetMusicVolume(game.resources.bgm.base, SoundConstants::baseVolume * duckFactor * underBoss);
+    SetMusicVolume(game.resources.bgm.intensity, game.resources.bgm.intensityVolume * duckFactor * underBoss);
     SetMusicVolume(game.resources.bgm.miniboss, game.resources.bgm.minibossVolume * duckFactor);
-    // Only the current biome's boss track is audible; all four keep running so they stay in step.
-    const auto biome = static_cast<size_t>(currentBiome(game.run.waveNumber));
-    for (size_t i = 0; i < game.resources.bgm.megaboss.size(); i++)
-    {
-        SetMusicVolume(game.resources.bgm.megaboss.at(i),
-                       i == biome ? game.resources.bgm.megabossVolume * duckFactor : 0.0F);
-    }
+    SetAudioStreamVolume(bossMusic.stream, bossMusicVolume * bossMusic.fade * duckFactor);
     SetMusicVolume(game.resources.bgm.swarmBoss, game.resources.bgm.swarmBossVolume * duckFactor);
 }
