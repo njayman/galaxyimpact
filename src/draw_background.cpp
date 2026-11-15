@@ -43,10 +43,12 @@ void drawSolarForgeCaveBackground(const Game& game)
         }
     }
 
-    for (float y = startY; y < center.y + halfH; y += cellSize)
+    for (int32_t iy = 0; startY + static_cast<float>(iy) * cellSize < center.y + halfH; iy++)
     {
-        for (float x = startX; x < center.x + halfW; x += cellSize)
+        const float y = startY + static_cast<float>(iy) * cellSize;
+        for (int32_t ix = 0; startX + static_cast<float>(ix) * cellSize < center.x + halfW; ix++)
         {
+            const float x = startX + static_cast<float>(ix) * cellSize;
             const Vector2 cellCenter{.x = x + cellSize / 2, .y = y + cellSize / 2};
             if (isSolarForgeCaveOpen(cellCenter))
             {
@@ -129,12 +131,12 @@ struct BeltPlanetFace
 struct BeltPlanet
 {
     std::vector<BeltPlanetFace> faces;
-    Vector3 breakDir;
-    Vector3 light;
-    Color rock;
-    bool live;     // molten core: glows through the seams and slowly pulses
-    Color coreHot; // live cores only
-    float pulsePhase;
+    Vector3 breakDir{};
+    Vector3 light{};
+    Color rock{};
+    bool live{};     // molten core: glows through the seams and slowly pulses
+    Color coreHot{}; // live cores only
+    float pulsePhase{};
 };
 
 auto buildBeltPlanet(float seed) -> BeltPlanet
@@ -154,7 +156,7 @@ auto buildBeltPlanet(float seed) -> BeltPlanet
         const bool pole = i == 0 || i == latBands;
         for (int32_t j = 0; j < lonSegments; j++)
         {
-            const float k = static_cast<float>(i * lonSegments + j);
+            const auto k = static_cast<float>(i * lonSegments + j);
             const float lat = (-90.0F + 180.0F * (static_cast<float>(i) + (pole ? 0.0F : (h(10 + k) - 0.5F) * 0.5F)) /
                                             latBands) *
                               DEG2RAD;
@@ -202,7 +204,7 @@ auto buildBeltPlanet(float seed) -> BeltPlanet
             c = Vector3Scale(c, 0.25F);
             face.normal = Vector3Normalize(c);
             const float facing = Vector3DotProduct(face.normal, breakDir);
-            const float k = static_cast<float>(i * lonSegments + j);
+            const auto k = static_cast<float>(i * lonSegments + j);
             face.fracture = std::clamp((facing - 0.45F) / (0.95F - 0.45F), 0.0F, 1.0F);
             face.shard = facing > 0.8F + h(1300 + k) * 0.14F;
 
@@ -284,7 +286,7 @@ void drawBeltPlanetBody(const BeltPlanet& planet, Vector2 center, float radius,
         constexpr int32_t debrisCount = 150;
         for (int32_t i = 0; i < debrisCount; i++)
         {
-            const float k = static_cast<float>(i);
+            const auto k = static_cast<float>(i);
             const float dist = radius * (1.35F + 0.4F * hashNoise(k * 1.3F + 3.0F));
             const float theta = hashNoise(k * 2.7F + 9.0F) * 2.0F * std::numbers::pi_v<float> +
                                 t * 0.012F * (radius * 1.5F / dist);
@@ -470,7 +472,7 @@ void drawRustbloomDerelict(Vector2 center, float angle, float length, float seed
         const auto strands = static_cast<int32_t>(len / furStep);
         for (int32_t j = 0; j < strands; j++)
         {
-            const float s = static_cast<float>(j);
+            const auto s = static_cast<float>(j);
             // Patchy: a slow wave along the edge decides where the bloom has taken hold.
             const float patch = 0.5F + 0.5F * std::sin(s * 0.23F + key * 3.1F);
             if (hashNoise(key * 13.7F + s * 1.37F) > density * patch)
@@ -694,10 +696,12 @@ void drawRustbloomBackground(const Game& game)
         const Color fragColor =
             ColorLerp(voidColor, ColorLerp(Palette::StructMid, Palette::RustbloomHaze, 0.3F),
                       fragmentStrength);
-        for (float y = fragStartY; y < fragArea.y + halfH; y += fragmentCellSize)
+        for (int32_t iy = 0; fragStartY + static_cast<float>(iy) * fragmentCellSize < fragArea.y + halfH; iy++)
         {
-            for (float x = fragStartX; x < fragArea.x + halfW; x += fragmentCellSize)
+            const float y = fragStartY + static_cast<float>(iy) * fragmentCellSize;
+            for (int32_t ix = 0; fragStartX + static_cast<float>(ix) * fragmentCellSize < fragArea.x + halfW; ix++)
             {
+                const float x = fragStartX + static_cast<float>(ix) * fragmentCellSize;
                 const float presence = hashNoise(x * 0.011F + y * 0.023F + 50.0F);
                 if (presence > fragmentChance)
                 {
@@ -724,10 +728,12 @@ void drawRustbloomBackground(const Game& game)
         constexpr float moteOrbit = 26.0F;
         const float moteStartX = std::floor((fragArea.x - halfW) / moteCellSize) * moteCellSize;
         const float moteStartY = std::floor((fragArea.y - halfH) / moteCellSize) * moteCellSize;
-        for (float y = moteStartY; y < fragArea.y + halfH; y += moteCellSize)
+        for (int32_t iy = 0; moteStartY + static_cast<float>(iy) * moteCellSize < fragArea.y + halfH; iy++)
         {
-            for (float x = moteStartX; x < fragArea.x + halfW; x += moteCellSize)
+            const float y = moteStartY + static_cast<float>(iy) * moteCellSize;
+            for (int32_t ix = 0; moteStartX + static_cast<float>(ix) * moteCellSize < fragArea.x + halfW; ix++)
             {
+                const float x = moteStartX + static_cast<float>(ix) * moteCellSize;
                 const float m = hashNoise(x * 0.019F + y * 0.041F + 131.0F);
                 if (m > moteChance)
                 {
@@ -767,10 +773,12 @@ void drawRustbloomBackground(const Game& game)
         return it == game.run.podJiggle.end() ? 0.0F : it->second;
     };
 
-    for (float y = startY; y < center.y + halfH; y += cellSize)
+    for (int32_t iy = 0; startY + static_cast<float>(iy) * cellSize < center.y + halfH; iy++)
     {
-        for (float x = startX; x < center.x + halfW; x += cellSize)
+        const float y = startY + static_cast<float>(iy) * cellSize;
+        for (int32_t ix = 0; startX + static_cast<float>(ix) * cellSize < center.x + halfW; ix++)
         {
+            const float x = startX + static_cast<float>(ix) * cellSize;
             if (podPresence(x, y) > podChance)
             {
                 continue;
@@ -803,13 +811,16 @@ void drawRustbloomBackground(const Game& game)
                 for (int32_t i = 1; i <= steps; i++)
                 {
                     const float s = static_cast<float>(i) / steps;
-                    const float bend = wave * std::sin(s * PI) * std::sin(t * 14.0F + s * 7.0F + x * 0.01F);
+                    const float bend = wave * std::sin(s * std::numbers::pi_v<float>) *
+                                       std::sin(t * 14.0F + s * 7.0F + x * 0.01F);
                     Vector2 p = Vector2Add(Vector2Add(podCenter, Vector2Scale(dir, s)), Vector2Scale(side, bend));
                     if (isPulled) // hooked or springing back: bent toward its offset, most at the hook
                     {
                         const float at = pulled->second.at;
                         const float k = s < at ? s / at : (1.0F - s) / (1.0F - at);
-                        p = Vector2Add(p, Vector2Scale(pulled->second.offset, std::sin(k * PI / 2)));
+                        p = Vector2Add(p,
+                                       Vector2Scale(pulled->second.offset,
+                                                    std::sin(k * std::numbers::pi_v<float> / 2)));
                     }
                     DrawLineEx(prev, p, 2.5F, color);
                     prev = p;
@@ -835,7 +846,7 @@ void drawRustbloomBackground(const Game& game)
                 constexpr int32_t rim = 20;
                 const auto rimPoint = [&](int32_t i)
                 {
-                    const float a = static_cast<float>(i) / rim * 2.0F * PI;
+                    const float a = static_cast<float>(i) / rim * 2.0F * std::numbers::pi_v<float>;
                     const float r = podRadius * (1.0F + energy * (0.28F * std::sin(3.0F * a + t * 15.0F) +
                                                                   0.12F * std::sin(5.0F * a - t * 11.0F)));
                     return Vector2Add(podCenter, Vector2{.x = std::cos(a) * r, .y = std::sin(a) * r});
@@ -1001,7 +1012,8 @@ void drawRustPatches(const Game& game)
         std::array<Vector2, sides> rim{};
         for (int32_t i = 0; i < sides; i++)
         {
-            const float a = static_cast<float>(i) / sides * 2.0F * PI + patch.seed;
+            const float a =
+                static_cast<float>(i) / sides * 2.0F * std::numbers::pi_v<float> + patch.seed;
             const float reach = 0.78F + 0.22F * hashNoise(patch.seed + static_cast<float>(i)) +
                                 0.04F * std::sin(t * 0.8F + static_cast<float>(i) * 1.7F);
             rim.at(static_cast<size_t>(i)) =
@@ -1030,7 +1042,7 @@ void drawRustPatches(const Game& game)
         for (int32_t i = 0; i < 5; i++)
         {
             const float s = patch.seed + 40.0F + static_cast<float>(i) * 3.1F;
-            const float a = hashNoise(s) * 2.0F * PI;
+            const float a = hashNoise(s) * 2.0F * std::numbers::pi_v<float>;
             const float d = hashNoise(s + 1.0F) * patch.radius * 0.6F;
             const Vector2 p =
                 Vector2Add(patch.position, Vector2{.x = std::cos(a) * d, .y = std::sin(a) * d});
@@ -1340,7 +1352,7 @@ void drawInfallSprite(InfallKind kind, float seed, Vector2 center, float size)
         std::array<Vector2, 3> pods{};
         for (size_t i = 0; i < pods.size(); i++)
         {
-            const float a = h(3.0F + static_cast<float>(i)) * 2.0F * PI;
+            const float a = h(3.0F + static_cast<float>(i)) * 2.0F * std::numbers::pi_v<float>;
             pods.at(i) = Vector2Add(center, Vector2{.x = std::cos(a) * size * 0.26F, .y = std::sin(a) * size * 0.26F}); // ~140 apart, as in Rustbloom
         }
         DrawLineEx(pods.at(0), pods.at(1), 3.0F, tone(Palette::RustbloomHaze, 0.5F));
@@ -1362,7 +1374,7 @@ void drawInfallSprite(InfallKind kind, float seed, Vector2 center, float size)
         for (int32_t i = 0; i < count; i++)
         {
             const auto k = static_cast<float>(i);
-            const float a = h(11.0F + k) * 2.0F * PI;
+            const float a = h(11.0F + k) * 2.0F * std::numbers::pi_v<float>;
             const float d = size * 0.22F * std::sqrt(h(21.0F + k));
             const Vector2 c = Vector2Add(center, Vector2{.x = std::cos(a) * d, .y = std::sin(a) * d});
             const float r = size * (0.12F + 0.07F * h(31.0F + k));

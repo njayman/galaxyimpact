@@ -32,11 +32,13 @@ auto generateBoundaryClouds() -> std::vector<GasCloud>
     for (int32_t layer = 0; layer < layerCount; layer++)
     {
         const float ringRadius = GameConstants::wallInner + static_cast<float>(layer) * layerGap;
-        const auto count = static_cast<int32_t>(2.0F * PI * ringRadius / ballSpacing);
+        const auto count =
+            static_cast<int32_t>(2.0F * std::numbers::pi_v<float> * ringRadius / ballSpacing);
         for (int32_t i = 0; i < count; i++)
         {
-            const float angle = (static_cast<float>(i) + static_cast<float>(GetRandomValue(-30, 30)) / 100.0F) *
-                                2.0F * PI / static_cast<float>(count);
+            const float angle =
+                (static_cast<float>(i) + static_cast<float>(GetRandomValue(-30, 30)) / 100.0F) *
+                2.0F * std::numbers::pi_v<float> / static_cast<float>(count);
             const float dist = ringRadius + static_cast<float>(GetRandomValue(-60, 60));
             clouds.push_back(GasCloud{
                 .position = Vector2{.x = std::cos(angle) * dist, .y = std::sin(angle) * dist},

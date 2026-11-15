@@ -38,7 +38,7 @@ constexpr auto biomeName(Biome biome) -> std::string_view
 constexpr auto currentBiome(int waveNumber) -> Biome
 {
     const int quarter = ((waveNumber - 1) / biomeQuarterLength) % 4;
-    return static_cast<Biome>(quarter);
+    return static_cast<Biome>(std::max(quarter, 0));
 }
 
 // One silhouette per way of fighting (see draw_enemy_shapes.cpp).
@@ -77,38 +77,38 @@ const float eliteChance = 0.06;
 class Enemy
 {
   public:
-    int kind;
-    Vector2 position;
-    Vector2 velocity;
-    int health;
-    bool active;
-    float stateTimer;
-    bool charging;
-    bool telegraphing;
-    bool phased;
-    float orbitAngle;
-    float orbitDist;
+    int kind{};
+    Vector2 position{};
+    Vector2 velocity{};
+    int health{};
+    bool active{};
+    float stateTimer{};
+    bool charging{};
+    bool telegraphing{};
+    bool phased{};
+    float orbitAngle{};
+    float orbitDist{};
 
     Vector2 orbitCenterCurrent{};
-    bool isElite;
-    bool hitByDash;
-    float hitFlashTimer;
+    bool isElite{};
+    bool hitByDash{};
+    float hitFlashTimer{};
     int32_t sniperPhase = 0; // 0 idle, 1 targeting tell, 2 live line shot
     float sniperTimer = 0;
     Vector2 sniperLineStart{};
     Vector2 sniperLineEnd{};
     Vector2 sniperEventPlayerStart{};
     bool sniperLineHitPlayer = false;
-    bool orbitContact;
-    float orbitDamageAccum;
-    bool beamContact;
-    float beamDamageAccum;
-    bool droneContact;
-    float droneDamageAccum;
-    bool debuffStatic;
-    bool debuffFreeze;
-    float burnDps;
-    float burnDamageAccum;
+    bool orbitContact{};
+    float orbitDamageAccum{};
+    bool beamContact{};
+    float beamDamageAccum{};
+    bool droneContact{};
+    float droneDamageAccum{};
+    bool debuffStatic{};
+    bool debuffFreeze{};
+    float burnDps{};
+    float burnDamageAccum{};
 
     float organicSeed = 0;
 
@@ -148,16 +148,16 @@ constexpr float auraRadius = 220;
 class EliteHazard
 {
   public:
-    Vector2 position;
-    float angle;
-    EliteHazardRole role;
-    int health;
-    int maxHealth;
-    bool active;
-    bool orbitContact;
-    float orbitDamageAccum;
-    bool beamContact;
-    float beamDamageAccum;
+    Vector2 position{};
+    float angle{};
+    EliteHazardRole role{};
+    int health{};
+    int maxHealth{};
+    bool active{};
+    bool orbitContact{};
+    float orbitDamageAccum{};
+    bool beamContact{};
+    float beamDamageAccum{};
     bool hitByDash = false;
 };
 

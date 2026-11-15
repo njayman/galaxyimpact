@@ -249,8 +249,6 @@ void updateRingCrush(Game& game, Boss& core)
     }
 }
 
-auto isRushPlateOf(const Boss& plate, const Boss& core) -> bool;
-
 auto beltbreakerBare(const Game& game, const Boss& core) -> bool
 {
     return core.isBeltbreaker && core.health > 0 &&
@@ -460,7 +458,7 @@ void beginBeltbreakerPlateRush(Game& game, Boss& core)
         {
             continue;
         }
-        const float angleDeg = static_cast<float>(GetRandomValue(0, 359));
+        const auto angleDeg = static_cast<float>(GetRandomValue(0, 359));
         const Vector2 dir{.x = std::cos(angleDeg * DEG2RAD), .y = std::sin(angleDeg * DEG2RAD)};
         plate.plateAttached = false;
         plate.plateReturning = false;
@@ -508,7 +506,7 @@ void endBeltbreakerPlateRush(Game& game, Boss& core, bool clean)
 void launchBeltbreakerRushAttack(Game& game, Boss& core, Boss& plate)
 {
     const float offDist = beltbreakerRushOffscreenDist(game);
-    const float turn = static_cast<float>(
+    const auto turn = static_cast<float>(
         GetRandomValue(static_cast<int32_t>(UpdateConstants::beltbreakerRushMinAngleChange),
                        360 - static_cast<int32_t>(UpdateConstants::beltbreakerRushMinAngleChange)));
     core.plateRushLastAngle = std::fmod(core.plateRushLastAngle + turn, 360.0F);

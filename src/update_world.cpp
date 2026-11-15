@@ -678,8 +678,8 @@ void updateWaveSpawner(Game& game, float deltaTime)
             const float punctumIntervalMult = inPunctum ? punctumSpawnIntervalMult : 1.0F;
             game.run.enemySpawnTimer = interval * spawnRateMult * punctumIntervalMult;
 
-            const auto rawSpawnCount =
-                static_cast<int>(static_cast<float>(1 + game.run.waveNumber / 4) * swarmSpawnCountMult);
+            const int32_t waveSteps = 1 + game.run.waveNumber / 4;
+            const auto rawSpawnCount = static_cast<int>(static_cast<float>(waveSteps) * swarmSpawnCountMult);
             const int spawnCount =
                 inPunctum ? std::max(1, rawSpawnCount / punctumSpawnCountDivisor) : rawSpawnCount;
             for (int i = 0; i < spawnCount &&

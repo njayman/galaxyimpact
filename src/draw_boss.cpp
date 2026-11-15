@@ -143,7 +143,8 @@ static void drawWormParasite(float size, float out, float seed)
     for (int32_t i = 0; i < 6; i++)
     {
         const auto fi = static_cast<float>(i);
-        const float a = seed + fi * 2.0F * PI / 6.0F + 0.3F * std::sin(t * 1.3F + fi);
+        const float a =
+            seed + fi * 2.0F * std::numbers::pi_v<float> / 6.0F + 0.3F * std::sin(t * 1.3F + fi);
         Vector2 p{.x = std::cos(a) * size * 0.6F, .y = std::sin(a) * size * 0.6F};
         const float len = size * (0.5F + 1.5F * out) * (0.8F + 0.2F * std::sin(t * 2.0F + fi * 1.7F));
         for (int32_t k = 0; k < 8; k++)
@@ -160,7 +161,7 @@ static void drawWormParasite(float size, float out, float seed)
     for (int32_t i = 0; i < 7; i++)
     {
         const auto fi = static_cast<float>(i);
-        const float a = seed * 1.7F + fi * 2.0F * PI / 7.0F;
+        const float a = seed * 1.7F + fi * 2.0F * std::numbers::pi_v<float> / 7.0F;
         const float r = size * (0.42F + 0.1F * std::sin(t * 2.2F + fi * 1.9F));
         DrawCircleV(Vector2{.x = std::cos(a) * size * 0.62F, .y = std::sin(a) * size * 0.62F}, r,
                     (i % 2) != 0 ? wormSlime : wormSlimeDark);
@@ -323,7 +324,7 @@ void drawBoss(const Game& game, const Boss& boss)
         const float flash = std::clamp(boss.hitFlashTimer / UpdateConstants::hitFlashDuration, 0.0F, 1.0F);
         drawWreckwormHeadShape(bossCenter, boss.size.x / 2, static_cast<float>(boss.instanceId),
                                ColorLerp(ufoColor, WHITE, flash), facing,
-                               spitting || boss.wreckwormPunishTimer > 0 ? 1.0F : coiling ? 0.55F : idleMouth);
+                               [&]() -> float { if (spitting || boss.wreckwormPunishTimer > 0) { return 1.0F; } if (coiling) { return 0.55F; } return idleMouth; }());
     }
     else if (boss.isWreckwormSegment && boss.krakenSnakeVariant)
     {
@@ -555,14 +556,14 @@ void drawBoss(const Game& game, const Boss& boss)
     if (boss.state == BossState::SHOOTING &&
         (boss.attack == BossAttack::ChargeDash || boss.attack == BossAttack::DashRush ||
          boss.attack == BossAttack::BurrowCharge) &&
-        Vector2LengthSqr(boss.chargeVelocity) > 0.01F && !boss.isWreckwormHead && !boss.isWreckwormSegment &&
-        !boss.isKraken && !boss.isBanished &&
-        !(boss.isSlagmaw && boss.attack == BossAttack::ChargeDash)) // a leaping mole trails nothing
+        Vector2LengthSqr(boss.chargeVelocity) > 0.01F && !boss.isWreckwormHead &&
+        !boss.isWreckwormSegment && !boss.isKraken && !boss.isBanished &&
+        (!boss.isSlagmaw || boss.attack != BossAttack::ChargeDash)) // a leaping mole trails nothing
     {
         const Vector2 back = Vector2Normalize(Vector2Negate(boss.chargeVelocity));
         for (int32_t k = 1; k <= 4; k++)
         {
-            const float f = static_cast<float>(k);
+            const auto f = static_cast<float>(k);
             const Vector2 ghost = Vector2Add(bossCenter, Vector2Scale(back, f * boss.size.x * 0.45F));
             if (boss.isSlagmaw)
             {
@@ -820,7 +821,7 @@ void drawSlagGob(Vector2 position, float radius, Vector2 velocity)
     std::array<Vector2, sides> verts{};
     for (int32_t i = 0; i < sides; i++)
     {
-        const float a = spin + static_cast<float>(i) * 2.0F * PI / sides;
+        const float a = spin + static_cast<float>(i) * 2.0F * std::numbers::pi_v<float> / sides;
         const float r = radius * (0.85F + 0.25F * hashNoise(static_cast<float>(i) * 3.7F + 1.3F));
         verts.at(static_cast<size_t>(i)) = Vector2Add(position, Vector2{.x = std::cos(a) * r, .y = std::sin(a) * r});
     }
@@ -850,7 +851,8 @@ void drawMagmaPools(const Game& game)
         {
             const auto kf = static_cast<float>(k);
             const float phase = std::fmod(t * 1.2F + hashNoise(pool.position.x * 0.01F + kf), 1.0F);
-            const float a = hashNoise(pool.position.y * 0.01F + kf * 3.0F) * 2.0F * PI;
+            const float a =
+                hashNoise(pool.position.y * 0.01F + kf * 3.0F) * 2.0F * std::numbers::pi_v<float>;
             const Vector2 bubble = Vector2Add(pool.position, Vector2{.x = std::cos(a) * r * 0.5F, .y = std::sin(a) * r * 0.5F});
             DrawCircleLines(static_cast<int32_t>(bubble.x), static_cast<int32_t>(bubble.y), r * 0.08F * (0.5F + phase),
                             Fade(gold, (1.0F - phase) * 0.8F * f));
@@ -1002,7 +1004,10 @@ void drawWreckwormHeadShape(Vector2 center, float radius, float seed, Color colo
     const auto piece = [&](Vector2 dir, Vector2 a, Vector2 b, Vector2 d, Color col)
     {
         const Vector2 o = Vector2Scale(dir, r * 0.62F * open);
-        const Vector2 pc = Vector2Add(c, o), pa = Vector2Add(a, o), pb = Vector2Add(b, o), pd = Vector2Add(d, o);
+        const Vector2 pc = Vector2Add(c, o);
+        const Vector2 pa = Vector2Add(a, o);
+        const Vector2 pb = Vector2Add(b, o);
+        const Vector2 pd = Vector2Add(d, o);
         DrawLineEx(c, pc, r * 0.07F * (1.0F - 0.6F * open), wormSlimeDark);
         flatTriangle(pc, pa, pb, col);
         flatTriangle(pc, pb, pd, col);
@@ -1184,7 +1189,7 @@ void drawBendyTentacle(Vector2 anchor, Vector2 tip, Vector2 bodyCenter, float bo
                           Vector2Scale(tip, tt * tt));
     };
 
-    const float t = static_cast<float>(GetTime());
+    const auto t = static_cast<float>(GetTime());
     const Vector2 overallDir = Vector2Scale(Vector2Subtract(tip, anchor), 1.0F / length);
     const Vector2 perp{.x = -overallDir.y, .y = overallDir.x};
     constexpr int32_t segments = 12;
@@ -1206,7 +1211,7 @@ void drawKrakenStaggeredTentacle(const Boss& boss, int32_t slot)
     const Vector2 bodyCenter{.x = boss.position.x + boss.size.x / 2,
                              .y = boss.position.y + boss.size.y / 2};
     const Vector2 gate = krakenPodPosition(boss, slot % 4);
-    const Vector2 tip = boss.tentacleStaggerPos[static_cast<size_t>(slot)];
+    const Vector2 tip = boss.tentacleStaggerPos.at(static_cast<size_t>(slot));
     const auto t = static_cast<float>(GetTime());
     const float flash = 0.5F + 0.5F * std::sin(t * 10.0F);
     const Color hangColor = ColorLerp(Palette::Crit, WHITE, flash * 0.4F);
@@ -1274,7 +1279,7 @@ void drawKrakenSnatch(const Boss& boss)
     }
     for (int32_t k = 0; k < 2; k++)
     {
-        const auto& rope = boss.ropePos.at(static_cast<size_t>(4 + k));
+        const auto& rope = boss.ropePos.at(static_cast<size_t>(k) + 4);
         drawKrakenRope(rope, 6.0F, 3.0F, 1.0F);
         const float glow = boss.snatchPhase == 1 ? 0.5F + 0.5F * std::sin(t * 24.0F) : 0.6F;
         DrawCircleV(rope.back(), 10.0F, ColorLerp(Palette::PunctumHaze, Palette::Void, 0.55F)); // the club
@@ -1301,8 +1306,9 @@ void drawKrakenTentacle(const Boss& boss, int32_t slot)
             for (int32_t spear = 0; spear < count; spear++)
             {
                 const Vector2 dir = krakenRakeDir(boss, slot, spear);
-                for (float d = 30.0F; d < krakenTentacleReach; d += 36.0F)
+                for (int32_t di = 0; 30.0F + static_cast<float>(di) * 36.0F < krakenTentacleReach; di++)
                 {
+                    const float d = 30.0F + static_cast<float>(di) * 36.0F;
                     DrawLineEx(Vector2Add(mouth, Vector2Scale(dir, d)), Vector2Add(mouth, Vector2Scale(dir, d + 18.0F)), 1.5F,
                                Fade(Palette::ElementFreeze, 0.15F + 0.5F * progress));
                 }
@@ -1398,7 +1404,7 @@ void drawKrakenGrabbedEnemy(Vector2 pos, int32_t kindIndex, float scale, float f
 
 void drawKrakenLimb(const Boss& boss, int32_t slot)
 {
-    const int32_t pod = boss.limbPod[slot];
+    const int32_t pod = boss.limbPod.at(slot);
     if (pod < 0)
     {
         return;
@@ -1407,7 +1413,7 @@ void drawKrakenLimb(const Boss& boss, int32_t slot)
     const Vector2 center{.x = boss.position.x + boss.size.x / 2,
                          .y = boss.position.y + boss.size.y / 2};
     const float bodyRadius = boss.size.x / 2;
-    const float seed = static_cast<float>(boss.instanceId);
+    const auto seed = static_cast<float>(boss.instanceId);
     const float podAngle = static_cast<float>(pod) * 90.0F * DEG2RAD + seed;
     const Vector2 podPos =
         Vector2Add(center, Vector2{.x = std::cos(podAngle) * boss.size.x / 2 * 0.78F,
@@ -1417,49 +1423,49 @@ void drawKrakenLimb(const Boss& boss, int32_t slot)
     float openProgress = 1.0F;
     bool grabbing = false;
     float grabbedEnemyScale = 0.0F;
-    if (boss.limbPhase[slot] == 1)
+    if (boss.limbPhase.at(slot) == 1)
     {
-        openProgress = std::clamp(1.0F - boss.limbTimer[slot] / krakenLimbOpenDuration, 0.0F, 1.0F);
-        tip = Vector2Lerp(podPos, boss.limbGrabTarget[slot], openProgress);
+        openProgress = std::clamp(1.0F - boss.limbTimer.at(slot) / krakenLimbOpenDuration, 0.0F, 1.0F);
+        tip = Vector2Lerp(podPos, boss.limbGrabTarget.at(slot), openProgress);
     }
-    else if (boss.limbPhase[slot] == 2)
+    else if (boss.limbPhase.at(slot) == 2)
     {
-        if (boss.limbThrowPhase[slot] == 1)
+        if (boss.limbThrowPhase.at(slot) == 1)
         {
             grabbing = true;
             grabbedEnemyScale = 1.0F;
             const float progress =
                 1.0F -
-                std::clamp(boss.limbThrowTimer[slot] / krakenLimbLeanBackDuration, 0.0F, 1.0F);
+                std::clamp(boss.limbThrowTimer.at(slot) / krakenLimbLeanBackDuration, 0.0F, 1.0F);
             const Vector2 leanBackTarget = Vector2Add(
-                podPos, Vector2Scale(Vector2Subtract(podPos, boss.limbGrabTarget[slot]),
+                podPos, Vector2Scale(Vector2Subtract(podPos, boss.limbGrabTarget.at(slot)),
                                      krakenLimbNearReach /
                                          std::max(1.0F, Vector2Distance(
-                                                            podPos, boss.limbGrabTarget[slot]))));
-            tip = Vector2Lerp(boss.limbPortalPos[slot], leanBackTarget, progress);
+                                                            podPos, boss.limbGrabTarget.at(slot)))));
+            tip = Vector2Lerp(boss.limbPortalPos.at(slot), leanBackTarget, progress);
         }
-        else if (boss.limbThrowPhase[slot] == 2)
+        else if (boss.limbThrowPhase.at(slot) == 2)
         {
             grabbing = true;
             grabbedEnemyScale = 1.0F;
             const float progress =
-                1.0F - std::clamp(boss.limbThrowTimer[slot] / krakenLimbThrowDuration, 0.0F, 1.0F);
+                1.0F - std::clamp(boss.limbThrowTimer.at(slot) / krakenLimbThrowDuration, 0.0F, 1.0F);
             const Vector2 leanBackTarget = Vector2Add(
-                podPos, Vector2Scale(Vector2Subtract(podPos, boss.limbGrabTarget[slot]),
+                podPos, Vector2Scale(Vector2Subtract(podPos, boss.limbGrabTarget.at(slot)),
                                      krakenLimbNearReach /
                                          std::max(1.0F, Vector2Distance(
-                                                            podPos, boss.limbGrabTarget[slot]))));
-            tip = Vector2Lerp(leanBackTarget, boss.limbGrabTarget[slot], progress);
+                                                            podPos, boss.limbGrabTarget.at(slot)))));
+            tip = Vector2Lerp(leanBackTarget, boss.limbGrabTarget.at(slot), progress);
         }
-        else if (boss.limbGrabAnimTimer[slot] > 0)
+        else if (boss.limbGrabAnimTimer.at(slot) > 0)
         {
             grabbing = true;
-            tip = boss.limbPortalPos[slot];
-            const float elapsed = krakenLimbGrabAnimDuration - boss.limbGrabAnimTimer[slot];
+            tip = boss.limbPortalPos.at(slot);
+            const float elapsed = krakenLimbGrabAnimDuration - boss.limbGrabAnimTimer.at(slot);
             if (elapsed < krakenLimbGrabAnimDuration / 3.0F)
             {
                 tip = Vector2Lerp(
-                    podPos, boss.limbPortalPos[slot],
+                    podPos, boss.limbPortalPos.at(slot),
                     std::clamp(elapsed / (krakenLimbGrabAnimDuration / 3.0F), 0.0F, 1.0F));
             }
             else if (elapsed < krakenLimbGrabAnimDuration * 2.0F / 3.0F)
@@ -1476,13 +1482,13 @@ void drawKrakenLimb(const Boss& boss, int32_t slot)
         }
         else
         {
-            tip = boss.limbGrabTarget[slot];
+            tip = boss.limbGrabTarget.at(slot);
         }
     }
-    else if (boss.limbPhase[slot] == 3)
+    else if (boss.limbPhase.at(slot) == 3)
     {
-        openProgress = std::clamp(boss.limbTimer[slot] / krakenLimbRetreatDuration, 0.0F, 1.0F);
-        tip = Vector2Lerp(podPos, boss.limbGrabTarget[slot], openProgress);
+        openProgress = std::clamp(boss.limbTimer.at(slot) / krakenLimbRetreatDuration, 0.0F, 1.0F);
+        tip = Vector2Lerp(podPos, boss.limbGrabTarget.at(slot), openProgress);
     }
     else
     {
@@ -1501,7 +1507,7 @@ void drawKrakenLimb(const Boss& boss, int32_t slot)
         return;
     }
 
-    if (grabbing && boss.limbThrowPhase[slot] == 0)
+    if (grabbing && boss.limbThrowPhase.at(slot) == 0)
     {
         const float grabPulse = 0.7F + 0.3F * std::sin(static_cast<float>(GetTime()) * 10.0F);
         drawTearPortal(tip, 16.0F * krakenLimbSizeMult * grabPulse, 1.0F);
@@ -1513,7 +1519,7 @@ void drawKrakenLimb(const Boss& boss, int32_t slot)
     if (grabbedEnemyScale > 0.0F)
     {
         const Vector2 overallDir = Vector2Scale(Vector2Subtract(tip, podPos), 1.0F / length);
-        drawKrakenGrabbedEnemy(tip, boss.limbGrabbedKind[slot], grabbedEnemyScale,
+        drawKrakenGrabbedEnemy(tip, boss.limbGrabbedKind.at(slot), grabbedEnemyScale,
                                std::atan2(overallDir.y, overallDir.x));
     }
 }
@@ -1679,7 +1685,8 @@ static auto banishedReachArm(Vector2 a, Vector2 b, float bend, float wave, float
     for (size_t i = 0; i < pts.size(); i++)
     {
         const float f = static_cast<float>(i) / static_cast<float>(pts.size() - 1);
-        const float off = bend * std::sin(PI * f) + wave * std::sin(t * 7.0F - f * 9.0F + seed) * 4.0F * f * (1.0F - f);
+        const float off = bend * std::sin(std::numbers::pi_v<float> * f) +
+                          wave * std::sin(t * 7.0F - f * 9.0F + seed) * 4.0F * f * (1.0F - f);
         pts.at(i) = Vector2Add(Vector2Lerp(a, b, f), Vector2Scale(perp, off));
     }
     return pts;
@@ -1716,18 +1723,18 @@ static auto banishedArm(Vector2 a, Vector2 b, float bend, float wave, float seed
 static void drawBanishedAttack(const Boss& boss, int32_t slot, const BanishedArm* rest)
 {
     const auto idx = static_cast<size_t>(slot);
-    const int32_t phase = boss.banishedPhase[idx];
+    const int32_t phase = boss.banishedPhase.at(idx);
     const auto t = static_cast<float>(GetTime());
     const float seed = static_cast<float>(boss.instanceId) * 7.0F + static_cast<float>(slot) * 13.0F;
-    const bool big = boss.banishedAttackKind[idx] == 4;
-    const bool hurl = boss.banishedAttackKind[idx] == 3;
-    const bool grab = boss.banishedAttackKind[idx] == 2 || hurl || big; // the hurl holds its enemy in the same claw
-    const bool portalled = boss.banishedIsFar[idx];
+    const bool big = boss.banishedAttackKind.at(idx) == 4;
+    const bool hurl = boss.banishedAttackKind.at(idx) == 3;
+    const bool grab = boss.banishedAttackKind.at(idx) == 2 || hurl || big; // the hurl holds its enemy in the same claw
+    const bool portalled = boss.banishedIsFar.at(idx);
     const float scale = big ? 1.7F : 1.0F;
-    const Vector2 anchor = boss.banishedAnchor[idx];
-    const Vector2 tip = boss.banishedTip[idx];
-    const float timer = boss.banishedTimer[idx];
-    const float aim = boss.banishedAimAngle[idx];
+    const Vector2 anchor = boss.banishedAnchor.at(idx);
+    const Vector2 tip = boss.banishedTip.at(idx);
+    const float timer = boss.banishedTimer.at(idx);
+    const float aim = boss.banishedAimAngle.at(idx);
     const Vector2 aimDir{.x = std::cos(aim), .y = std::sin(aim)};
     // Draws the tentacle and its tip; `k` is how far it has left its resting pose (body attacks).
     const auto show = [&](const BanishedArm& shape, float k, float open, Color tipColor)
@@ -1775,7 +1782,7 @@ static void drawBanishedAttack(const Boss& boss, int32_t slot, const BanishedArm
             const Vector2 held = Vector2Add(anchor, Vector2Add(Vector2Scale(aimDir, (-50.0F - 50.0F * lock) * out),
                                                                 Vector2Scale(side, lean * 100.0F * out)));
             const Vector2 hand = show(banishedReachArm(anchor, held, lean * 45.0F * out, 4.0F, seed), wake, 0.5F, Palette::Crit);
-            drawBanishedThrowable(hand, boss.banishedHeldKind[idx], out * wake, aim * RAD2DEG, Vector2{});
+            drawBanishedThrowable(hand, boss.banishedHeldKind.at(idx), out * wake, aim * RAD2DEG, Vector2{});
             if (lock > 0)
             {
                 DrawLineEx(anchor, Vector2Add(anchor, Vector2Scale(aimDir, 420.0F)), 2.0F, Fade(Palette::Crit, 0.15F + 0.4F * lock));
@@ -1788,8 +1795,12 @@ static void drawBanishedAttack(const Boss& boss, int32_t slot, const BanishedArm
         {
             const float f = static_cast<float>(i) / static_cast<float>(pts.size() - 1);
             // an S along the aim; the grab also sways from side to side, the pierce holds still and trembles
-            const float off = grab ? 26.0F * std::sin(2.0F * PI * f) + 60.0F * (1.0F - lock) * std::sin(t * 3.0F + seed) * std::sin(PI * f)
-                                   : (48.0F + 14.0F * lock) * std::sin(2.0F * PI * f) + 3.0F * lock * std::sin(t * 55.0F);
+            const float off =
+                grab ? 26.0F * std::sin(2.0F * std::numbers::pi_v<float> * f) +
+                           60.0F * (1.0F - lock) * std::sin(t * 3.0F + seed) *
+                               std::sin(std::numbers::pi_v<float> * f)
+                     : (48.0F + 14.0F * lock) * std::sin(2.0F * std::numbers::pi_v<float> * f) +
+                           3.0F * lock * std::sin(t * 55.0F);
             pts.at(i) = Vector2Add(anchor, Vector2Add(Vector2Scale(aimDir, reach * f), Vector2Scale(side, off * out * scale)));
         }
         const Color hot = ColorLerp(Palette::Crit, WHITE, lock * (0.5F + 0.5F * std::sin(t * 40.0F)));
@@ -1797,7 +1808,7 @@ static void drawBanishedAttack(const Boss& boss, int32_t slot, const BanishedArm
         if (!grab && lock > 0)
         {
             // the line it will take
-            DrawLineEx(point, Vector2Add(anchor, Vector2Scale(aimDir, boss.banishedAimReach[idx])), 2.0F,
+            DrawLineEx(point, Vector2Add(anchor, Vector2Scale(aimDir, boss.banishedAimReach.at(idx))), 2.0F,
                        Fade(Palette::Crit, 0.2F + 0.5F * lock));
         }
         if (big)
@@ -1854,7 +1865,7 @@ static void drawBanishedAttack(const Boss& boss, int32_t slot, const BanishedArm
 void drawBanishedTentacle(const Boss& boss, int32_t slot)
 {
     const auto idx = static_cast<size_t>(slot);
-    if (!boss.banishedStaggered[idx] && boss.banishedPhase[idx] != 0)
+    if (!boss.banishedStaggered.at(idx) && boss.banishedPhase.at(idx) != 0)
     {
         drawBanishedAttack(boss, slot, nullptr);
     }
@@ -1868,8 +1879,8 @@ void drawBanishedRestingArms(Vector2 center, const Boss& boss)
     for (int32_t slot = 0; slot < Boss::banishedTentacleCount; slot++)
     {
         const auto idx = static_cast<size_t>(slot);
-        const float hit = std::clamp(boss.banishedTentacleHitFlash[idx] / UpdateConstants::hitFlashDuration, 0.0F, 1.0F);
-        const bool limp = boss.banishedStaggered[idx];
+        const float hit = std::clamp(boss.banishedTentacleHitFlash.at(idx) / UpdateConstants::hitFlashDuration, 0.0F, 1.0F);
+        const bool limp = boss.banishedStaggered.at(idx);
         drawBanishedStub(center, boss.size.x, instanceSeed, slot, (limp ? 0.5F : 1.0F) * boss.banishedReveal,
                          limp ? ColorLerp(ColorLerp(banishedBone, banishedVoid, 0.6F), WHITE, hit) : banishedTendril);
     }
@@ -2018,7 +2029,7 @@ static void drawBanishedRingEye(Vector2 center, const Boss& boss, Vector2 ship)
     plateRing(center, r * 0.66F, r * 0.72F, seal.plates + 1, t * -seal.spin * 1.6F, seal.gap, Fade(banishedBone, 0.32F * there));
     for (int32_t i = 0; i < Boss::banishedTentacleCount; i++)
     {
-        const bool live = !boss.banishedStaggered[static_cast<size_t>(i)];
+        const bool live = !boss.banishedStaggered.at(static_cast<size_t>(i));
         const float a = (t * banishedTickSpin + static_cast<float>(i) * 30.0F) * DEG2RAD;
         const Vector2 d{.x = std::cos(a), .y = std::sin(a)};
         DrawLineEx(Vector2Add(center, Vector2Scale(d, r * 1.07F)), Vector2Add(center, Vector2Scale(d, r * (live ? 1.2F : 1.12F))),
@@ -2056,7 +2067,7 @@ void drawBanishedShape(Vector2 center, const Boss& boss, Vector2 ship)
     uint32_t broken = 0;
     for (int32_t i = 0; i < Boss::banishedTentacleCount; i++)
     {
-        broken |= boss.banishedStaggered[static_cast<size_t>(i)] ? 1U << static_cast<uint32_t>(i) : 0U;
+        broken |= boss.banishedStaggered.at(static_cast<size_t>(i)) ? 1U << static_cast<uint32_t>(i) : 0U;
     }
     drawBanishedBody(center, boss.size.x, static_cast<float>(boss.instanceId), boss.banishedReveal, broken,
                      banishedEyeOpen(boss) ? 1.0F : 0.0F,
@@ -2113,15 +2124,18 @@ void drawBeam(Vector2 from, Vector2 to, float width, float life, Color color)
     DrawLineEx(from, to, w * 0.55F, hot);
     // plates racing down the core
     constexpr float spacing = 96.0F;
-    for (float d = std::fmod(t * 1700.0F, spacing); d < length; d += spacing)
+    const float plateStart = std::fmod(t * 1700.0F, spacing);
+    for (int32_t di = 0; plateStart + static_cast<float>(di) * spacing < length; di++)
     {
+        const float d = plateStart + static_cast<float>(di) * spacing;
         DrawPoly(Vector2Add(from, Vector2Scale(dir, d)), 4, w * 0.5F, heading, Fade(WHITE, 0.6F));
     }
     // teeth flicking off both edges
     const float frame = std::floor(t * 24.0F);
     int32_t n = 0;
-    for (float d = 30.0F; d < length; d += 58.0F, n++)
+    for (; 30.0F + static_cast<float>(n) * 58.0F < length; n++)
     {
+        const float d = 30.0F + static_cast<float>(n) * 58.0F;
         const float sign = (n % 2) == 0 ? 1.0F : -1.0F;
         const float tall = w * (0.4F + 1.1F * hashNoise(frame * 0.37F + static_cast<float>(n) * 1.9F));
         const Vector2 base = Vector2Add(Vector2Add(from, Vector2Scale(dir, d)), Vector2Scale(side, sign * w * 0.6F));
@@ -2180,8 +2194,10 @@ void drawBanishedEye(const Boss& boss, Vector2 lookAt)
         }
         else
         {
-            for (float d = std::fmod(t * 600.0F, 60.0F); d < 2400.0F; d += 60.0F)
+            const float gazeStart = std::fmod(t * 600.0F, 60.0F);
+            for (int32_t di = 0; gazeStart + static_cast<float>(di) * 60.0F < 2400.0F; di++)
             {
+                const float d = gazeStart + static_cast<float>(di) * 60.0F;
                 DrawLineEx(Vector2Add(pos, Vector2Scale(pupilDir, d)), Vector2Add(pos, Vector2Scale(pupilDir, d + 26.0F)), 2.0F,
                            Fade(Palette::Crit, 0.15F + 0.35F * gaze.track));
             }
@@ -2244,7 +2260,7 @@ void drawLavaChunk(Vector2 center, float radius, float seed, Vector2 velocity)
     std::array<Vector2, sides> verts{};
     for (int32_t i = 0; i < sides; i++)
     {
-        const float a = spin + static_cast<float>(i) * 2.0F * PI / sides;
+        const float a = spin + static_cast<float>(i) * 2.0F * std::numbers::pi_v<float> / sides;
         const float r = radius * (0.8F + 0.25F * hashNoise(seed * 7.0F + static_cast<float>(i)));
         verts.at(static_cast<size_t>(i)) = Vector2Add(center, Vector2{.x = std::cos(a) * r, .y = std::sin(a) * r});
     }
@@ -2258,7 +2274,7 @@ void drawLavaChunk(Vector2 center, float radius, float seed, Vector2 velocity)
     const Vector2 side{.x = -back.y, .y = back.x};
     for (int32_t i = 0; i < 4; i++)
     {
-        const float k = static_cast<float>(i);
+        const auto k = static_cast<float>(i);
         const float life = std::fmod(t * 1.3F + hashNoise(seed + k) * 4.0F, 1.0F);
         const Vector2 pos = Vector2Add(
             center, Vector2Add(Vector2Scale(back, radius * (1.0F + life * 1.6F)),
@@ -2323,7 +2339,7 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
     constexpr Color molten{.r = 255, .g = 128, .b = 40, .a = 255};
     const auto t = static_cast<float>(GetTime());
     const float radius = boss.size.x / 2;
-    const float seed = static_cast<float>(boss.instanceId);
+    const auto seed = static_cast<float>(boss.instanceId);
     const bool winding = boss.state == BossState::WINDING_UP;
     const bool shooting = boss.state == BossState::SHOOTING;
     const float windup = winding && boss.windupTotal > 0 ? std::clamp(1.0F - boss.stateTimer / boss.windupTotal, 0.0F, 1.0F) : 0.0F;
@@ -2349,8 +2365,9 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
         const Vector2 to = winding ? Vector2Add(boss.targetPosition, Vector2Scale(dir, tunnelOvershoot))
                                    : Vector2Add(center, Vector2Scale(boss.chargeVelocity, std::max(0.0F, boss.stateTimer)));
         const float a = winding ? 0.15F + 0.45F * windup : 0.4F;
-        for (float d = 0; d < Vector2Distance(from, to); d += 34.0F) // a dashed crack line
+        for (int32_t di = 0; static_cast<float>(di) * 34.0F < Vector2Distance(from, to); di++) // a dashed crack line
         {
+            const float d = static_cast<float>(di) * 34.0F;
             const Vector2 p = Vector2Add(from, Vector2Scale(dir, d));
             DrawLineEx(p, Vector2Add(p, Vector2Scale(dir, 18.0F)), 3.0F, Fade(gold, a));
         }
@@ -2366,7 +2383,7 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
         for (int32_t k = 0; k < 7; k++)
         {
             const auto kf = static_cast<float>(k);
-            float a = hashNoise(seed + kf * 2.9F) * 2.0F * PI + t * 0.3F;
+            float a = hashNoise(seed + kf * 2.9F) * 2.0F * std::numbers::pi_v<float> + t * 0.3F;
             Vector2 p = Vector2Add(center, Vector2{.x = std::cos(a) * radius * 0.2F, .y = std::sin(a) * radius * 0.2F});
             for (int32_t seg = 0; seg < 3; seg++)
             {
@@ -2380,7 +2397,7 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
         {
             const auto kf = static_cast<float>(k);
             const float phase = std::fmod(t * 1.3F + hashNoise(kf * 5.1F), 1.0F);
-            const float a = hashNoise(seed + kf * 7.3F) * 2.0F * PI;
+            const float a = hashNoise(seed + kf * 7.3F) * 2.0F * std::numbers::pi_v<float>;
             const Vector2 p = Vector2Add(center, Vector2Scale(Vector2{.x = std::cos(a), .y = std::sin(a)}, radius * (0.6F + 0.6F * phase)));
             DrawCircleV(p, radius * 0.06F * (1.0F - phase), Fade(basaltLit, 0.6F * (1.0F - phase) * u));
         }
@@ -2396,7 +2413,8 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
         const Color rock = ColorLerp(Palette::SolarForgeAccent, Palette::Void, 0.45F);
         for (int32_t k = 0; k < 10; k++)
         {
-            const float a = static_cast<float>(k) / 10.0F * 2.0F * PI + hashNoise(seed + static_cast<float>(k));
+            const float a = static_cast<float>(k) / 10.0F * 2.0F * std::numbers::pi_v<float> +
+                            hashNoise(seed + static_cast<float>(k));
             const float far = radius * (0.6F + 1.3F * u * (2.0F - u));
             DrawCircleV(Vector2Add(where, Vector2{.x = std::cos(a) * far, .y = std::sin(a) * far}), 22.0F * (1.0F - u),
                         (k % 3) == 0 ? molten : rock);
@@ -2458,9 +2476,10 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
     {
         // The leap: up and over, larger at the top, its shadow shrinking on the ground below.
         const float p = std::clamp(1.0F - boss.stateTimer / boss.moleLeapTotal, 0.0F, 1.0F);
-        const float h = std::sin(PI * p);
+        const float h = std::sin(std::numbers::pi_v<float> * p);
         scale *= 1.0F + 0.35F * h;
-        reach = std::cos(2.0F * PI * p); // claws reach, sweep back, reach again to land
+        reach = std::cos(2.0F * std::numbers::pi_v<float> *
+                         p); // claws reach, sweep back, reach again to land
         DrawCircleV(center, R * 0.9F * (1.0F - 0.35F * h), Fade(BLACK, 0.5F * seen));
         at.y -= R * 0.9F * h;
         splash(boss.moleLeapFrom, p * boss.moleLeapTotal);
@@ -2491,8 +2510,11 @@ void drawLavaMole(const Game& game, const Boss& boss, Vector2 center, float flas
     }
     DrawCircleV(Vector2{.x = -R * 0.05F, .y = 0}, R * 0.95F, paint(hide, 1.0F)); // body
     { // shovel rump, wide hot edge at the rear
-        const Vector2 a{.x = 0, .y = -R * 0.8F}, b{.x = 0, .y = R * 0.8F};
-        const Vector2 c{.x = -R * 0.9F, .y = R * 1.3F}, d{.x = -R * 0.9F, .y = -R * 1.3F}, n{.x = -R * 1.17F, .y = 0};
+        const Vector2 a{.x = 0, .y = -R * 0.8F};
+        const Vector2 b{.x = 0, .y = R * 0.8F};
+        const Vector2 c{.x = -R * 0.9F, .y = R * 1.3F};
+        const Vector2 d{.x = -R * 0.9F, .y = -R * 1.3F};
+        const Vector2 n{.x = -R * 1.17F, .y = 0};
         flatTriangle(a, b, c, paint(hideLite, 1.0F));
         flatTriangle(a, c, d, paint(hideLite, 1.0F));
         flatTriangle(d, c, n, paint(hideLite, 1.0F));

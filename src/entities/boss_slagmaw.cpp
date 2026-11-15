@@ -216,7 +216,8 @@ void throwSlagRing(Game& game, Vector2 at, int32_t count)
     const float start = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
     for (int32_t i = 0; i < count; i++)
     {
-        const float a = start + static_cast<float>(i) * 2.0F * PI / static_cast<float>(count);
+        const float a = start + static_cast<float>(i) * 2.0F * std::numbers::pi_v<float> /
+                                    static_cast<float>(count);
         const Vector2 dir{.x = std::cos(a), .y = std::sin(a)};
         game.run.bossProjectiles.push_back(BossProjectile{.position = Vector2Add(at, Vector2Scale(dir, 40.0F)),
                                                           .velocity = Vector2Scale(dir, barrageProjSpeed * 0.7F),
@@ -355,7 +356,8 @@ void shedPetals(Game& game, Boss& boss, Vector2 bossCenter)
     const float start = std::atan2(boss.slagmawFacing.y, boss.slagmawFacing.x);
     for (int32_t i = 0; i < count; i++)
     {
-        const float a = start + static_cast<float>(i) * 2.0F * PI / static_cast<float>(count);
+        const float a = start + static_cast<float>(i) * 2.0F * std::numbers::pi_v<float> /
+                                    static_cast<float>(count);
         const Vector2 dir{.x = std::cos(a), .y = std::sin(a)};
         game.run.bossProjectiles.push_back(
             BossProjectile{.life = petalLife,

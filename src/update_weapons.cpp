@@ -338,7 +338,7 @@ auto estimatePlayerDps(const Game& game) -> float
         {
             continue;
         }
-        const float dmg = static_cast<float>(weaponDamage(game, w.level));
+        const auto dmg = static_cast<float>(weaponDamage(game, w.level));
         const float cooldown = std::max(weaponCooldown(game, w.type, w.level, w.evolved), 0.05F);
 
         float hitsPerCooldown = 1.0F;
@@ -357,7 +357,8 @@ auto estimatePlayerDps(const Game& game) -> float
         case WeaponType::LaserShots:
         {
             // dmg here is the raw weaponDamage; mirror the fire code's per-shot multipliers.
-            hitsPerCooldown = static_cast<float>((3 + w.level / 4) * (w.evolved ? laserEvoCountMult : 1)) *
+            const int32_t baseShots = 3 + w.level / 4;
+            hitsPerCooldown = static_cast<float>(baseShots * (w.evolved ? laserEvoCountMult : 1)) *
                               laserShotDamageMult * (w.evolved ? laserEvoDamageMult : 1.0F);
             break;
         }
@@ -2430,7 +2431,12 @@ void updateFlamethrower(Game& game, float deltaTime)
                 .radius = halfWidth * (1.6F + static_cast<float>(GetRandomValue(0, 100)) / 100.0F * 1.4F),
                 .life = flamethrowerJetLife,
                 .maxLife = flamethrowerJetLife,
-                .color = heat == 0 ? Palette::Crit : heat == 1 ? Palette::Charge : Palette::Accent});
+                .color = [&]() -> Color
+                {
+                    if (heat == 0) { return Palette::Crit; }
+                    if (heat == 1) { return Palette::Charge; }
+                    return Palette::Accent;
+                }()});
         }
 
         for (size_t j = 0; j < game.run.enemies.size(); j++)

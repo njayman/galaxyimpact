@@ -119,9 +119,6 @@ void drawQteButtons(const Game& game, QtePrompt prompt, Vector2 center, float pr
               : drawQteMouse(center, true, true, press, color);
         break;
     case QtePrompt::Nerve:
-        touch ? drawQteTouchButton(game, "NERVE", center, press, color)
-              : drawQteKeycap(game, "SPACE", center, 170.0F, press, color);
-        break;
     case QtePrompt::Mash:
         touch ? drawQteTouchButton(game, "NERVE", center, press, color)
               : drawQteKeycap(game, "SPACE", center, 170.0F, press, color);

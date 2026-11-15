@@ -12,7 +12,7 @@
 #include <cstring>
 
 // Value of "--name value" on the command line, or nullptr.
-auto argValue(int argc, char* argv[], const char* name) -> const char*
+auto argValue(int argc, char** argv, const char* name) -> const char*
 {
     for (int i = 1; i + 1 < argc; i++)
     {
@@ -24,7 +24,7 @@ auto argValue(int argc, char* argv[], const char* name) -> const char*
     return nullptr;
 }
 
-auto main(int argc, char* argv[]) -> int
+auto main(int argc, char** argv) -> int
 {
     const bool sandbox = std::any_of(
         argv + 1, argv + argc, [](const char* arg)

@@ -40,7 +40,7 @@ auto hashNoise1D(float seed) -> float
 
 namespace
 {
-float caveWidthScale = 1.0F; // ponytail: global, the one caller that sets it is the Slagmaw update
+float caveWidthScale = 1.0F; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables): set by Slagmaw update; ponytail: global, the one caller that sets it is the Slagmaw update
 }
 
 void setSolarForgeCaveWidthScale(float scale) { caveWidthScale = scale; }

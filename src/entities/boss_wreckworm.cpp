@@ -453,8 +453,6 @@ void updateWreckwormChain(Game& game, Boss& head, float deltaTime)
     }
 }
 
-auto krakenPodPosition(const Boss& boss, int32_t podIndex) -> Vector2;
-
 void updateWreckwormSegmentVolley(Game& game, Boss& segment, float deltaTime)
 {
     if (!segment.isWreckwormSegment || segment.isArmorSegment || segment.health <= 0)

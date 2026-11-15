@@ -41,10 +41,18 @@ void drawSettings(const Game& game)
         const int32_t row = settingsRowSetting(game, i);
         if (row == 1 || row == 2 || row == 6)
         {
-            const bool on = row == 1   ? game.resources.settings.bgmOn
-                            : row == 2 ? game.resources.settings.soundOn
-                                       : game.resources.settings.swapTouchSticks;
-            const char* label = row == 1 ? "BGM" : row == 2 ? "Sound" : "Swap Sticks";
+            const bool on = [&]() -> bool
+            {
+                if (row == 1) { return game.resources.settings.bgmOn; }
+                if (row == 2) { return game.resources.settings.soundOn; }
+                return game.resources.settings.swapTouchSticks;
+            }();
+            const char* label = [&]() -> const char*
+            {
+                if (row == 1) { return "BGM"; }
+                if (row == 2) { return "Sound"; }
+                return "Swap Sticks";
+            }();
             uiButton(rect, std::format("{}:   {}", label, on ? "ON" : "OFF").c_str(), false);
         }
         else if (i == rowCount - 1)
@@ -105,7 +113,8 @@ void drawAchievements(Game& game)
     for (int32_t id = 0; id < achievementCount; id++)
     {
         const bool done = ach.earned.at(static_cast<size_t>(id));
-        const float x = leftX + static_cast<float>(id / rows) * static_cast<float>(columnWidth) * scale;
+        const int32_t column = id / rows;
+        const float x = leftX + static_cast<float>(column) * static_cast<float>(columnWidth) * scale;
         const float y = topY + static_cast<float>(id % rows) * static_cast<float>(rowHeight) * scale;
         std::string line = achievementName(id);
         if (!done && id < achievementWeaponMaxed)
@@ -148,7 +157,7 @@ void drawSkillTree(const Game& game)
 {
     applyGuiScale(game);
     const float r = skillTreeNodeRadius(game);
-    const float t = static_cast<float>(GetTime());
+    const auto t = static_cast<float>(GetTime());
 
     const int32_t points = skillPoints(game);
     windowText(game, "SKILL TREE", game.resources.windowWidth / 2, 28, 34, Palette::Accent);
@@ -185,8 +194,12 @@ void drawSkillTree(const Game& game)
             const Vector2 to = Vector2Subtract(b, Vector2Scale(dir, r));
             const bool lit = skillNodeOwned(game, i);
             const bool open = skillNodeOwned(game, req);
-            const Color color =
-                lit ? Fade(Palette::Crit, 0.7F) : open ? Fade(Palette::Accent, 0.55F) : Palette::StructDark;
+            const Color color = [&]() -> Color
+            {
+                if (lit) { return Fade(Palette::Crit, 0.7F); }
+                if (open) { return Fade(Palette::Accent, 0.55F); }
+                return Palette::StructDark;
+            }();
             const float len = Vector2Distance(from, to);
             if (len < r * 8.0F)
             {
@@ -194,8 +207,9 @@ void drawSkillTree(const Game& game)
                 continue;
             }
             // A long link across branches is dotted, so it reads as a cross-link, not a path.
-            for (float d = 0; d < len; d += r * 0.5F)
+            for (int32_t di = 0; static_cast<float>(di) * r * 0.5F < len; di++)
             {
+                const float d = static_cast<float>(di) * r * 0.5F;
                 DrawCircleV(Vector2Add(from, Vector2Scale(dir, d)), lit ? 1.8F : 1.4F, color);
             }
         }
@@ -211,7 +225,8 @@ void drawSkillTree(const Game& game)
         float s = popScale(game, i % 8);
         if (i == game.skillTreePopNode && game.skillTreePopTimer > 0)
         {
-            s *= 1.0F + 0.35F * std::sin(game.skillTreePopTimer / 0.45F * PI);
+            s *=
+                1.0F + 0.35F * std::sin(game.skillTreePopTimer / 0.45F * std::numbers::pi_v<float>);
         }
         if (s <= 0)
         {
@@ -219,8 +234,18 @@ void drawSkillTree(const Game& game)
         }
         beginPop(c, s);
         const float pulse = 0.5F + 0.5F * std::sin(t * 4.0F + static_cast<float>(i));
-        const Color ring = owned ? Palette::Crit : available ? Palette::Accent : Palette::StructMid;
-        const Color icon = owned ? Palette::Crit : available ? Palette::Haze : Palette::StructMid;
+        const Color ring = [&]() -> Color
+        {
+            if (owned) { return Palette::Crit; }
+            if (available) { return Palette::Accent; }
+            return Palette::StructMid;
+        }();
+        const Color icon = [&]() -> Color
+        {
+            if (owned) { return Palette::Crit; }
+            if (available) { return Palette::Haze; }
+            return Palette::StructMid;
+        }();
         const float nodeR = node.kind == NodeKind::Ship ? r * 1.25F : r;
         if (available)
         {
@@ -241,7 +266,8 @@ void drawSkillTree(const Game& game)
         switch (node.kind)
         {
         case NodeKind::Ship:
-            drawShipHull(static_cast<ShipClass>(node.value), c, nodeR * 0.55F, -PI / 2, icon);
+            drawShipHull(static_cast<ShipClass>(node.value), c, nodeR * 0.55F,
+                         -std::numbers::pi_v<float> / 2, icon);
             break;
         case NodeKind::Weapon:
             drawWeaponIcon(static_cast<WeaponType>(node.value), c, iconS, icon);
@@ -334,7 +360,8 @@ void drawWeaponGallery(const Game& game)
     {
         const auto type = static_cast<WeaponType>(i);
         const float cx = 180.0F + static_cast<float>(i % perRow) * 222.0F;
-        const float cy = 120.0F + static_cast<float>(i / perRow) * 120.0F;
+        const int32_t row = i / perRow;
+        const float cy = 120.0F + static_cast<float>(row) * 120.0F;
         const bool evolves = weaponEvolves.at(static_cast<size_t>(i));
         drawWeaponIcon(type, Vector2{.x = cx - (evolves ? 30.0F : 0.0F), .y = cy}, 16.0F, weaponColor(type));
         if (evolves)
@@ -399,7 +426,8 @@ void drawWeaponGallery(const Game& game)
             drawShipHull(ShipClass::Bastion, at, 16.0F, 0, Palette::StructMid);
             for (int32_t k = 0; k < 6; k++)
             {
-                const float a = static_cast<float>(k) * PI / 3 + static_cast<float>(GetTime());
+                const float a = static_cast<float>(k) * std::numbers::pi_v<float> / 3 +
+                                static_cast<float>(GetTime());
                 drawOrbitRingBlade(Vector2Add(at, Vector2{.x = std::cos(a) * 38.0F, .y = std::sin(a) * 38.0F}),
                                    evolved ? evolvedWeaponColor(WeaponType::Orbit) : weaponColor(WeaponType::Orbit), evolved);
             }
@@ -417,7 +445,8 @@ void drawWeaponGallery(const Game& game)
         {
             for (int32_t k = 0; k < 6; k++)
             {
-                const float a = static_cast<float>(k) * PI / 3 + static_cast<float>(GetTime()) * 3.0F;
+                const float a = static_cast<float>(k) * std::numbers::pi_v<float> / 3 +
+                                static_cast<float>(GetTime()) * 3.0F;
                 drawSpiralBlade(Vector2Add(at, Vector2{.x = std::cos(a) * 44.0F, .y = std::sin(a) * 44.0F}), evolved);
             }
         });
@@ -509,7 +538,12 @@ auto drawBestiarySection(const Game& game, std::string_view title, float y, floa
             .x = x, .y = cellY, .width = cellSize * scale, .height = cellSize * scale};
 
         const bool hovered = hoverActive(game) && CheckCollisionPointRec(mouse, box);
-        const float tone = hovered ? 1.0F : unlocked ? 0.7F : 0.35F;
+        const float tone = [&]() -> float
+        {
+            if (hovered) { return 1.0F; }
+            if (unlocked) { return 0.7F; }
+            return 0.35F;
+        }();
         DrawRectangleRec(box, hovered ? ColorLerp(Palette::StructDark, Palette::StructMid, 0.35F)
                                       : ColorLerp(Palette::Void, Palette::StructDark, tone));
 
@@ -591,7 +625,12 @@ void drawBestiary(Game& game)
             else
             {
                 // Shapes with a long gun reach further forward (up) than back: drop them so the outline is centred.
-                const float drop = shape == EnemyShape::Turret ? 0.25F : shape == EnemyShape::LongBarrel ? 0.4F : 0.0F;
+                const float drop = [&]() -> float
+                {
+                    if (shape == EnemyShape::Turret) { return 0.25F; }
+                    if (shape == EnemyShape::LongBarrel) { return 0.4F; }
+                    return 0.0F;
+                }();
                 drawEnemyShape(shape, Vector2{.x = c.x, .y = c.y + r * drop}, r, -90, col, 1);
             }
         },
@@ -1025,7 +1064,7 @@ void drawLevelUp(const Game& game)
         std::string name;
         std::string desc;
         std::string hint;
-        const char* tag = "";
+        const char* tag = ""; // NOLINT(clang-analyzer-deadcode.DeadStores): every case below sets it; the init keeps it defined
         SkillType icon{};
         bool hasIcon = false;
         bool evolvedIcon = false;
@@ -1043,13 +1082,14 @@ void drawLevelUp(const Game& game)
             break;
         case ChoiceType::Pickup:
         {
-            const auto found = std::ranges::find_if(pickupCatalog,
-                                                    [&](const PickupCatalogEntry& e)
-                                                    {
-                                                        return e.type == choice.pickupType &&
-                                                               e.element == choice.element &&
-                                                               e.mechanism == choice.mechanism;
-                                                    });
+            const auto* const found =
+                std::ranges::find_if(pickupCatalog,
+                                     [&](const PickupCatalogEntry& e)
+                                     {
+                                         return e.type == choice.pickupType &&
+                                                e.element == choice.element &&
+                                                e.mechanism == choice.mechanism;
+                                     });
             name = found != pickupCatalog.end() ? std::string(found->name) : "Pickup";
             desc = pickupChoiceDescription(choice.pickupType, choice.element, choice.mechanism);
             tag = "PICKUP";

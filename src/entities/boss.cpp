@@ -337,30 +337,6 @@ void updateBossMovement(Game& game, float deltaTime, Boss& boss, Vector2 bossCen
     {
         return; // the lava mole never flies: it moves blob to blob under the magma (updateLavaMole)
     }
-    if (false)
-    {
-        const float offscreenDist =
-            std::max(static_cast<float>(game.resources.screenWidth),
-                     static_cast<float>(game.resources.screenHeight)) /
-                2 +
-            ghostTeleportMargin;
-        if (boss.ghostFadeAlpha >= 1.0F &&
-            Vector2Distance(bossCenter, game.run.player.position) > offscreenDist)
-        {
-            const float teleportAngle = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
-            const Vector2 spawnCenter = Vector2Add(
-                game.run.player.position,
-                Vector2{.x = std::cos(teleportAngle) * offscreenDist * 0.85F,
-                        .y = std::sin(teleportAngle) * offscreenDist * 0.85F});
-            boss.position =
-                Vector2Subtract(spawnCenter, Vector2{.x = boss.size.x / 2, .y = boss.size.y / 2});
-            boss.ghostFadeAlpha = 0;
-        }
-        if (boss.ghostFadeAlpha < 1.0F)
-        {
-            boss.ghostFadeAlpha = std::min(1.0F, boss.ghostFadeAlpha + deltaTime / ghostFadeDuration);
-        }
-    }
 
     if (boss.state == BossState::SHOOTING || boss.recoveryTimer > 0)
     {
@@ -498,9 +474,12 @@ void endRushQte(Game& game, Boss& boss, bool clean)
         return; // the rush carries on live
     }
     // It ploughs to a stop, stunned: the rush is over.
-    float& stun = boss.isWreckwormHead ? boss.wreckwormPunishTimer
-                  : boss.isSlagmaw     ? boss.slagmawPunishTimer
-                                       : boss.qteStunTimer;
+    float& stun = [&]() -> float&
+    {
+        if (boss.isWreckwormHead) { return boss.wreckwormPunishTimer; }
+        if (boss.isSlagmaw) { return boss.slagmawPunishTimer; }
+        return boss.qteStunTimer;
+    }();
     stun = UpdateConstants::qteStunWindow;
     boss.chargeVelocity = Vector2{};
     boss.slamHit = false;
@@ -802,7 +781,7 @@ static void updateBossIdle(Game& game, float deltaTime, Boss& boss, Vector2 boss
 
     if (boss.attackTimer <= 0 && boss.health > 0 && boss.wreckwormPunishTimer <= 0 &&
         boss.slagmawPunishTimer <= 0 && boss.qteStunTimer <= 0 && bossOnScreen(game, bossCenter) &&
-        !(boss.isSlagmaw && (boss.moleHidden || boss.moleUnder > 0.05F)))
+        (!boss.isSlagmaw || (!boss.moleHidden && boss.moleUnder <= 0.05F)))
     {
         boss.attack = boss.moveset.at(static_cast<size_t>(
             GetRandomValue(0, static_cast<int32_t>(boss.moveset.size()) - 1)));
@@ -896,13 +875,19 @@ static void updateBossIdle(Game& game, float deltaTime, Boss& boss, Vector2 boss
             boss.color = Palette::Haze;
             break;
         case BossAttack::Barrage:
-            boss.barragePattern = boss.isBeltbreaker ? (shardNova ? 2 : 0) : GetRandomValue(0, 2);
+            boss.barragePattern = [&]() -> int32_t
+            {
+                if (boss.isBeltbreaker) { return shardNova ? 2 : 0; }
+                return GetRandomValue(0, 2);
+            }();
             boss.barrageAngle = std::atan2(game.run.player.position.y - bossCenter.y,
                                            game.run.player.position.x - bossCenter.x);
-            boss.color = boss.isBeltbreaker ? Palette::ShatteredBeltAccent
-                         : boss.isWreckwormHead && !boss.krakenSnakeVariant
-                             ? Palette::RustbloomAccent
-                             : Palette::BossSpread;
+            boss.color = [&]() -> Color
+            {
+                if (boss.isBeltbreaker) { return Palette::ShatteredBeltAccent; }
+                if (boss.isWreckwormHead && !boss.krakenSnakeVariant) { return Palette::RustbloomAccent; }
+                return Palette::BossSpread;
+            }();
             break;
         case BossAttack::GravityWell:
             boss.color = boss.isBeltbreaker ? Palette::ShatteredBeltAccent : Palette::StructMid;
@@ -1089,8 +1074,9 @@ static void bossShootMeteorHell(Game& game, float deltaTime, Boss& boss, Vector2
         const auto roundProjectileHealth = static_cast<int32_t>(
             std::max(1.0F, static_cast<float>(baseProjectileHealth) * meteorHellHealthMult *
                                enemyHealthMult * enemyHealthScale(game)));
-        const int32_t spawnCount =
-            static_cast<int32_t>(static_cast<float>(GetRandomValue(meteorHellSpawnPerBatchMin, meteorHellSpawnPerBatchMax)) *
+        const auto spawnCount =
+            static_cast<int32_t>(static_cast<float>(GetRandomValue(meteorHellSpawnPerBatchMin,
+                                                                   meteorHellSpawnPerBatchMax)) *
                                  (boss.isSlagmaw ? slagmawSwarmMult : 1.0F));
         for (int32_t i = 0; i < spawnCount; i++)
         {
@@ -1261,10 +1247,12 @@ static void bossShootBarrage(Game& game, float deltaTime, Boss& boss, Vector2 bo
                                                     Palette::Accent};
         // Spores leave the slime head's mouth, which turns to face the player; Slag
         // Spray sprays from Slagmaw's maw in a loose fan.
-        const Vector2 muzzle =
-            isSporeSpit    ? Vector2Add(bossCenter, Vector2Scale(direction, boss.size.x * 0.3F))
-            : boss.isSlagmaw ? slagmawMawCenter(boss)
-                             : bossCenter;
+        const Vector2 muzzle = [&]() -> Vector2
+        {
+            if (isSporeSpit) { return Vector2Add(bossCenter, Vector2Scale(direction, boss.size.x * 0.3F)); }
+            if (boss.isSlagmaw) { return slagmawMawCenter(boss); }
+            return bossCenter;
+        }();
         const Vector2 shotDir =
             boss.isSlagmaw
                 ? Vector2Rotate(direction, static_cast<float>(GetRandomValue(-100, 100)) / 100.0F *
@@ -1273,9 +1261,12 @@ static void bossShootBarrage(Game& game, float deltaTime, Boss& boss, Vector2 bo
         game.run.bossProjectiles.push_back(BossProjectile{
             .position = muzzle,
             .velocity = Vector2Scale(shotDir, barrageProjSpeed * attackScale *
-                                             (boss.isSlagmaw ? slagmawShotSpeedMult
-                                              : isSporeSpit  ? wreckwormShotSpeedMult
-                                                             : 1.0F)),
+                                             [&]() -> float
+                                             {
+                                                 if (boss.isSlagmaw) { return slagmawShotSpeedMult; }
+                                                 if (isSporeSpit) { return wreckwormShotSpeedMult; }
+                                                 return 1.0F;
+                                             }()),
             .radius = 6,
             .homing = false,
             .active = true,
@@ -1991,8 +1982,9 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
             // Pounce: launch through the ship into the first blob past it.
             const float toShip = Vector2Length(direction);
             float travel = toShip + 600.0F;
-            for (float d = toShip + 150.0F; d < toShip + 900.0F; d += 30.0F)
+            for (int32_t di = 0; toShip + 150.0F + static_cast<float>(di) * 30.0F < toShip + 900.0F; di++)
             {
+                const float d = toShip + 150.0F + static_cast<float>(di) * 30.0F;
                 if (!isSolarForgeCaveOpen(Vector2Add(bossCenter, Vector2Scale(aimDirection, d))))
                 {
                     travel = d;
@@ -2013,7 +2005,12 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         boss.stateTimer = chargeDashDuration;
         boss.chargeVelocity = Vector2Scale(
             aimDirection,
-            chargeDashSpeed * (boss.isBeltbreakerPlate ? beltbreakerPlateAttackScale : boss.isSlagmaw ? 1.6F : 1.0F));
+            chargeDashSpeed * [&]() -> float
+            {
+                if (boss.isBeltbreakerPlate) { return beltbreakerPlateAttackScale; }
+                if (boss.isSlagmaw) { return 1.6F; }
+                return 1.0F;
+            }());
         boss.dashHitPlayer = false;
         playSFX(game, game.resources.sounds.bossWindUp);
         triggerShake(game, 8, 0.3F);
@@ -2160,8 +2157,9 @@ void startBossAttack(Game& game, Boss& boss, Vector2 bossCenter)
         const float hx = static_cast<float>(game.resources.screenWidth) / 2;
         const float hy = static_cast<float>(game.resources.screenHeight) / 2;
         const float perimeter = 4 * (hx + hy);
-        for (float s = 0; s < perimeter; s += wreckwormWallSpacing)
+        for (int32_t si = 0; static_cast<float>(si) * wreckwormWallSpacing < perimeter; si++)
         {
+            const float s = static_cast<float>(si) * wreckwormWallSpacing;
             game.run.gasHazards.push_back(GasHazard{
                 .position = mouth,
                 .radius = wreckwormWallRadius,

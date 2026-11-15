@@ -111,10 +111,10 @@ void damageBanishedEyeBurst(Game& game, Boss& boss, int32_t divisor)
 
 void beginBanishedCoil(Boss& boss, Player& player, int32_t idx, Vector2 contactPoint)
 {
-    boss.banishedGrabbing[static_cast<size_t>(idx)] = true;
-    boss.banishedPhase[static_cast<size_t>(idx)] = 6;
-    boss.banishedTimer[static_cast<size_t>(idx)] = UpdateConstants::banishedPlainGrabHold;
-    boss.banishedTip[static_cast<size_t>(idx)] = contactPoint;
+    boss.banishedGrabbing.at(static_cast<size_t>(idx)) = true;
+    boss.banishedPhase.at(static_cast<size_t>(idx)) = 6;
+    boss.banishedTimer.at(static_cast<size_t>(idx)) = UpdateConstants::banishedPlainGrabHold;
+    boss.banishedTip.at(static_cast<size_t>(idx)) = contactPoint;
     player.grabbed = true;
     player.grabbingTentacle = idx;
     player.launched = false;
@@ -129,9 +129,9 @@ void resolveBanishedCoil(Game& game, Boss& boss, int32_t idx)
     player.grabbed = false;
     player.grabbingTentacle = -1;
     damagePlayer(game, enemyDamage(game, banishedThrashDamage));
-    boss.banishedGrabbing[static_cast<size_t>(idx)] = false;
-    boss.banishedPhase[static_cast<size_t>(idx)] = 3;
-    boss.banishedTimer[static_cast<size_t>(idx)] = banishedTentacleRetreat;
+    boss.banishedGrabbing.at(static_cast<size_t>(idx)) = false;
+    boss.banishedPhase.at(static_cast<size_t>(idx)) = 3;
+    boss.banishedTimer.at(static_cast<size_t>(idx)) = banishedTentacleRetreat;
 }
 
 // --- Banished big attack: the grab, the toss and the bat (the Juggled QTE) -------
@@ -150,9 +150,9 @@ static void restBanishedTentacles(Boss& boss)
     for (int32_t t = 0; t < Boss::banishedTentacleCount; t++)
     {
         const auto idx = static_cast<size_t>(t);
-        boss.banishedPhase[idx] = 0;
-        boss.banishedGrabbing[idx] = false;
-        boss.banishedCooldown[idx] = static_cast<float>(GetRandomValue(8, 30)) / 10.0F;
+        boss.banishedPhase.at(idx) = 0;
+        boss.banishedGrabbing.at(idx) = false;
+        boss.banishedCooldown.at(idx) = static_cast<float>(GetRandomValue(8, 30)) / 10.0F;
     }
 }
 
@@ -181,8 +181,8 @@ void beginBanishedJuggled(Game& game, Boss& boss, int32_t slot)
 {
     bossQteBegin(game, boss.instanceId, QteKind::Juggled);
     game.run.player.grabbed = true;
-    boss.banishedTossAnchor = boss.banishedIsFar[static_cast<size_t>(slot)]
-                                  ? boss.banishedAnchor[static_cast<size_t>(slot)]
+    boss.banishedTossAnchor = boss.banishedIsFar.at(static_cast<size_t>(slot))
+                                  ? boss.banishedAnchor.at(static_cast<size_t>(slot))
                                   : Vector2Add(game.run.player.position, Vector2{.x = 0, .y = -200.0F});
     restBanishedTentacles(boss);
     boss.banishedTossLeft = banishedTossThrows;
@@ -252,7 +252,7 @@ void updateBanishedJuggled(Game& game, Boss& boss, float deltaTime)
         int32_t found = 0;
         for (int32_t t = 0; t < Boss::banishedTentacleCount && found < 3; t++)
         {
-            if (!boss.banishedStaggered[static_cast<size_t>(t)])
+            if (!boss.banishedStaggered.at(static_cast<size_t>(t)))
             {
                 boss.banishedBatSlots.at(static_cast<size_t>(found++)) = t;
             }
@@ -290,8 +290,8 @@ void updateBanishedJuggled(Game& game, Boss& boss, float deltaTime)
             run.qtePrompt = QtePrompt::None;
             for (const int32_t slot : boss.banishedBatSlots)
             {
-                boss.banishedStaggered[static_cast<size_t>(slot)] = true;
-                boss.banishedTentacleHitFlash[static_cast<size_t>(slot)] = UpdateConstants::hitFlashDuration;
+                boss.banishedStaggered.at(static_cast<size_t>(slot)) = true;
+                boss.banishedTentacleHitFlash.at(static_cast<size_t>(slot)) = UpdateConstants::hitFlashDuration;
             }
             spawnKillExplosion(game, boss.banishedTossAnchor, Palette::Crit, 30, 1.6F);
             playSFX(game, game.resources.sounds.critical);
@@ -628,7 +628,7 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
     bool bigOut = false;
     for (int32_t t = 0; t < Boss::banishedTentacleCount; t++)
     {
-        bigOut = bigOut || (boss.banishedAttackKind[static_cast<size_t>(t)] == 4 && boss.banishedPhase[static_cast<size_t>(t)] != 0);
+        bigOut = bigOut || (boss.banishedAttackKind.at(static_cast<size_t>(t)) == 4 && boss.banishedPhase.at(static_cast<size_t>(t)) != 0);
     }
     if (!bigOut)
     {
@@ -640,31 +640,31 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
         for (int32_t order = 0; order < Boss::banishedTentacleCount && slot < 0; order++)
         {
             const int32_t t = (firstSlot + order) % Boss::banishedTentacleCount;
-            slot = !boss.banishedStaggered[static_cast<size_t>(t)] ? t : -1;
+            slot = !boss.banishedStaggered.at(static_cast<size_t>(t)) ? t : -1;
         }
         if (slot >= 0)
         {
             for (int32_t t = 0; t < Boss::banishedTentacleCount; t++)
             {
                 const auto tdx = static_cast<size_t>(t);
-                if (boss.banishedPhase[tdx] == 1 || boss.banishedPhase[tdx] == 2)
+                if (boss.banishedPhase.at(tdx) == 1 || boss.banishedPhase.at(tdx) == 2)
                 {
-                    boss.banishedTip[tdx] = boss.banishedAnchor[tdx];
-                    boss.banishedPhase[tdx] = 3;
-                    boss.banishedTimer[tdx] = banishedTentacleRetreat;
+                    boss.banishedTip.at(tdx) = boss.banishedAnchor.at(tdx);
+                    boss.banishedPhase.at(tdx) = 3;
+                    boss.banishedTimer.at(tdx) = banishedTentacleRetreat;
                 }
             }
             const auto sdx = static_cast<size_t>(slot);
             const Vector2 ship = game.run.player.position;
             const float a = static_cast<float>(GetRandomValue(0, 359)) * DEG2RAD;
             const Vector2 at = Vector2Add(ship, Vector2{.x = std::cos(a) * banishedBigPortalDist, .y = std::sin(a) * banishedBigPortalDist});
-            boss.banishedAttackKind[sdx] = 4;
-            boss.banishedIsFar[sdx] = true;
-            boss.banishedAnchor[sdx] = at;
-            boss.banishedTip[sdx] = at;
-            boss.banishedAimAngle[sdx] = std::atan2(ship.y - at.y, ship.x - at.x);
-            boss.banishedPhase[sdx] = 1;
-            boss.banishedTimer[sdx] = banishedBigAimMax;
+            boss.banishedAttackKind.at(sdx) = 4;
+            boss.banishedIsFar.at(sdx) = true;
+            boss.banishedAnchor.at(sdx) = at;
+            boss.banishedTip.at(sdx) = at;
+            boss.banishedAimAngle.at(sdx) = std::atan2(ship.y - at.y, ship.x - at.x);
+            boss.banishedPhase.at(sdx) = 1;
+            boss.banishedTimer.at(sdx) = banishedBigAimMax;
             boss.banishedBigStill = 0;
             boss.banishedBigShipPrev = ship;
             bigOut = true;
@@ -677,23 +677,23 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
     {
         const int32_t i = (firstSlot + order) % Boss::banishedTentacleCount;
         const auto idx = static_cast<size_t>(i);
-        if (boss.banishedTentacleHitFlash[idx] > 0)
+        if (boss.banishedTentacleHitFlash.at(idx) > 0)
         {
-            boss.banishedTentacleHitFlash[idx] -= deltaTime;
+            boss.banishedTentacleHitFlash.at(idx) -= deltaTime;
         }
-        if (!boss.banishedStaggered[idx])
+        if (!boss.banishedStaggered.at(idx))
         {
             allStaggered = false;
         }
-        if (boss.banishedStaggered[idx])
+        if (boss.banishedStaggered.at(idx))
         {
             continue;
         }
 
-        if (boss.banishedPhase[idx] == 0)
+        if (boss.banishedPhase.at(idx) == 0)
         {
-            boss.banishedCooldown[idx] -= tentacleDeltaTime;
-            if (boss.banishedCooldown[idx] > 0)
+            boss.banishedCooldown.at(idx) -= tentacleDeltaTime;
+            if (boss.banishedCooldown.at(idx) > 0)
             {
                 continue;
             }
@@ -722,68 +722,76 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
             // Pierce; sometimes a grab (when the ship is free) or a hurled enemy.
             const int32_t roll = GetRandomValue(0, 99);
             const bool canGrab = !game.run.player.grabbed && !game.run.player.launched;
-            boss.banishedAttackKind[pdx] = canGrab && roll < banishedGrabChance              ? 2
-                                           : roll < banishedGrabChance + banishedHurlChance ? 3
-                                                                                           : 0;
+            boss.banishedAttackKind.at(pdx) = [&]() -> int32_t
+            {
+                if (canGrab && roll < banishedGrabChance) { return 2; }
+                if (roll < banishedGrabChance + banishedHurlChance) { return 3; }
+                return 0;
+            }();
             // What a hurl pulls through: an enemy (most often), a meteor, or a lava chunk.
             const int32_t pulled = GetRandomValue(0, 99);
             const auto enemyCount = static_cast<int32_t>(enemyKinds.size());
-            boss.banishedHeldKind[pdx] = pulled < 60 ? GetRandomValue(0, enemyCount - 1) : pulled < 85 ? enemyCount : enemyCount + 1;
-            boss.banishedIsFar[pdx] = !fromBody;
-            boss.banishedAnchor[pdx] = at;
-            boss.banishedTip[pdx] = at;
-            boss.banishedAimAngle[pdx] = std::atan2(ship.y - at.y, ship.x - at.x);
-            boss.banishedAimReach[pdx] = 0;
-            boss.banishedPhase[pdx] = 1;
-            boss.banishedTimer[pdx] = banishedTentacleWindup;
+            boss.banishedHeldKind.at(pdx) = [&]() -> int32_t
+            {
+                if (pulled < 60) { return GetRandomValue(0, enemyCount - 1); }
+                if (pulled < 85) { return enemyCount; }
+                return enemyCount + 1;
+            }();
+            boss.banishedIsFar.at(pdx) = !fromBody;
+            boss.banishedAnchor.at(pdx) = at;
+            boss.banishedTip.at(pdx) = at;
+            boss.banishedAimAngle.at(pdx) = std::atan2(ship.y - at.y, ship.x - at.x);
+            boss.banishedAimReach.at(pdx) = 0;
+            boss.banishedPhase.at(pdx) = 1;
+            boss.banishedTimer.at(pdx) = banishedTentacleWindup;
             continue;
         }
 
-        if (boss.banishedPhase[idx] == 1 && boss.banishedAttackKind[idx] == 4)
+        if (boss.banishedPhase.at(idx) == 1 && boss.banishedAttackKind.at(idx) == 4)
         {
             // The big grab aims for as long as the ship keeps moving and keeps away.
             const Vector2 ship = game.run.player.position;
-            boss.banishedTimer[idx] -= deltaTime;
-            if (boss.banishedTimer[idx] > banishedBigTell)
+            boss.banishedTimer.at(idx) -= deltaTime;
+            if (boss.banishedTimer.at(idx) > banishedBigTell)
             {
-                boss.banishedAimAngle[idx] = std::atan2(ship.y - boss.banishedAnchor[idx].y, ship.x - boss.banishedAnchor[idx].x);
+                boss.banishedAimAngle.at(idx) = std::atan2(ship.y - boss.banishedAnchor.at(idx).y, ship.x - boss.banishedAnchor.at(idx).x);
                 const float speed = deltaTime > 0 ? Vector2Distance(ship, boss.banishedBigShipPrev) / deltaTime : 0.0F;
                 boss.banishedBigStill = speed < banishedBigStillSpeed ? boss.banishedBigStill + deltaTime : 0.0F;
-                if (boss.banishedBigStill >= banishedBigStillTime || Vector2Distance(ship, boss.banishedAnchor[idx]) < banishedBigNear)
+                if (boss.banishedBigStill >= banishedBigStillTime || Vector2Distance(ship, boss.banishedAnchor.at(idx)) < banishedBigNear)
                 {
-                    boss.banishedTimer[idx] = banishedBigTell; // it flashes: block now
+                    boss.banishedTimer.at(idx) = banishedBigTell; // it flashes: block now
                     playSFX(game, game.resources.sounds.bossWindUp);
                 }
             }
             boss.banishedBigShipPrev = ship;
-            if (boss.banishedTimer[idx] <= 0)
+            if (boss.banishedTimer.at(idx) <= 0)
             {
-                boss.banishedPhase[idx] = 2;
-                boss.banishedTimer[idx] = banishedBigLunge;
+                boss.banishedPhase.at(idx) = 2;
+                boss.banishedTimer.at(idx) = banishedBigLunge;
             }
             continue;
         }
 
-        if (boss.banishedPhase[idx] == 1)
+        if (boss.banishedPhase.at(idx) == 1)
         {
             // The stance: it tracks the ship until the last moment, then the aim freezes.
-            boss.banishedTimer[idx] -= tentacleDeltaTime;
-            if (boss.banishedTimer[idx] > banishedAimLock)
+            boss.banishedTimer.at(idx) -= tentacleDeltaTime;
+            if (boss.banishedTimer.at(idx) > banishedAimLock)
             {
-                const Vector2 toShip = Vector2Subtract(game.run.player.position, boss.banishedAnchor[idx]);
-                boss.banishedAimAngle[idx] = std::atan2(toShip.y, toShip.x);
-                boss.banishedAimReach[idx] = std::min(Vector2Length(toShip) + banishedPierceOvershoot, banishedPierceReach);
+                const Vector2 toShip = Vector2Subtract(game.run.player.position, boss.banishedAnchor.at(idx));
+                boss.banishedAimAngle.at(idx) = std::atan2(toShip.y, toShip.x);
+                boss.banishedAimReach.at(idx) = std::min(Vector2Length(toShip) + banishedPierceOvershoot, banishedPierceReach);
             }
-            if (boss.banishedTimer[idx] <= 0)
+            if (boss.banishedTimer.at(idx) <= 0)
             {
-                boss.banishedPhase[idx] = 2;
-                boss.banishedTimer[idx] = boss.banishedAttackKind[idx] == 2 ? banishedTentacleStrike : banishedPierceStrike;
-                if (boss.banishedAttackKind[idx] == 3)
+                boss.banishedPhase.at(idx) = 2;
+                boss.banishedTimer.at(idx) = boss.banishedAttackKind.at(idx) == 2 ? banishedTentacleStrike : banishedPierceStrike;
+                if (boss.banishedAttackKind.at(idx) == 3)
                 {
                     // Hurl: the enemy it pulled through leaves the tip down the frozen aim.
-                    const Vector2 dir{.x = std::cos(boss.banishedAimAngle[idx]), .y = std::sin(boss.banishedAimAngle[idx])};
+                    const Vector2 dir{.x = std::cos(boss.banishedAimAngle.at(idx)), .y = std::sin(boss.banishedAimAngle.at(idx))};
                     game.run.bossProjectiles.push_back(
-                        BossProjectile{.position = Vector2Add(boss.banishedAnchor[idx], Vector2Scale(dir, banishedHurlRelease)),
+                        BossProjectile{.position = Vector2Add(boss.banishedAnchor.at(idx), Vector2Scale(dir, banishedHurlRelease)),
                                        .velocity = Vector2Scale(dir, krakenLimbHurlSpeed),
                                        .radius = 22,
                                        .homing = false,
@@ -792,61 +800,66 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
                                        .damage = krakenLimbHurlDamage,
                                        .health = 0,
                                        .isMeteor = false,
-                                       .visualEnemyKind = boss.banishedHeldKind[idx],
+                                       .visualEnemyKind = boss.banishedHeldKind.at(idx),
                                        .energized = true});
                 }
             }
             continue;
         }
 
-        if (boss.banishedPhase[idx] == 2 && boss.banishedAttackKind[idx] == 3)
+        if (boss.banishedPhase.at(idx) == 2 && boss.banishedAttackKind.at(idx) == 3)
         {
-            boss.banishedTimer[idx] -= tentacleDeltaTime; // the throw's follow-through; the tip hits nothing
-            if (boss.banishedTimer[idx] <= 0)
+            boss.banishedTimer.at(idx) -= tentacleDeltaTime; // the throw's follow-through; the tip hits nothing
+            if (boss.banishedTimer.at(idx) <= 0)
             {
-                boss.banishedPhase[idx] = 3;
-                boss.banishedTimer[idx] = banishedTentacleRetreat;
+                boss.banishedPhase.at(idx) = 3;
+                boss.banishedTimer.at(idx) = banishedTentacleRetreat;
             }
             continue;
         }
 
-        if (boss.banishedPhase[idx] == 2)
+        if (boss.banishedPhase.at(idx) == 2)
         {
-            const bool big = boss.banishedAttackKind[idx] == 4;
-            const bool grab = boss.banishedAttackKind[idx] == 2 || big;
-            const float strike = big ? banishedBigLunge : grab ? banishedTentacleStrike : banishedPierceStrike;
-            const float progress = std::clamp(1.0F - boss.banishedTimer[idx] / strike, 0.0F, 1.0F);
-            const Vector2 prevTip = boss.banishedTip[idx];
+            const bool big = boss.banishedAttackKind.at(idx) == 4;
+            const bool grab = boss.banishedAttackKind.at(idx) == 2 || big;
+            const float strike = [&]() -> float
+            {
+                if (big) { return banishedBigLunge; }
+                if (grab) { return banishedTentacleStrike; }
+                return banishedPierceStrike;
+            }();
+            const float progress = std::clamp(1.0F - boss.banishedTimer.at(idx) / strike, 0.0F, 1.0F);
+            const Vector2 prevTip = boss.banishedTip.at(idx);
             if (grab)
             {
                 // The grab lunges after the ship wherever it goes.
-                const Vector2 toPlayer = Vector2Subtract(game.run.player.position, boss.banishedAnchor[idx]);
+                const Vector2 toPlayer = Vector2Subtract(game.run.player.position, boss.banishedAnchor.at(idx));
                 const float dist = big ? Vector2Length(toPlayer) : std::min(Vector2Length(toPlayer), banishedPierceReach);
                 const Vector2 dir = Vector2Length(toPlayer) > 0.01F ? Vector2Normalize(toPlayer) : Vector2{.x = 0, .y = 1};
-                boss.banishedTip[idx] =
-                    Vector2Add(boss.banishedAnchor[idx], Vector2Scale(dir, dist * std::min(1.0F, progress / 0.7F))); // on the ship by 70%
+                boss.banishedTip.at(idx) =
+                    Vector2Add(boss.banishedAnchor.at(idx), Vector2Scale(dir, dist * std::min(1.0F, progress / 0.7F))); // on the ship by 70%
             }
             else
             {
                 // The pierce thrusts straight down its frozen aim: step off the line to dodge it.
-                const float a = boss.banishedAimAngle[idx];
-                const float out = boss.banishedAimReach[idx] * (1.0F - (1.0F - progress) * (1.0F - progress));
-                boss.banishedTip[idx] =
-                    Vector2Add(boss.banishedAnchor[idx], Vector2{.x = std::cos(a) * out, .y = std::sin(a) * out});
+                const float a = boss.banishedAimAngle.at(idx);
+                const float out = boss.banishedAimReach.at(idx) * (1.0F - (1.0F - progress) * (1.0F - progress));
+                boss.banishedTip.at(idx) =
+                    Vector2Add(boss.banishedAnchor.at(idx), Vector2{.x = std::cos(a) * out, .y = std::sin(a) * out});
             }
 
-            boss.banishedTimer[idx] -= tentacleDeltaTime;
+            boss.banishedTimer.at(idx) -= tentacleDeltaTime;
 
             // The tip moves far in a frame, so test the stretch it just covered.
             if (CheckCollisionCircleLine(game.run.player.position, banishedTentacleHitRadius + game.run.player.radius,
-                                         prevTip, boss.banishedTip[idx]))
+                                         prevTip, boss.banishedTip.at(idx)))
             {
                 if (game.run.player.shieldActive)
                 {
                     // Blocked: it recoils. (Only the bat's QTE paralyses a tentacle now.)
-                    boss.banishedPhase[idx] = 3;
-                    boss.banishedTimer[idx] = banishedTentacleRetreat;
-                    boss.banishedTentacleHitFlash[idx] = UpdateConstants::hitFlashDuration;
+                    boss.banishedPhase.at(idx) = 3;
+                    boss.banishedTimer.at(idx) = banishedTentacleRetreat;
+                    boss.banishedTentacleHitFlash.at(idx) = UpdateConstants::hitFlashDuration;
                     triggerBossShieldDashShake(game);
                     if (big)
                     {
@@ -859,21 +872,21 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
                 }
                 else if (grab)
                 {
-                    beginBanishedCoil(boss, game.run.player, i, boss.banishedTip[idx]);
+                    beginBanishedCoil(boss, game.run.player, i, boss.banishedTip.at(idx));
                 }
                 else
                 {
                     damagePlayer(game, enemyDamage(game, banishedTentacleDamage));
-                    boss.banishedPhase[idx] = 3;
-                    boss.banishedTimer[idx] = banishedTentacleRetreat;
+                    boss.banishedPhase.at(idx) = 3;
+                    boss.banishedTimer.at(idx) = banishedTentacleRetreat;
                 }
                 continue;
             }
 
-            if (boss.banishedTimer[idx] <= 0)
+            if (boss.banishedTimer.at(idx) <= 0)
             {
-                boss.banishedPhase[idx] = 3;
-                boss.banishedTimer[idx] = banishedTentacleRetreat;
+                boss.banishedPhase.at(idx) = 3;
+                boss.banishedTimer.at(idx) = banishedTentacleRetreat;
                 if (big)
                 {
                     boss.banishedBigTimer = banishedBigRetryGap;
@@ -882,13 +895,13 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
             continue;
         }
 
-        if (boss.banishedPhase[idx] == 3)
+        if (boss.banishedPhase.at(idx) == 3)
         {
-            boss.banishedTimer[idx] -= tentacleDeltaTime;
-            if (boss.banishedTimer[idx] <= 0)
+            boss.banishedTimer.at(idx) -= tentacleDeltaTime;
+            if (boss.banishedTimer.at(idx) <= 0)
             {
-                boss.banishedPhase[idx] = 0;
-                boss.banishedCooldown[idx] =
+                boss.banishedPhase.at(idx) = 0;
+                boss.banishedCooldown.at(idx) =
                     static_cast<float>(GetRandomValue(
                         static_cast<int32_t>(banishedTentacleCooldownMin * 10),
                         static_cast<int32_t>(banishedTentacleCooldownMax * 10))) /
@@ -897,20 +910,20 @@ void updateBanished(Game& game, Boss& boss, float deltaTime)
             continue;
         }
 
-        if (boss.banishedPhase[idx] == 5)
+        if (boss.banishedPhase.at(idx) == 5)
         {
             const float easeLerp = std::clamp(3.0F * deltaTime, 0.0F, 1.0F);
-            boss.banishedTip[idx] = Vector2Lerp(boss.banishedTip[idx], game.run.player.position, easeLerp);
-            boss.banishedAnchor[idx] = boss.banishedTip[idx];
+            boss.banishedTip.at(idx) = Vector2Lerp(boss.banishedTip.at(idx), game.run.player.position, easeLerp);
+            boss.banishedAnchor.at(idx) = boss.banishedTip.at(idx);
             continue;
         }
 
-        if (boss.banishedPhase[idx] == 6)
+        if (boss.banishedPhase.at(idx) == 6)
         {
-            game.run.player.position = boss.banishedTip[idx];
+            game.run.player.position = boss.banishedTip.at(idx);
             game.run.player.dashing = false;
-            boss.banishedTimer[idx] -= deltaTime;
-            if (boss.banishedTimer[idx] <= 0)
+            boss.banishedTimer.at(idx) -= deltaTime;
+            if (boss.banishedTimer.at(idx) <= 0)
             {
                 resolveBanishedCoil(game, boss, i);
             }

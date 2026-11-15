@@ -33,7 +33,7 @@ struct InfallSprite
 };
 
 // ponytail: built once on first entering Punctum and kept for the process; a dozen small textures.
-std::vector<InfallSprite> sprites;
+std::vector<InfallSprite> sprites; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables): cache built on first Punctum entry
 
 struct SpriteSpec
 {

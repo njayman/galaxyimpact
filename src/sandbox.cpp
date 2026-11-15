@@ -46,7 +46,7 @@ void sandboxSpawnSelectedEnemy(Game& game)
 }
 
 // The Banished in its realm, spawned if it is not there yet.
-static auto sandboxBanished(Game& game) -> Boss&
+auto sandboxBanished(Game& game) -> Boss&
 {
     for (auto& boss : game.run.bosses)
     {

@@ -54,10 +54,10 @@ enum class NodeKind : std::uint8_t
 
 struct SkillNode
 {
-    NodeKind kind;
-    int32_t value; // ShipClass, WeaponType, SkillType or slot count by kind
+    NodeKind kind{};
+    int32_t value{}; // ShipClass, WeaponType, SkillType or slot count by kind
     std::array<int8_t, 3> prereqs{-1, -1, -1};
-    Vector2 pos; // layout units: Ranger at the origin, ~1 unit between neighbours
+    Vector2 pos{}; // layout units: Ranger at the origin, ~1 unit between neighbours
 };
 
 // Ranger hub (node 0, always owned); Offence branch to the right toward the Interceptor,

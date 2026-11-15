@@ -63,11 +63,11 @@ class BgParticle
 class BlackHole
 {
   public:
-    Vector2 position;
-    float radius;
-    float influenceRadius;
-    bool active;
-    float timer;
+    Vector2 position{};
+    float radius{};
+    float influenceRadius{};
+    bool active{};
+    float timer{};
     bool isKrakenPortal = false;
 };
 
@@ -115,11 +115,11 @@ enum class AsteroidTier : std::uint8_t
 class Asteroid
 {
   public:
-    Vector2 position;
-    Vector2 velocity;
-    float radius;
-    AsteroidTier tier;
-    bool active;
+    Vector2 position{};
+    Vector2 velocity{};
+    float radius{};
+    AsteroidTier tier{};
+    bool active{};
 
     bool inCluster = false;
     Vector2 clusterCenter{};

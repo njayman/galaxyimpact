@@ -123,7 +123,7 @@ struct TacticTracker
     bool primed = false;
 };
 
-class Boss
+class Boss // NOLINT(clang-analyzer-optin.performance.Padding): fields grouped by topic; reordering only saves bytes
 {
   public:
     Vector2 position;
@@ -540,15 +540,15 @@ class BossProjectile
     float orbitShrink = 0;
     float orbitTime = 0;
     float orbitFling = 0;
-    Vector2 position;
-    Vector2 velocity;
-    float radius;
-    bool homing;
-    bool active;
-    bool fromPlayer;
+    Vector2 position{};
+    Vector2 velocity{};
+    float radius{};
+    bool homing{};
+    bool active{};
+    bool fromPlayer{};
 
-    int damage;
-    int health;
+    int damage{};
+    int health{};
 
     bool huntingNewTarget = false;
 

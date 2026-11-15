@@ -110,7 +110,7 @@ void drawNerveBall(Vector2 pos, float radius, bool evolved)
     // Evolved: a gold orb with a hot core, three arcs turning round its rim, and sparks circling
     // inside the other way.
     const Color gold = evolvedWeaponColor(WeaponType::Forward);
-    const float t = static_cast<float>(GetTime());
+    const auto t = static_cast<float>(GetTime());
     DrawCircleV(pos, radius, Fade(gold, 0.35F));
     DrawCircleV(pos, radius * 0.5F, Fade(gold, 0.5F));
     DrawCircleV(pos, radius * 0.25F, Fade(WHITE, 0.75F));
@@ -121,7 +121,7 @@ void drawNerveBall(Vector2 pos, float radius, bool evolved)
     }
     for (int32_t k = 0; k < 4; k++)
     {
-        const float a = -t * 4.0F + static_cast<float>(k) * PI / 2;
+        const float a = -t * 4.0F + static_cast<float>(k) * std::numbers::pi_v<float> / 2;
         DrawCircleV(Vector2Add(pos, Vector2{.x = std::cos(a) * radius * 0.7F, .y = std::sin(a) * radius * 0.7F}),
                     radius * 0.08F, Fade(WHITE, 0.85F));
     }
@@ -434,12 +434,12 @@ void drawGameplayWorld(const Game& game)
         }
         for (int32_t i = 0; i < segments; i++)
         {
-            DrawLineEx(points.at(static_cast<size_t>(i)), points.at(static_cast<size_t>(i + 1)), 7.0F,
+            DrawLineEx(points.at(static_cast<size_t>(i)), points.at(static_cast<size_t>(i) + 1), 7.0F,
                        Fade(Palette::ElementFreeze, 0.18F * fade));
         }
         for (int32_t i = 0; i < segments; i++)
         {
-            DrawLineEx(points.at(static_cast<size_t>(i)), points.at(static_cast<size_t>(i + 1)), 2.0F,
+            DrawLineEx(points.at(static_cast<size_t>(i)), points.at(static_cast<size_t>(i) + 1), 2.0F,
                        Fade(Palette::ElementStatic, fade));
         }
         for (const int32_t at : {4, 8})
@@ -872,12 +872,18 @@ void drawShip(const Game& game)
 
     // Phase 10 spins the ship down into the tear; phase 13 (the fall) brings it back out.
     const bool twirlingIn = game.run.bossCutscenePhase == 10 || game.run.bossCutscenePhase == 13;
-    const float twirlProgress =
-        game.run.bossCutscenePhase == 10
-            ? std::clamp(1.0F - game.run.bossCutsceneTimer / banishedEntryTwirlDuration, 0.0F, 1.0F)
-            : game.run.bossCutscenePhase == 13
-                  ? std::clamp(game.run.bossCutsceneTimer / banishedTunnelDuration, 0.0F, 1.0F)
-                  : 0.0F;
+    const float twirlProgress = [&]() -> float
+    {
+        if (game.run.bossCutscenePhase == 10)
+        {
+            return std::clamp(1.0F - game.run.bossCutsceneTimer / banishedEntryTwirlDuration, 0.0F, 1.0F);
+        }
+        if (game.run.bossCutscenePhase == 13)
+        {
+            return std::clamp(game.run.bossCutsceneTimer / banishedTunnelDuration, 0.0F, 1.0F);
+        }
+        return 0.0F;
+    }();
     const float r =
         game.run.player.radius * (twirlingIn ? std::max(0.05F, 1.0F - twirlProgress) : 1.0F);
 
@@ -1333,7 +1339,7 @@ void drawEnemy(const Game& game, const Enemy& enemy, bool buffed)
                    kind.radius * 0.8F, Fade(color, 0.18F));
         for (int32_t k = 1; k <= 4; k++)
         {
-            const float f = static_cast<float>(k);
+            const auto f = static_cast<float>(k);
             drawEnemyShape(kind.shape, Vector2Add(enemy.position, Vector2Scale(back, f * kind.radius * 1.3F)),
                            kind.radius * (1.0F - f * 0.12F), std::atan2(-back.y, -back.x) * RAD2DEG,
                            Fade(color, 0.35F - f * 0.07F));
@@ -1564,7 +1570,7 @@ void drawOrbitBlades(const Game& game)
             // The jets themselves are flame particles (drawn with the rest); here only the nozzle:
             // a white-hot flare while firing, and while it reheats a glow that swells as embers are
             // drawn in toward it.
-            const float t = static_cast<float>(GetTime());
+            const auto t = static_cast<float>(GetTime());
             const Vector2 nozzle = game.run.player.position;
             const float hw = flamethrowerRayHalfWidth(w.level);
             if (flamethrowerFiring(game))

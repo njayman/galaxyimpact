@@ -52,8 +52,6 @@ void beginPixelZoom(const Game& game)
                          .zoom = zoom});
 }
 
-auto transitionPush(const Game& game) -> float;
-
 void beginWorldCamera(const Game& game)
 {
     const float zoom = game.resources.renderScale * (1.0F + transitionCameraPush * transitionPush(game));
@@ -349,7 +347,7 @@ void drawEnding(const Game& game)
 
     for (int32_t i = 0; i < 60; i++)
     {
-        const float seed = static_cast<float>(i);
+        const auto seed = static_cast<float>(i);
         const float twinkle =
             0.35F + 0.35F * std::sin(t * (0.6F + hashNoise(seed) * 1.4F) + seed * 5.0F);
         const float x = std::fmod(hashNoise(seed * 3.1F) * windowW - parallax, windowW);

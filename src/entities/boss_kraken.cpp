@@ -46,7 +46,12 @@ void spawnKraken(Game& game, int32_t wave)
               .instanceId = game.run.bossSpawnCount,
               .isKraken = true};
 
-    boss.krakenEncounter = wave >= 100 ? 3 : (wave >= 90 ? 2 : 1);
+    boss.krakenEncounter = [&]() -> int32_t
+    {
+        if (wave >= 100) { return 3; }
+        if (wave >= 90) { return 2; }
+        return 1;
+    }();
     if (wave >= 100)
     {
         boss.isFinalBoss = true;
@@ -225,9 +230,9 @@ auto krakenStaggerDuration(int32_t encounter) -> float
 // already mid-attack in either system and isn't hanging staggered.
 auto krakenTentacleSlotIdle(const Boss& boss, int32_t slot) -> bool
 {
-    return boss.tentaclePhase[static_cast<size_t>(slot)] == 0 &&
-           boss.limbPhase[static_cast<size_t>(slot)] == 0 &&
-           !boss.tentacleStaggered[static_cast<size_t>(slot)];
+    return boss.tentaclePhase.at(static_cast<size_t>(slot)) == 0 &&
+           boss.limbPhase.at(static_cast<size_t>(slot)) == 0 &&
+           !boss.tentacleStaggered.at(static_cast<size_t>(slot));
 }
 
 // --- Kraken arm attacks --------------------------------------------------------
@@ -285,7 +290,7 @@ void stepKrakenRope(Boss& boss, int32_t rope, Vector2 root, Vector2 target, floa
         for (int32_t i = 0; i + 1 < n; i++)
         {
             Vector2& a = pos.at(static_cast<size_t>(i));
-            Vector2& b = pos.at(static_cast<size_t>(i + 1));
+            Vector2& b = pos.at(static_cast<size_t>(i) + 1);
             const Vector2 d = Vector2Subtract(b, a);
             const float dist = std::max(0.001F, Vector2Length(d));
             const Vector2 fix = Vector2Scale(d, (dist - segment) / dist);
@@ -308,7 +313,7 @@ auto krakenRopeHits(const Boss& boss, int32_t rope, Vector2 point, float radius)
     const auto& pos = boss.ropePos.at(static_cast<size_t>(rope));
     for (int32_t i = 0; i + 1 < Boss::krakenRopePoints; i++)
     {
-        if (CheckCollisionCircleLine(point, radius, pos.at(static_cast<size_t>(i)), pos.at(static_cast<size_t>(i + 1))))
+        if (CheckCollisionCircleLine(point, radius, pos.at(static_cast<size_t>(i)), pos.at(static_cast<size_t>(i) + 1)))
         {
             return true;
         }
@@ -477,7 +482,7 @@ void updateKrakenSlot(Game& game, Boss& boss, int32_t slot, float deltaTime)
         if (phase == 1)
         {
             // Portal Lash: the portal opens first, then the arm uncoils out of it; both rear back.
-            const float tell = kind == krakenKindPortal ? krakenArmTell : krakenArmTell;
+            const float tell = krakenArmTell;
             const float uncoil = std::clamp(1.0F - timer / tell, 0.0F, 1.0F);
             const float back = boss.tentacleSwipeStartAngle.at(s);
             const Vector2 target = Vector2Add(root, Vector2Scale(Vector2{.x = std::cos(back), .y = std::sin(back)}, reach * 0.55F * uncoil));
@@ -565,8 +570,8 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
                 boss.krakenCoreExposedTimer = 0;
                 for (int32_t slot = 0; slot < activeCount; slot++)
                 {
-                    boss.tentacleStaggered[static_cast<size_t>(slot)] = false;
-                    boss.tentacleCooldownTimer[static_cast<size_t>(slot)] = krakenTentacleCooldownDuration;
+                    boss.tentacleStaggered.at(static_cast<size_t>(slot)) = false;
+                    boss.tentacleCooldownTimer.at(static_cast<size_t>(slot)) = krakenTentacleCooldownDuration;
                 }
                 boss.krakenCoreExposureUsed = true;
             }
@@ -577,9 +582,9 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
             boss.krakenCoreExposureUsed = true;
             for (int32_t slot = 0; slot < Boss::krakenLimbSlots; slot++)
             {
-                boss.limbPhase[static_cast<size_t>(slot)] = 0;
-                boss.limbPod[static_cast<size_t>(slot)] = -1;
-                boss.limbThrowPhase[static_cast<size_t>(slot)] = 0;
+                boss.limbPhase.at(static_cast<size_t>(slot)) = 0;
+                boss.limbPod.at(static_cast<size_t>(slot)) = -1;
+                boss.limbThrowPhase.at(static_cast<size_t>(slot)) = 0;
             }
         }
         return;
@@ -590,15 +595,15 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
     for (int32_t s = 0; s < activeCount; s++)
     {
         const auto slot = static_cast<size_t>(s);
-        if (boss.tentacleStaggered[slot])
+        if (boss.tentacleStaggered.at(slot))
         {
             continue;
         }
-        if (boss.tentacleCooldownTimer[slot] > 0)
+        if (boss.tentacleCooldownTimer.at(slot) > 0)
         {
-            boss.tentacleCooldownTimer[slot] -= deltaTime;
+            boss.tentacleCooldownTimer.at(slot) -= deltaTime;
         }
-        if (boss.tentaclePhase[slot] != 0)
+        if (boss.tentaclePhase.at(slot) != 0)
         {
             updateKrakenSlot(game, boss, s, deltaTime);
         }
@@ -616,7 +621,7 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
     {
         const auto slot = static_cast<size_t>(s);
         const bool forced = boss.sandboxKrakenKind >= 0 && boss.sandboxKrakenKind <= krakenKindRake;
-        if (!krakenTentacleSlotIdle(boss, s) || (boss.tentacleCooldownTimer[slot] > 0 && !forced))
+        if (!krakenTentacleSlotIdle(boss, s) || (boss.tentacleCooldownTimer.at(slot) > 0 && !forced))
         {
             continue;
         }
@@ -625,10 +630,13 @@ void updateKrakenTentacle(Game& game, Boss& boss, float deltaTime)
             continue;
         }
         const int32_t roll = GetRandomValue(0, 99);
-        const int32_t kind = forced       ? boss.sandboxKrakenKind
-                             : roll < 40  ? krakenKindLash
-                             : roll < 75  ? krakenKindPortal
-                                          : krakenKindRake;
+        const int32_t kind = [&]() -> int32_t
+        {
+            if (forced) { return boss.sandboxKrakenKind; }
+            if (roll < 40) { return krakenKindLash; }
+            if (roll < 75) { return krakenKindPortal; }
+            return krakenKindRake;
+        }();
         boss.sandboxKrakenKind = -1;
         startKrakenArmAttack(game, boss, s, kind);
     }
@@ -783,7 +791,7 @@ void updateKrakenSnatch(Game& game, Boss& kraken, float deltaTime)
     {
         for (int32_t k = 0; k < 2; k++)
         {
-            const Vector2 club = kraken.ropePos.at(static_cast<size_t>(4 + k)).back();
+            const Vector2 club = kraken.ropePos.at(static_cast<size_t>(k) + 4).back();
             if (player.health > 0 && Vector2Distance(club, player.position) <= krakenFeedCatchRadius + player.radius &&
                 qteSlotFree(game))
             {
@@ -929,7 +937,7 @@ void updateKrakenDraggedUnder(Game& game, Boss& kraken, float deltaTime)
 auto krakenPodPosition(const Boss& boss, int32_t podIndex) -> Vector2
 {
     const Vector2 center{.x = boss.position.x + boss.size.x / 2, .y = boss.position.y + boss.size.y / 2};
-    const float seed = static_cast<float>(boss.instanceId);
+    const auto seed = static_cast<float>(boss.instanceId);
     const float angle = static_cast<float>(podIndex) * 90.0F * DEG2RAD + seed;
     return Vector2Add(center, Vector2{.x = std::cos(angle) * boss.size.x / 2 * 0.78F,
                                       .y = std::sin(angle) * boss.size.y / 2 * 0.78F});
@@ -952,19 +960,19 @@ void updateKrakenLimbs(Game& game, Boss& boss, float deltaTime)
     {
         if (i >= activeSlots)
         {
-            boss.limbPhase[i] = 0;
-            boss.limbPod[i] = -1;
+            boss.limbPhase.at(i) = 0;
+            boss.limbPod.at(i) = -1;
             continue;
         }
 
-        if (boss.limbCooldown[i] > 0)
+        if (boss.limbCooldown.at(i) > 0)
         {
-            boss.limbCooldown[i] -= deltaTime;
+            boss.limbCooldown.at(i) -= deltaTime;
         }
 
-        if (boss.limbPhase[i] == 0)
+        if (boss.limbPhase.at(i) == 0)
         {
-            if (boss.limbCooldown[i] > 0 || !krakenTentacleSlotIdle(boss, i))
+            if (boss.limbCooldown.at(i) > 0 || !krakenTentacleSlotIdle(boss, i))
             {
                 continue;
             }
@@ -975,7 +983,7 @@ void updateKrakenLimbs(Game& game, Boss& boss, float deltaTime)
                 podTaken = false;
                 for (int32_t other = 0; other < Boss::krakenLimbSlots; other++)
                 {
-                    if (other != i && boss.limbPod[other] == pod)
+                    if (other != i && boss.limbPod.at(other) == pod)
                     {
                         podTaken = true;
                         pod = (pod + 1) % 4;
@@ -983,49 +991,49 @@ void updateKrakenLimbs(Game& game, Boss& boss, float deltaTime)
                     }
                 }
             }
-            boss.limbPod[i] = pod;
-            boss.limbPhase[i] = 1;
-            boss.limbTimer[i] = krakenLimbOpenDuration;
-            boss.limbGrabTimer[i] = krakenLimbGrabInterval * 0.4F;
+            boss.limbPod.at(i) = pod;
+            boss.limbPhase.at(i) = 1;
+            boss.limbTimer.at(i) = krakenLimbOpenDuration;
+            boss.limbGrabTimer.at(i) = krakenLimbGrabInterval * 0.4F;
             continue;
         }
 
-        if (boss.limbPhase[i] == 1 || boss.limbPhase[i] == 2)
+        if (boss.limbPhase.at(i) == 1 || boss.limbPhase.at(i) == 2)
         {
-            const Vector2 podPos = krakenPodPosition(boss, boss.limbPod[i]);
+            const Vector2 podPos = krakenPodPosition(boss, boss.limbPod.at(i));
             const Vector2 toPlayer = Vector2Subtract(game.run.player.position, podPos);
             const float distToPlayer = Vector2Length(toPlayer);
             const Vector2 aimDir =
                 distToPlayer > 1.0F ? Vector2Scale(toPlayer, 1.0F / distToPlayer) : Vector2{.x = 1, .y = 0};
-            boss.limbGrabTarget[i] = Vector2Add(podPos, Vector2Scale(aimDir, krakenLimbNearReach));
+            boss.limbGrabTarget.at(i) = Vector2Add(podPos, Vector2Scale(aimDir, krakenLimbNearReach));
         }
 
-        if (boss.limbPhase[i] == 1)
+        if (boss.limbPhase.at(i) == 1)
         {
-            boss.limbTimer[i] -= deltaTime;
-            if (boss.limbTimer[i] <= 0)
+            boss.limbTimer.at(i) -= deltaTime;
+            if (boss.limbTimer.at(i) <= 0)
             {
-                boss.limbPhase[i] = 2;
-                boss.limbTimer[i] = krakenLimbActiveDuration;
+                boss.limbPhase.at(i) = 2;
+                boss.limbTimer.at(i) = krakenLimbActiveDuration;
             }
             continue;
         }
 
-        if (boss.limbPhase[i] == 2)
+        if (boss.limbPhase.at(i) == 2)
         {
-            boss.limbTimer[i] -= deltaTime;
+            boss.limbTimer.at(i) -= deltaTime;
 
-            if (boss.limbThrowPhase[i] != 0)
+            if (boss.limbThrowPhase.at(i) != 0)
             {
-                boss.limbThrowTimer[i] -= deltaTime;
-                if (boss.limbThrowPhase[i] == 1 && boss.limbThrowTimer[i] <= 0)
+                boss.limbThrowTimer.at(i) -= deltaTime;
+                if (boss.limbThrowPhase.at(i) == 1 && boss.limbThrowTimer.at(i) <= 0)
                 {
-                    boss.limbThrowPhase[i] = 2;
-                    boss.limbThrowTimer[i] = krakenLimbThrowDuration;
+                    boss.limbThrowPhase.at(i) = 2;
+                    boss.limbThrowTimer.at(i) = krakenLimbThrowDuration;
                 }
-                else if (boss.limbThrowPhase[i] == 2 && boss.limbThrowTimer[i] <= 0)
+                else if (boss.limbThrowPhase.at(i) == 2 && boss.limbThrowTimer.at(i) <= 0)
                 {
-                    const Vector2 podPos = krakenPodPosition(boss, boss.limbPod[i]);
+                    const Vector2 podPos = krakenPodPosition(boss, boss.limbPod.at(i));
                     const Vector2 toPlayer = Vector2Subtract(game.run.player.position, podPos);
                     const float dist = Vector2Length(toPlayer);
                     const Vector2 dir = dist > 1.0F ? Vector2Scale(toPlayer, 1.0F / dist)
@@ -1042,52 +1050,52 @@ void updateKrakenLimbs(Game& game, Boss& boss, float deltaTime)
                                       .damage = krakenLimbHurlDamage,
                                       .health = 0,
                                       .isMeteor = false,
-                                      .visualEnemyKind = boss.limbGrabbedKind[i]});
-                    boss.limbThrowPhase[i] = 0;
-                    boss.limbGrabbedKind[i] = -1;
+                                      .visualEnemyKind = boss.limbGrabbedKind.at(i)});
+                    boss.limbThrowPhase.at(i) = 0;
+                    boss.limbGrabbedKind.at(i) = -1;
                 }
             }
-            else if (boss.limbGrabAnimTimer[i] > 0)
+            else if (boss.limbGrabAnimTimer.at(i) > 0)
             {
-                boss.limbGrabAnimTimer[i] -= deltaTime;
-                if (boss.limbGrabAnimTimer[i] <= 0)
+                boss.limbGrabAnimTimer.at(i) -= deltaTime;
+                if (boss.limbGrabAnimTimer.at(i) <= 0)
                 {
-                    boss.limbThrowPhase[i] = 1;
-                    boss.limbThrowTimer[i] = krakenLimbLeanBackDuration;
+                    boss.limbThrowPhase.at(i) = 1;
+                    boss.limbThrowTimer.at(i) = krakenLimbLeanBackDuration;
                 }
             }
             else
             {
-                boss.limbGrabTimer[i] -= deltaTime;
-                if (boss.limbGrabTimer[i] <= 0)
+                boss.limbGrabTimer.at(i) -= deltaTime;
+                if (boss.limbGrabTimer.at(i) <= 0)
                 {
-                    boss.limbGrabTimer[i] = krakenLimbGrabInterval;
-                    const Vector2 podPos = krakenPodPosition(boss, boss.limbPod[i]);
+                    boss.limbGrabTimer.at(i) = krakenLimbGrabInterval;
+                    const Vector2 podPos = krakenPodPosition(boss, boss.limbPod.at(i));
                     const Vector2 outward =
                         Vector2Normalize(Vector2Subtract(podPos, Vector2{.x = boss.position.x + boss.size.x / 2,
                                                                         .y = boss.position.y + boss.size.y / 2}));
-                    boss.limbPortalPos[i] = Vector2Add(podPos, Vector2Scale(outward, krakenLimbPortalOffset));
-                    boss.limbGrabAnimTimer[i] = krakenLimbGrabAnimDuration;
-                    boss.limbGrabbedKind[i] = GetRandomValue(0, static_cast<int32_t>(enemyKinds.size()) - 1);
+                    boss.limbPortalPos.at(i) = Vector2Add(podPos, Vector2Scale(outward, krakenLimbPortalOffset));
+                    boss.limbGrabAnimTimer.at(i) = krakenLimbGrabAnimDuration;
+                    boss.limbGrabbedKind.at(i) = GetRandomValue(0, static_cast<int32_t>(enemyKinds.size()) - 1);
                 }
             }
 
-            if (boss.limbTimer[i] <= 0 && boss.limbThrowPhase[i] == 0)
+            if (boss.limbTimer.at(i) <= 0 && boss.limbThrowPhase.at(i) == 0)
             {
-                boss.limbPhase[i] = 3;
-                boss.limbTimer[i] = krakenLimbRetreatDuration;
+                boss.limbPhase.at(i) = 3;
+                boss.limbTimer.at(i) = krakenLimbRetreatDuration;
             }
             continue;
         }
 
-        if (boss.limbPhase[i] == 3)
+        if (boss.limbPhase.at(i) == 3)
         {
-            boss.limbTimer[i] -= deltaTime;
-            if (boss.limbTimer[i] <= 0)
+            boss.limbTimer.at(i) -= deltaTime;
+            if (boss.limbTimer.at(i) <= 0)
             {
-                boss.limbPhase[i] = 0;
-                boss.limbPod[i] = -1;
-                boss.limbCooldown[i] = krakenLimbCooldownDuration;
+                boss.limbPhase.at(i) = 0;
+                boss.limbPod.at(i) = -1;
+                boss.limbCooldown.at(i) = krakenLimbCooldownDuration;
             }
         }
     }

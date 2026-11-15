@@ -51,14 +51,14 @@ enum class ElementMechanism : std::uint8_t
 class Pickup
 {
   public:
-    Vector2 position;
-    int value;
-    PickupType type;
-    ElementType element;
-    ElementMechanism mechanism;
-    bool active;
-    float lifetime;
-    float maxLifetime;
+    Vector2 position{};
+    int value{};
+    PickupType type{};
+    ElementType element{};
+    ElementMechanism mechanism{};
+    bool active{};
+    float lifetime{};
+    float maxLifetime{};
     float pull = 0;      // 0..1 magnet ramp: eases the flight in and out
     bool homing = false; // Magnet Pulse: flies to the ship from anywhere
 };
@@ -133,11 +133,11 @@ enum class WeaponType : std::uint8_t
 class Weapon
 {
   public:
-    WeaponType type;
-    int level;
-    float timer;
-    bool evolved;
-    float flashTimer;
+    WeaponType type{};
+    int level{};
+    float timer{};
+    bool evolved{};
+    float flashTimer{};
 
     bool disabled = false;
 };

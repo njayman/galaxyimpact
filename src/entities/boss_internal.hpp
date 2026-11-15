@@ -30,7 +30,6 @@ auto isGenericMovesetAttack(BossAttack attack) -> bool;
 auto steerHeading(Vector2 heading, Vector2 desired, float maxTurn) -> Vector2;
 auto bossQteStunned(const Boss& boss) -> bool;
 void endRushQte(Game& game, Boss& boss, bool clean);
-auto countContributingPlates(Game& game, const Boss& core) -> int32_t;
 auto ringCrushDuration(const Boss& core) -> float;
 void updateRingCrush(Game& game, Boss& core);
 auto beltbreakerRushOffscreenDist(const Game& game) -> float;

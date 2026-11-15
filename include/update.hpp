@@ -328,7 +328,7 @@ auto krakenRakeExtent(const Boss& boss, int32_t slot, int32_t spear, float elaps
 auto krakenRakeStrikeDuration(const Boss& boss, int32_t slot) -> float;
 auto krakenLashAngle(const Boss& boss, int32_t slot, float progress) -> float;
 void updateKrakenDraggedUnder(Game& game, Boss& kraken, float deltaTime);
-void updateBanishedJuggled(Game& game, Boss& banished, float deltaTime);
+void updateBanishedJuggled(Game& game, Boss& boss, float deltaTime);
 auto findBossById(Game& game, int32_t instanceId) -> Boss*;
 auto findSlagmawById(Game& game, int32_t instanceId) -> Boss*;
 void updateSlagmawSwallowed(Game& game, Boss& slagmaw, float deltaTime);

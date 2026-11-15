@@ -147,8 +147,8 @@ struct GameResources
     float renderScale{1.0F};
     RenderTarget worldTarget;
     RenderTarget pixelTarget;
-    Font font;
-    Sounds sounds;
+    Font font{};
+    Sounds sounds{};
     BgmLayers bgm;
     Settings settings;
     std::vector<int32_t> highScores;
@@ -199,7 +199,7 @@ struct TendrilPull
     float cellY = 0;
 };
 
-struct GameplayState
+struct GameplayState // NOLINT(clang-analyzer-optin.performance.Padding): fields grouped by topic; reordering only saves bytes
 {
     Player player;
     std::vector<Boss> bosses;
@@ -209,25 +209,25 @@ struct GameplayState
     std::vector<Enemy> enemies;
     uint32_t nextEnemyId = 0;
     std::vector<EliteHazard> eliteHazards;
-    float eliteHazardSpawnTimer;
+    float eliteHazardSpawnTimer{};
     std::vector<Pickup> pickups;
     std::vector<Mine> mines;
     std::vector<OrbitBladeProjectile> orbitBladeProjectiles;
     std::vector<OrbitBladeProjectile> nerveBallProjectiles;
     std::vector<NerveSpiralProjectile> nerveSpiralProjectiles;
     std::vector<Weapon> weapons;
-    std::array<int, static_cast<size_t>(SkillType::Count)> skillLevels;
+    std::array<int, static_cast<size_t>(SkillType::Count)> skillLevels{};
     std::vector<LevelUpChoice> pendingChoices;
     std::array<int, static_cast<size_t>(AscensionType::Count)> ascensionStacks{};
     DamageMeter damageMeter;
     DamageMeter damageMeterDisplay;
-    float damageMeterHoldTimer;
+    float damageMeterHoldTimer{};
     std::vector<BossDeathShockwave> bossDeathShockwaves;
     std::vector<GasHazard> gasHazards;
     TacticTracker tactics;
     BlackHole blackhole;
     std::vector<BlackHoleDustParticle> blackHoleDust;
-    Wormhole wormhole;
+    Wormhole wormhole{};
     std::vector<Star> stars;
     std::vector<BgParticle> bgParticles;
     std::vector<Star> borderStars;
@@ -285,10 +285,10 @@ struct GameplayState
     // QTEs don't lock out its others.
     std::array<float, 6> qteCooldowns{};
     int32_t qteKind = -1; // kind of the running Boss QTE
-    float asteroidSpawnTimer;
-    float enemySpawnTimer;
-    float solarForgeHeatMeter;
-    float solarForgeHeatTickTimer;
+    float asteroidSpawnTimer{};
+    float enemySpawnTimer{};
+    float solarForgeHeatMeter{};
+    float solarForgeHeatTickTimer{};
     float ricochetSpawnTimer = 0;
     float dasherSpawnCooldown = 0;
     float specialSpawnCooldown = 0;
@@ -297,49 +297,49 @@ struct GameplayState
     Vector2 solarForgeGelWobbleVel{};
     float solarForgeGelPocket = 0;    // 0..1, how far the gel has parted round the ship
     bool solarForgeInGel = false;
-    float organicMergeTimer;
-    int xp;
-    int level;
-    int xpToNext;
-    int waveNumber;
-    float waveTimer;
-    int bossSpawnCount;
-    float runTime;
-    int score;
-    bool scoreRecorded;
-    float shakeTimer;
-    float shakeDuration;
-    float shakeIntensity;
-    float hitPauseTimer;
+    float organicMergeTimer{};
+    int xp{};
+    int level{};
+    int xpToNext{};
+    int waveNumber{};
+    float waveTimer{};
+    int bossSpawnCount{};
+    float runTime{};
+    int score{};
+    bool scoreRecorded{};
+    float shakeTimer{};
+    float shakeDuration{};
+    float shakeIntensity{};
+    float hitPauseTimer{};
     std::string achievementToast;
     HudState hud;
-    float achievementToastTimer;
-    float punctumThunderTimer;
-    float punctumThunderFlashTimer;
-    Vector2 punctumThunderBoltOrigin;
-    float punctumThunderBoltSeed;
-    float backdropSeed; // per-run variety for biome backdrops
-    float debrisSquallTimer;
-    int32_t debrisSquallPhase; // 0 idle, 1 edge warning, 2 rocks sweeping
-    float debrisSquallPhaseTimer;
-    Vector2 debrisSquallCenter;
-    float debrisSquallAngle; // direction the squall sweeps, radians, random per squall
-    float debrisSquallFront;
-    float debrisSquallEnemyTickTimer;
-    uint64_t debrisSquallBrokenMask; // bit per rock shot this sweep
+    float achievementToastTimer{};
+    float punctumThunderTimer{};
+    float punctumThunderFlashTimer{};
+    Vector2 punctumThunderBoltOrigin{};
+    float punctumThunderBoltSeed{};
+    float backdropSeed{}; // per-run variety for biome backdrops
+    float debrisSquallTimer{};
+    int32_t debrisSquallPhase{}; // 0 idle, 1 edge warning, 2 rocks sweeping
+    float debrisSquallPhaseTimer{};
+    Vector2 debrisSquallCenter{};
+    float debrisSquallAngle{}; // direction the squall sweeps, radians, random per squall
+    float debrisSquallFront{};
+    float debrisSquallEnemyTickTimer{};
+    uint64_t debrisSquallBrokenMask{}; // bit per rock shot this sweep
     std::vector<RustPatch> rustPatches;
     std::vector<MagmaPool> magmaPools;
     float magmaPoolTick = 0;
-    float rustPatchTickTimer;
-    float shieldDashShakeCooldownTimer;
-    bool punctumTrapActive;
-    bool inBanishedRealm;
+    float rustPatchTickTimer{};
+    float shieldDashShakeCooldownTimer{};
+    bool punctumTrapActive{};
+    bool inBanishedRealm{};
 
-    int32_t bossCutscenePhase;
-    float bossCutsceneTimer;
-    Vector2 krakenFleePos;
+    int32_t bossCutscenePhase{};
+    float bossCutsceneTimer{};
+    Vector2 krakenFleePos{};
 
-    float endingTimer;
+    float endingTimer{};
 
 };
 
@@ -353,7 +353,7 @@ struct Game
     ~Game() = default;
 
     GameState state{};
-    int menuIndex;
+    int menuIndex{};
     // Screen transitions (see updateTransitions in draw.cpp).
     GameState drawnState{}; // the state the last frame was drawn in
     float stateAge = 0;     // seconds since the state changed
@@ -362,28 +362,28 @@ struct Game
     int menuIndexDrawn = 0; // selector change detection
     float menuIndexAge = 0;
     float qteAge = 0; // seconds since the current Boss QTE began
-    GameState settingsReturnState;
-    bool sandbox;
+    GameState settingsReturnState{};
+    bool sandbox{};
     bool autoplay = false; // --autoplay: a bot plays the sandbox (see updateAutoplayBot)
     float autoplayTime = 0;
     float autoplaySeconds = 120.0F; // --autoplay-seconds: how long the bot plays
     uint32_t autoplaySeed = 0;      // --seed: RNG seed, echoed when an invariant fails
-    int sandboxKindIndex;
-    bool sandboxDeathEnabled;
-    int sandboxBossAttackIndex;
-    int sandboxBossPatternIndex;
-    bool sandboxBossNoDeath;
-    int sandboxPickupIndex;
-    bool sandboxNaturalSpawnEnabled;
-    bool sandboxKillBoxArmed;
-    float sandboxKillBoxTimer;
+    int sandboxKindIndex{};
+    bool sandboxDeathEnabled{};
+    int sandboxBossAttackIndex{};
+    int sandboxBossPatternIndex{};
+    bool sandboxBossNoDeath{};
+    int sandboxPickupIndex{};
+    bool sandboxNaturalSpawnEnabled{};
+    bool sandboxKillBoxArmed{};
+    float sandboxKillBoxTimer{};
 
-    bool sandboxBrowserMode;
-    int browserCategoryIndex;
-    int browserBossTypeIndex;
-    int browserWeaponIndex;
-    int browserShipIndex;
-    int browserParticleIndex;
+    bool sandboxBrowserMode{};
+    int browserCategoryIndex{};
+    int browserBossTypeIndex{};
+    int browserWeaponIndex{};
+    int browserShipIndex{};
+    int browserParticleIndex{};
 
     GameResources resources;
     GameplayState run;

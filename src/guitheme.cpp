@@ -110,6 +110,12 @@ void uiButton(Rectangle rect, const char* text, bool hoverHighlights)
                          Fade(Palette::StructMid, 0.8F));
     }
 
-    const Color color = disabled ? Palette::StructMid : pressed ? WHITE : focused ? Palette::Crit : Palette::StructLight;
+    const Color color = [&]() -> Color
+    {
+        if (disabled) { return Palette::StructMid; }
+        if (pressed) { return WHITE; }
+        if (focused) { return Palette::Crit; }
+        return Palette::StructLight;
+    }();
     DrawTextEx(font, text, Vector2{.x = cx - measured.x / 2, .y = cy - measured.y / 2}, size, spacing, color);
 }

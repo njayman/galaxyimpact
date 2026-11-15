@@ -271,9 +271,12 @@ void qteStartAction(Game& game, QtePrompt prompt, Vector2 threatDir)
         player.nerve = std::min(UpdateConstants::nerveMax, player.nerve + UpdateConstants::qteNerveGain);
     }
     game.run.qteChainLive = true; // from here a wrong press breaks the chain
-    game.run.qteFinisherCharge += prompt == QtePrompt::Parry   ? UpdateConstants::qteFinisherChargeParry
-                                  : prompt == QtePrompt::Nerve ? UpdateConstants::qteFinisherChargeNerve
-                                                               : UpdateConstants::qteFinisherChargeAnswer;
+    game.run.qteFinisherCharge += [&]() -> float
+    {
+        if (prompt == QtePrompt::Parry) { return UpdateConstants::qteFinisherChargeParry; }
+        if (prompt == QtePrompt::Nerve) { return UpdateConstants::qteFinisherChargeNerve; }
+        return UpdateConstants::qteFinisherChargeAnswer;
+    }();
     game.run.qteActionTimer = UpdateConstants::qteActionDuration;
     game.run.qteActionVelocity = Vector2Scale(move, 1.0F / UpdateConstants::qteActionDuration);
 }

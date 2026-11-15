@@ -10,40 +10,40 @@
 class Player
 {
   public:
-    Vector2 position;
+    Vector2 position{};
 
-    Vector2 velocity;
-    float radius;
-    Color color;
-    float speed;
-    float health;
-    float maxHealth;
-    bool shieldActive;
-    float shieldTimer;
-    float shieldCooldownTimer;
-    float immunityTimer;
-    float blackHoleCoreTimer;
+    Vector2 velocity{};
+    float radius{};
+    Color color{};
+    float speed{};
+    float health{};
+    float maxHealth{};
+    bool shieldActive{};
+    float shieldTimer{};
+    float shieldCooldownTimer{};
+    float immunityTimer{};
+    float blackHoleCoreTimer{};
     float boundaryWallTimer = 0;
-    float bossBodyTimer;
-    float slowTimer;
-    int charges;
-    float chargeRegenTimer;
-    bool dashing;
-    float dashTimer;
-    Vector2 dashVelocity;
-    int shieldStacks;
-    float nerve;
-    bool nerveCharging;
-    float nerveChargeTimer;
-    float nerveChargeFeedTimer;
-    std::array<float, static_cast<size_t>(ElementType::Count)> elementalBuffTimer;
-    float regenTimer;
-    float regenRate;
-    float overchargeTimer;
+    float bossBodyTimer{};
+    float slowTimer{};
+    int charges{};
+    float chargeRegenTimer{};
+    bool dashing{};
+    float dashTimer{};
+    Vector2 dashVelocity{};
+    int shieldStacks{};
+    float nerve{};
+    bool nerveCharging{};
+    float nerveChargeTimer{};
+    float nerveChargeFeedTimer{};
+    std::array<float, static_cast<size_t>(ElementType::Count)> elementalBuffTimer{};
+    float regenTimer{};
+    float regenRate{};
+    float overchargeTimer{};
 
-    bool secondWindReady;
+    bool secondWindReady{};
 
-    float overdriveTimer;
+    float overdriveTimer{};
 
     float blindTimer = 0;  // Danger pickup: view shrunk to a circle
     float frenzyTimer = 0; // Danger pickup: enemies sped up
@@ -77,12 +77,12 @@ class Player
 class Bullet
 {
   public:
-    Vector2 position;
-    Vector2 velocity;
-    float radius;
-    Color color;
-    bool active;
-    int damage;
+    Vector2 position{};
+    Vector2 velocity{};
+    float radius{};
+    Color color{};
+    bool active{};
+    int damage{};
     int pierceRemaining = 0;
     int ricochetRemaining = 0;
     uint32_t ricochetLastHit = 0; // Enemy::id bounced off last; never re-hit in a row
@@ -166,25 +166,25 @@ class Mine
 class OrbitBladeProjectile
 {
   public:
-    Vector2 position;
-    Vector2 velocity;
-    float radius;
-    int damage;
-    bool active;
+    Vector2 position{};
+    Vector2 velocity{};
+    float radius{};
+    int damage{};
+    bool active{};
     bool evolved = false;
 };
 
 class NerveSpiralProjectile
 {
   public:
-    Vector2 origin;
-    Vector2 direction;
-    float age;
-    float speed;
-    float life;
-    float spinRadius;
-    int32_t bladeCount;
-    int32_t damagePerBlade;
-    bool active;
+    Vector2 origin{};
+    Vector2 direction{};
+    float age{};
+    float speed{};
+    float life{};
+    float spinRadius{};
+    int32_t bladeCount{};
+    int32_t damagePerBlade{};
+    bool active{};
     bool evolved = false;
 };
