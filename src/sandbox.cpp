@@ -10,7 +10,11 @@
 #include "update.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <format>
+#include <iostream>
+#include <string>
+#include <utility>
 
 namespace
 {
@@ -1024,11 +1028,63 @@ namespace
 // --autoplay bot: cycles one habit at a time so the M12 director's counters are visible.
 constexpr std::array<const char*, 5> botHabits{"Kite", "Circle", "Camp", "Dash spam", "Turtle"};
 constexpr float botHabitDuration = 12.0F;
-constexpr float botRunDuration = 120.0F;
 
 auto botHabit(const Game& game) -> size_t
 {
     return static_cast<size_t>(game.autoplayTime / botHabitDuration) % botHabits.size();
+}
+
+// Bug-hunt checks for --autoplay runs. Returns a description of the first broken invariant, or "".
+// ponytail: caps are guesses; raise them if a legit run trips one.
+auto autoplayInvariantFailure(const Game& game) -> std::string
+{
+    const auto finite = [](Vector2 v) { return std::isfinite(v.x) && std::isfinite(v.y); };
+    const auto& p = game.run.player;
+    if (!finite(p.position) || !finite(p.velocity))
+    {
+        return "player position or velocity not finite";
+    }
+    if (!std::isfinite(p.health) || p.health < 0)
+    {
+        return std::format("player health {}", p.health);
+    }
+    for (const auto& b : game.run.bosses)
+    {
+        if (b.health < 0 || !finite(b.position))
+        {
+            return std::format("boss health {} or position not finite", b.health);
+        }
+    }
+    for (const auto& e : game.run.enemies)
+    {
+        if (!finite(e.position))
+        {
+            return "enemy position not finite";
+        }
+    }
+    for (const auto& pk : game.run.pickups)
+    {
+        if (!finite(pk.position))
+        {
+            return "pickup position not finite";
+        }
+    }
+    const std::array<std::pair<const char*, size_t>, 5> counts{{
+        {"enemies", game.run.enemies.size()},
+        {"bullets", game.run.bullets.size()},
+        {"boss projectiles", game.run.bossProjectiles.size()},
+        {"death particles", game.run.deathParticles.size()},
+        {"damage numbers", game.run.damageNumbers.size()},
+    }};
+    const std::array<size_t, 5> caps{3000, 4000, 4000, 20000, 2000};
+    for (size_t i = 0; i < counts.size(); i++)
+    {
+        if (counts.at(i).second > caps.at(i))
+        {
+            return std::format("{} runaway: {}", counts.at(i).first, counts.at(i).second);
+        }
+    }
+    return {};
 }
 } // namespace
 
@@ -1039,9 +1095,15 @@ auto autoplayHabitName(const Game& game) -> const char* { return botHabits.at(bo
 auto updateAutoplayBot(Game& game, float deltaTime) -> bool
 {
     game.autoplayTime += deltaTime;
-    if (game.autoplayTime > botRunDuration)
+    if (game.autoplayTime > game.autoplaySeconds)
     {
         return true;
+    }
+    if (const std::string failure = autoplayInvariantFailure(game); !failure.empty())
+    {
+        std::cerr << std::format("autoplay invariant failed: seed {}, t={:.1f}s: {}\n",
+                                 game.autoplaySeed, game.autoplayTime, failure);
+        std::exit(EXIT_FAILURE);
     }
     if (game.state != GameState::GAMEPLAY)
     {

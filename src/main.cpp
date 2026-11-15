@@ -7,13 +7,36 @@
 #include "settings.hpp"
 #include "update.hpp"
 #include <algorithm>
+#include <cstdint>
+#include <cstdlib>
 #include <cstring>
+
+// Value of "--name value" on the command line, or nullptr.
+auto argValue(int argc, char* argv[], const char* name) -> const char*
+{
+    for (int i = 1; i + 1 < argc; i++)
+    {
+        if (std::strcmp(argv[i], name) == 0)
+        {
+            return argv[i + 1];
+        }
+    }
+    return nullptr;
+}
 
 auto main(int argc, char* argv[]) -> int
 {
     const bool sandbox = std::any_of(
         argv + 1, argv + argc, [](const char* arg)
         { return std::strcmp(arg, "-sandbox") == 0 || std::strcmp(arg, "--sandbox") == 0; });
+
+    // Seeded before InitGame so the world layout reproduces for --autoplay.
+    const char* seedArg = argValue(argc, argv, "--seed");
+    const auto seed = static_cast<uint32_t>(seedArg != nullptr ? std::strtoul(seedArg, nullptr, 10) : 0);
+    if (seedArg != nullptr)
+    {
+        SetRandomSeed(seed);
+    }
 
     constexpr int minWindowWidth = 320;
     constexpr int minWindowHeight = 240;
@@ -61,6 +84,14 @@ auto main(int argc, char* argv[]) -> int
     {
         enterSandbox(game);
         game.autoplay = autoplay;
+    }
+    if (autoplay)
+    {
+        game.autoplaySeed = seed;
+        if (const char* secs = argValue(argc, argv, "--autoplay-seconds"))
+        {
+            game.autoplaySeconds = std::strtof(secs, nullptr);
+        }
     }
 
     bool shouldExit = false;

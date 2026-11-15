@@ -17,3 +17,4 @@ tools/bgm_prototype
 tools/ship_playground
 __pycache__/
 *.pyc
+build-asan/

@@ -366,6 +366,8 @@ struct Game
     bool sandbox;
     bool autoplay = false; // --autoplay: a bot plays the sandbox (see updateAutoplayBot)
     float autoplayTime = 0;
+    float autoplaySeconds = 120.0F; // --autoplay-seconds: how long the bot plays
+    uint32_t autoplaySeed = 0;      // --seed: RNG seed, echoed when an invariant fails
     int sandboxKindIndex;
     bool sandboxDeathEnabled;
     int sandboxBossAttackIndex;
