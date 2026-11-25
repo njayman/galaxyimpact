@@ -235,13 +235,9 @@ auto updateTutorial(Game& game, float deltaTime) -> bool
                 return true;
             }
             t.dialog = false;
-            if (t.step == TutorialStep::Welcome)
+            if (t.step == TutorialStep::Welcome || t.step == TutorialStep::Upgrade)
             {
-                nextStep(game);
-            }
-            else if (t.step == TutorialStep::Upgrade)
-            {
-                nextStep(game);
+                nextStep(game); // dialog-only steps
             }
             else
             {
