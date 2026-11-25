@@ -1076,7 +1076,8 @@ auto autoplayInvariantFailure(const Game& game) -> std::string
         {"death particles", game.run.deathParticles.size()},
         {"damage numbers", game.run.damageNumbers.size()},
     }};
-    const std::array<size_t, 5> caps{3000, 4000, 4000, 20000, 2000};
+    // ponytail: caps are ~10x peaks from 90 s bot runs (enemies: no data yet, kept). Re-measure with natural spawns on.
+    const std::array<size_t, 5> caps{3000, 140, 940, 510, 110};
     for (size_t i = 0; i < counts.size(); i++)
     {
         if (counts.at(i).second > caps.at(i))
