@@ -608,9 +608,9 @@ void updateGasHazards(Game& game, float deltaTime)
 
 void updateWaveSpawner(Game& game, float deltaTime)
 {
-    if (game.sandbox && !game.sandboxNaturalSpawnEnabled)
+    if ((game.sandbox && !game.sandboxNaturalSpawnEnabled) || game.tutorial.active)
     {
-        return;
+        return; // the tutorial spawns its own enemies, one case at a time
     }
 
     if (game.run.bosses.empty())
@@ -1239,7 +1239,7 @@ void updateEliteHazards(Game& game, float deltaTime)
 
     game.run.eliteHazardSpawnTimer -= deltaTime;
 
-    if (!game.sandbox && game.run.eliteHazardSpawnTimer <= 0)
+    if (!game.sandbox && !game.tutorial.active && game.run.eliteHazardSpawnTimer <= 0)
     {
         if (static_cast<int>(game.run.eliteHazards.size()) < eliteHazardCap)
         {
@@ -1303,8 +1303,8 @@ void updateBlackHole(Game& game, float deltaTime)
 
     game.run.blackhole.timer -= deltaTime;
 
-    if ((!game.sandbox || game.sandboxNaturalSpawnEnabled) && !game.run.blackhole.active &&
-        game.run.blackhole.timer <= 0)
+    if ((!game.sandbox || game.sandboxNaturalSpawnEnabled) && !game.tutorial.active &&
+        !game.run.blackhole.active && game.run.blackhole.timer <= 0)
     {
         spawnBlackHole(game);
     }

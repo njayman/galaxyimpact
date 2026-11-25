@@ -53,6 +53,39 @@ enum class QtePrompt : std::uint8_t
     Mash // nerve, repeatedly, to fill a bar
 };
 
+// First-run tutorial (src/tutorial.cpp): scripted, frozen on a dialog until the player acts.
+enum class TutorialStep : std::uint8_t
+{
+    Welcome,
+    Move,
+    Shoot,
+    Level,
+    Upgrade,
+    Shield,
+    Dash,
+    Parry,
+    Qte,
+    Boss,
+    Done
+};
+
+struct TutorialState
+{
+    bool active = false;
+    bool dialog = true; // frozen on the step's dialog until the player continues
+    TutorialStep step = TutorialStep::Welcome;
+    float timer = 0;      // seconds since the step's action began
+    Vector2 start{};      // where the Move step measures from
+    uint32_t targetId = 0; // the drone the Shoot and Level steps wait on
+    int32_t startLevel = 0;
+    float spawnCooldown = 0;
+    float qteRetry = 0;
+    bool droneOut = false; // a Level step drone is alive; its death grants the level
+    bool prevShield = false; // edge detection: an action needs a fresh press, not a held one
+    bool prevDash = false;
+    bool prevCombo = false;
+};
+
 enum class GameState : std::uint8_t
 {
     TITLE,
@@ -363,6 +396,7 @@ struct Game
     float menuIndexAge = 0;
     float qteAge = 0; // seconds since the current Boss QTE began
     GameState settingsReturnState{};
+    TutorialState tutorial;
     bool sandbox{};
     bool autoplay = false; // --autoplay: a bot plays the sandbox (see updateAutoplayBot)
     float autoplayTime = 0;

@@ -31,6 +31,7 @@ struct Settings
     int32_t hudScaleIndex{defaultHudScaleIndex};
     int32_t shipIndex{1};
     bool swapTouchSticks{false};
+    bool tutorialDone{false}; // Play starts the tutorial until this is set
 };
 
 auto loadSettings() -> Settings;

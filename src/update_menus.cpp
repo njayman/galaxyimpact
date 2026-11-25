@@ -1,4 +1,5 @@
 #include "update_internal.hpp"
+#include "tutorial.hpp"
 
 auto updateTitle(Game& game) -> bool
 {
@@ -13,6 +14,13 @@ auto updateTitle(Game& game) -> bool
         switch (index)
         {
         case 0:
+            if (!game.resources.settings.tutorialDone)
+            {
+                resetRun(game); // new players get the tutorial only
+                startTutorial(game);
+                game.state = GameState::GAMEPLAY;
+                break;
+            }
             game.menuIndex = game.resources.settings.shipIndex;
             game.settingsReturnState = GameState::TITLE;
             game.state = GameState::SHIP_SELECT;
@@ -237,6 +245,32 @@ auto updatePaused(Game& game) -> bool
         return false;
     }
 
+    if (game.tutorial.active)
+    {
+        const auto [index, confirmed] = updateMenuSelectionWindow(
+            game, game.menuIndex, 3, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
+            MenuLayout::buttonGap, MenuLayout::pausedMenuY);
+        playMenuSounds(game, index, confirmed);
+        game.menuIndex = index;
+        if (confirmed && index == 0)
+        {
+            game.state = GameState::GAMEPLAY;
+        }
+        else if (confirmed && index == 1)
+        {
+            resetRun(game);
+            startTutorial(game);
+            game.state = GameState::GAMEPLAY;
+        }
+        else if (confirmed && index == 2)
+        {
+            game.tutorial = TutorialState{}; // unfinished: Play offers the tutorial again
+            game.state = GameState::TITLE;
+            game.menuIndex = 0;
+        }
+        return false;
+    }
+
     const auto [index, confirmed] = updateMenuSelectionWindow(
         game, game.menuIndex, 6, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
         MenuLayout::buttonGap, MenuLayout::pausedMenuY);
@@ -322,6 +356,13 @@ auto updateGameOver(Game& game) -> bool
         switch (index)
         {
         case 0:
+            if (game.tutorial.active)
+            {
+                resetRun(game); // a lost tutorial starts again
+                startTutorial(game);
+                game.state = GameState::GAMEPLAY;
+                break;
+            }
             game.menuIndex = game.resources.settings.shipIndex;
             game.settingsReturnState = GameState::GAME_OVER;
             game.state = GameState::SHIP_SELECT;

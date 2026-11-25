@@ -215,6 +215,7 @@ void syncScreenSize(Game& game)
 
 void resetRun(Game& game)
 {
+    game.tutorial = TutorialState{};
     game.run.hud = HudState{};
     const ShipDef& ship = currentShip(game);
 

@@ -103,9 +103,9 @@ void damagePlayer(Game& game, int32_t amount)
         return;
     }
 
-    if (game.run.player.invulnerable)
+    if (game.run.player.invulnerable || game.tutorial.active)
     {
-        return;
+        return; // the tutorial ship cannot be hurt
     }
 
     if (bossQteActive(game))

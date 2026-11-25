@@ -1,4 +1,5 @@
 #include "draw_internal.hpp"
+#include "tutorial.hpp"
 
 namespace DrawDetail
 {
@@ -238,7 +239,8 @@ void drawHUD(const Game& game)
 
     // Controls: below the ship, clear of the HUD, only at the start of a run, then gone.
     constexpr float hintTime = 8.0F;
-    if (game.run.runTime < hintTime && game.run.bosses.empty() && game.state == GameState::GAMEPLAY)
+    if (game.run.runTime < hintTime && game.run.bosses.empty() && game.state == GameState::GAMEPLAY &&
+        !game.tutorial.active)
     {
         const char* controlHint =
             touchInputActive(game)
@@ -248,6 +250,33 @@ void drawHUD(const Game& game)
         constexpr int32_t hintSize = 14;
         drawText(game, controlHint, (width - measureText(game, controlHint, hintSize)) / 2, height * 3 / 4,
                  hintSize, Fade(Palette::StructLight, 0.7F * alpha));
+    }
+
+    if (game.tutorial.active && game.state == GameState::GAMEPLAY)
+    {
+        if (game.tutorial.dialog)
+        {
+            // Dialog: the run is frozen until the player continues.
+            const char* text = tutorialDialog(game);
+            constexpr int32_t dialogSize = 22;
+            constexpr int32_t hintSize = 14;
+            constexpr int32_t pad = 28;
+            const int32_t boxW = std::min(width - 2 * margin, measureText(game, text, dialogSize) + 2 * pad);
+            const int32_t boxH = dialogSize + hintSize + 3 * pad;
+            const int32_t boxX = (width - boxW) / 2;
+            const int32_t boxY = height * 2 / 3;
+            DrawRectangle(boxX, boxY, boxW, boxH, Fade(Palette::StructDark, 0.9F));
+            drawText(game, text, boxX + pad, boxY + pad, dialogSize, Palette::StructLight);
+            drawText(game, "Enter or click to continue", boxX + pad, boxY + pad + dialogSize + pad / 2,
+                     hintSize, Fade(Palette::StructLight, 0.6F));
+        }
+        else
+        {
+            const char* objective = tutorialObjective(game);
+            constexpr int32_t objectiveSize = 22;
+            drawText(game, objective, (width - measureText(game, objective, objectiveSize)) / 2, height / 4,
+                     objectiveSize, Palette::StructLight);
+        }
     }
 }
 

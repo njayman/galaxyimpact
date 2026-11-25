@@ -722,10 +722,18 @@ auto drawGame(Game& game) -> void
         break;
     case GameState::PAUSED:
         drawOverlay(game);
-        drawMenu(game, "PAUSED",
-                 {"Resume", "Achievements", "Bestiary", "Settings", "New Game", "Exit"},
-                 MenuLayout::pausedMenuY);
-        drawAscensionList(game);
+        if (game.tutorial.active)
+        {
+            drawMenu(game, "PAUSED", {"Resume", "Restart Tutorial", "Exit to Title"},
+                     MenuLayout::pausedMenuY);
+        }
+        else
+        {
+            drawMenu(game, "PAUSED",
+                     {"Resume", "Achievements", "Bestiary", "Settings", "New Game", "Exit"},
+                     MenuLayout::pausedMenuY);
+            drawAscensionList(game);
+        }
         break;
     case GameState::LEVEL_UP:
         drawOverlay(game);

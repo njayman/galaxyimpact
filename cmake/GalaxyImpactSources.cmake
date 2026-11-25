@@ -43,5 +43,6 @@ set(GALAXYIMPACT_SOURCES
     src/update_menus.cpp
     src/update_pickups.cpp
     src/update_weapons.cpp
+    src/tutorial.cpp
     src/update_world.cpp
 )

@@ -1,4 +1,5 @@
 #include "update_internal.hpp"
+#include "tutorial.hpp"
 
 auto damageShakeIntensity(int32_t amount) -> float
 {
@@ -489,6 +490,11 @@ void updateGameplay(Game& game, float deltaTime)
 
     game.run.damageMeter = DamageMeter{};
 
+    // The tutorial owns the run first: a dialog can freeze it, and Esc opens its pause menu.
+    if (updateTutorial(game, deltaTime))
+    {
+        return;
+    }
     if (IsKeyPressed(KEY_ESCAPE) || pausePressed(game))
     {
         game.state = GameState::PAUSED;
