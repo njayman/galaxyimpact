@@ -38,6 +38,7 @@ auto loadSettings() -> Settings
     {
         return settings;
     }
+    settings.tutorialState = 2; // a settings file from before the tutorial: existing player
 
     int32_t resIdx = 0;
 
@@ -85,9 +86,12 @@ auto loadSettings() -> Settings
         settings.swapTouchSticks = swapSticks != 0;
     }
 
-    if (int32_t tutorialDone = 0; file >> tutorialDone)
+    if (int32_t tutorialState = 0; file >> tutorialState)
     {
-        settings.tutorialDone = tutorialDone != 0;
+        if (tutorialState >= 0 && tutorialState <= 2)
+        {
+            settings.tutorialState = tutorialState;
+        }
     }
 
     return settings;
@@ -104,7 +108,7 @@ void saveSettings(const Settings& settings)
     file << settings.resolutionIndex << ' ' << 0 << ' ' << (settings.bgmOn ? 1 : 0) << ' '
          << (settings.soundOn ? 1 : 0) << ' ' << settings.fpsIndex << ' ' << settings.hudScaleIndex
          << ' ' << settings.shipIndex << ' ' << (settings.swapTouchSticks ? 1 : 0)
-         << ' ' << (settings.tutorialDone ? 1 : 0);
+         << ' ' << settings.tutorialState;
     file.close();
     platformSyncSaveData();
 }

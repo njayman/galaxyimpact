@@ -14,7 +14,7 @@ auto updateTitle(Game& game) -> bool
         switch (index)
         {
         case 0:
-            if (!game.resources.settings.tutorialDone)
+            if (game.resources.settings.tutorialState != 1)
             {
                 resetRun(game); // new players get the tutorial only
                 startTutorial(game);
@@ -264,7 +264,12 @@ auto updatePaused(Game& game) -> bool
         }
         else if (confirmed && index == 2)
         {
-            game.tutorial = TutorialState{}; // unfinished: Play offers the tutorial again
+            if (game.resources.settings.tutorialState == 2) // existing player: leaving is declining
+            {
+                game.resources.settings.tutorialState = 1;
+                saveSettings(game.resources.settings);
+            }
+            game.tutorial = TutorialState{}; // new player: Play offers the tutorial again
             game.state = GameState::TITLE;
             game.menuIndex = 0;
         }

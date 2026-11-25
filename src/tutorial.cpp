@@ -94,7 +94,7 @@ void nextStep(Game& game)
 void finishTutorial(Game& game)
 {
     game.tutorial.active = false;
-    game.resources.settings.tutorialDone = true;
+    game.resources.settings.tutorialState = 1;
     saveSettings(game.resources.settings);
     game.state = GameState::TITLE;
     game.menuIndex = 0;

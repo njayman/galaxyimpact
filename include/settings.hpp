@@ -31,7 +31,9 @@ struct Settings
     int32_t hudScaleIndex{defaultHudScaleIndex};
     int32_t shipIndex{1};
     bool swapTouchSticks{false};
-    bool tutorialDone{false}; // Play starts the tutorial until this is set
+    // Tutorial: 0 new player (Play starts it, leaving it restarts it), 1 done,
+    // 2 existing player (offered, leaving it counts as done).
+    int32_t tutorialState{0};
 };
 
 auto loadSettings() -> Settings;
