@@ -18,3 +18,4 @@ tools/ship_playground
 __pycache__/
 *.pyc
 build-asan/
+tools/synth
