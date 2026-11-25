@@ -258,9 +258,9 @@ void updateWeapons(Game& game, float deltaTime);
 void recordDamage(Game& game, DamageSource source, int32_t amount);
 auto currentBurnDps(const Game& game) -> float;
 void applyElementDebuff(Enemy& enemy, ElementType element, float burnDps);
-void applyActiveElementalDebuffs(Game& game, Enemy& enemy);
+void applyActiveElementalDebuffs(const Game& game, Enemy& enemy);
 void applyElementDebuff(Boss& boss, ElementType element, float burnDps);
-void applyActiveElementalDebuffs(Game& game, Boss& boss);
+void applyActiveElementalDebuffs(const Game& game, Boss& boss);
 void collectElementalPickup(Game& game, ElementType element, ElementMechanism mechanism);
 void updatePlayerBuffs(Game& game, float deltaTime);
 void aoePulse(Game& game, Vector2 center, float radius, int32_t dmg, DamageSource source,
@@ -452,7 +452,7 @@ auto bossWindupDuration(BossAttack attack) -> float;
 auto bossOnScreen(const Game& game, Vector2 bossCenter) -> bool;
 void spawnBlastRing(Game& game, Vector2 at, float reach);
 auto isAimLockedAttack(BossAttack attack) -> bool;
-void beginWindup(Game& game, Boss& boss);
+void beginWindup(const Game& game, Boss& boss);
 auto wormholeBentBeamSegments(const Game& game, Vector2 start,
                               Vector2 end) -> std::vector<std::pair<Vector2, Vector2>>;
 

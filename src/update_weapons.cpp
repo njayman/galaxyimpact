@@ -2088,7 +2088,7 @@ auto droneCountForLevel(int32_t level) -> size_t
     return level >= 1 ? 1 : 0;
 }
 
-auto dronePosition(Game& game, size_t index) -> Vector2
+auto dronePosition(const Game& game, size_t index) -> Vector2
 {
     const Vector2 dir = aimAtMouse(game);
     const Vector2 perp{.x = -dir.y, .y = dir.x};

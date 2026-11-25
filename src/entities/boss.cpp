@@ -645,7 +645,7 @@ void applyElementDebuff(Boss& boss, ElementType element, float burnDps)
     }
 }
 
-void applyActiveElementalDebuffs(Game& game, Boss& boss)
+void applyActiveElementalDebuffs(const Game& game, Boss& boss)
 {
     const float burnDps = currentBurnDps(game);
     for (size_t e = 0; e < static_cast<size_t>(ElementType::Count); e++)
@@ -1734,7 +1734,7 @@ auto bossOnScreen(const Game& game, Vector2 bossCenter) -> bool
 
 // First frame of a wind-up, whoever started it: stretch beam and dash tells to their minimum and
 // place the wormhole portal now, so its tell line can show where the beam will come from.
-void beginWindup(Game& game, Boss& boss)
+void beginWindup(const Game& game, Boss& boss)
 {
     if (boss.attack == BossAttack::Beam || boss.attack == BossAttack::WormholeBeam)
     {

@@ -28,5 +28,5 @@
 void updateHud(Game& game, float deltaTime);
 auto updateSkillTree(Game& game) -> bool;
 auto signatureEvolved(const Game& game) -> bool;
-auto dronePosition(Game& game, size_t index) -> Vector2;
+auto dronePosition(const Game& game, size_t index) -> Vector2;
 void updateDroneContactDamage(Game& game, float deltaTime, int32_t followerDmg, int32_t laserDmg);

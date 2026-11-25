@@ -386,7 +386,7 @@ void applyElementDebuff(Enemy& enemy, ElementType element, float burnDps)
     }
 }
 
-void applyActiveElementalDebuffs(Game& game, Enemy& enemy)
+void applyActiveElementalDebuffs(const Game& game, Enemy& enemy)
 {
     const float burnDps = currentBurnDps(game);
     for (size_t e = 0; e < static_cast<size_t>(ElementType::Count); e++)
