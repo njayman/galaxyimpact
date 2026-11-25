@@ -220,7 +220,7 @@ void drawTitle(const Game& game)
     windowText(game, "GALAXY IMPACT", game.resources.windowWidth / 2, layout.titleY, 100,
               Palette::Accent);
 
-    drawMenu(game, "", {"Start", "Skill Tree", "Achievements", "Bestiary", "Settings", "Exit"}, layout.menuY);
+    drawMenu(game, "", {"Start", "Skill Tree", "Achievements", "Bestiary", "Settings", "Tutorial", "Exit"}, layout.menuY);
     drawHighScores(game, game.resources.windowWidth / 2, layout.highScoreY,
                    game.resources.highScores);
 }

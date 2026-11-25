@@ -4,7 +4,7 @@
 auto updateTitle(Game& game) -> bool
 {
     const auto [index, confirmed] = updateMenuSelectionWindow(
-        game, game.menuIndex, 6, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
+        game, game.menuIndex, 7, MenuLayout::buttonWidth, MenuLayout::buttonHeight,
         MenuLayout::buttonGap, titleLayout().menuY);
     playMenuSounds(game, index, confirmed);
     game.menuIndex = index;
@@ -43,6 +43,11 @@ auto updateTitle(Game& game) -> bool
             game.state = GameState::SETTINGS;
             break;
         case 5:
+            resetRun(game); // replay: the tutorial again, whatever the saved state
+            startTutorial(game);
+            game.state = GameState::GAMEPLAY;
+            break;
+        case 6:
             return true;
         default:
             break;

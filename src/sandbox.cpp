@@ -1035,7 +1035,7 @@ auto botHabit(const Game& game) -> size_t
 }
 
 // Bug-hunt checks for --autoplay runs. Returns a description of the first broken invariant, or "".
-// ponytail: caps are guesses; raise them if a legit run trips one.
+// ponytail: caps are ~10x bot peaks; raise them if a legit run trips one.
 auto autoplayInvariantFailure(const Game& game) -> std::string
 {
     const auto finite = [](Vector2 v) { return std::isfinite(v.x) && std::isfinite(v.y); };
